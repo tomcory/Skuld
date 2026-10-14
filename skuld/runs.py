@@ -3,7 +3,8 @@ A Loki run folder, as Skuld reads it: Skuld's only window on a device.
 
 Loki drives the app, controls the capture and instruments the app; what it did and saw is in the run
 folder it writes: `run.json` (the run's record, with the blocks `capture` and `instrumentation`),
-`events.jsonl` (everything that happened, in order) and the capture's export below `capture/`.
+`events.jsonl` (everything that happened, in order) and the capture's export below `capture/`, with
+the scans of the apps (their permissions and tracker libraries) if the run asked for them.
 `load` reads such a folder and refuses one that Skuld cannot rely on: a run that did not end in
 order, a capture export that Loki did not validate or that is not complete, and an instrumentation
 record that does not conform to Ratatoskr's schemas, which Skuld checks again itself.
@@ -24,6 +25,9 @@ SCHEMA_VERSIONS = (2,)
 
 #: Exported files of a capture, by the name of their count in `run.json → capture.records`
 CAPTURE_FILES = {"messages": "messages.jsonl", "connections": "connections.jsonl"}
+
+#: The apps' scans, exported only if the run asked for them (`capture.export: [..., scans]`)
+SCANS_FILE = "scans.jsonl"
 
 
 class RunRefused(Exception):
@@ -76,6 +80,8 @@ class Run:
         connections: The captured connections (`captured_connection`); None if the capture was not read
         instrumentation: The block `instrumentation` of `run.json` (`run_instrumentation`); None if the
             run was not instrumented
+        scans: The scans of the apps (`app_scan`) by package: the permissions each requests and the
+            tracker libraries it contains; None if the capture was not read or the run exported no scans
     """
 
     directory: Path
@@ -87,6 +93,7 @@ class Run:
     messages: tuple[dict, ...] | None
     connections: tuple[dict, ...] | None
     instrumentation: dict | None
+    scans: dict[str, dict] | None = None
 
     @property
     def run_id(self) -> str:
@@ -133,9 +140,9 @@ def load(run_dir: str | Path, capture: bool = True) -> Run:
     source_reads = tuple(e for e in events if e.get("type") == "source_read")
     _check_instrumentation(instrumentation, source_reads)
 
-    messages = connections = None
+    messages = connections = scans = None
     if capture:
-        messages, connections = _read_capture(directory, meta.get("capture"))
+        messages, connections, scans = _read_capture(directory, meta.get("capture"))
 
     return Run(
         directory=directory,
@@ -147,6 +154,7 @@ def load(run_dir: str | Path, capture: bool = True) -> Run:
         messages=messages,
         connections=connections,
         instrumentation=instrumentation,
+        scans=scans,
     )
 
 
@@ -169,8 +177,10 @@ def _check_instrumentation(block: dict | None, source_reads: tuple[dict, ...]) -
         raise RunRefused("invalid_record", f"{path}: {e.message}"[:300]) from e
 
 
-def _read_capture(directory: Path, block: dict | None) -> tuple[tuple[dict, ...], tuple[dict, ...]]:
-    """The captured messages and connections, once the export is known to be validated and complete."""
+def _read_capture(
+    directory: Path, block: dict | None
+) -> tuple[tuple[dict, ...], tuple[dict, ...], dict[str, dict] | None]:
+    """The captured messages, connections and scans, once the export is known to be validated and complete."""
     if not block:
         raise RunRefused("no_capture", "the run was not captured")
     validated = block.get("validated")
@@ -197,7 +207,23 @@ def _read_capture(directory: Path, block: dict | None) -> tuple[tuple[dict, ...]
             raise RunRefused(
                 "incomplete_export", f"{file} has {len(read[name])} records, run.json says {records[name]}"
             )
-    return read["messages"], read["connections"]
+    scans = None
+    if "scans" in records:
+        path = export / SCANS_FILE
+        if not path.is_file():
+            raise RunRefused("incomplete_export", f"{path} is missing")
+        lines = _lines(path)
+        if len(lines) != records["scans"]:
+            raise RunRefused(
+                "incomplete_export", f"{SCANS_FILE} has {len(lines)} records, run.json says {records['scans']}"
+            )
+        try:
+            for scan in lines:
+                validate("app_scan", scan)
+        except jsonschema.ValidationError as e:
+            raise RunRefused("invalid_record", f"{SCANS_FILE}: {e.message}"[:300]) from e
+        scans = {scan["app"]["package"]: scan for scan in lines}
+    return read["messages"], read["connections"], scans
 
 
 def _change(event: dict) -> SettingChange:

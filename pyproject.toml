@@ -1,18 +1,19 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "skuld"
 description = "Expectation pipeline of the Asgard suite: purpose-conditioned counterfactual analysis of app data practices"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
 authors = [{ name = "Thomas Cory" }]
 requires-python = ">=3.12"
 dynamic = ["version"]
 dependencies = [
     # the record schemas, and what checks the records of a Loki run folder against them
-    "ratatoskr[validate] @ git+https://github.com/tomcory/ratatoskr@v0.2.0",
+    "ratatoskr[validate] @ git+ssh://git@github.com/tomcory/Ratatoskr.git@0.3.0",
 ]
 
 [project.optional-dependencies]

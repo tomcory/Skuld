@@ -211,6 +211,40 @@ def test_an_instrumentation_record_that_does_not_conform_is_refused(tmp_path):
     assert refused(folder) == "invalid_record"
 
 
+SCAN = {
+    "id": "12-com.example.app",
+    "scanned_at": 1791805800000,
+    "app": {"package": PACKAGE, "label": "Example", "version_name": "1.0", "version_code": 1},
+    "permissions": [{"name": "android.permission.ACCESS_FINE_LOCATION", "dangerous": True}],
+    "libraries": [{"exodus_id": 27, "name": "Google Firebase Analytics"}],
+    "catalogue": {"source": "exodus", "trackers": 432},
+    "capture": {"backend": "heimdall", "session": 12, "tag": "run-1"},
+}
+
+
+def with_scans(folder: Path, scans=(SCAN,), count=None) -> Path:
+    """Adds the apps' scans to a run's export, as a run with `capture.export: [..., scans]` has them."""
+    record = json.loads((folder / "run.json").read_text())
+    record["capture"]["records"]["scans"] = len(scans) if count is None else count
+    (folder / "run.json").write_text(json.dumps(record))
+    (folder / record["capture"]["export"] / "scans.jsonl").write_text("".join(json.dumps(s) + "\n" for s in scans))
+    return folder
+
+
+def test_a_run_gives_the_scans_of_its_apps_if_it_exported_them(tmp_path):
+    assert load(write_run(tmp_path / "without")).scans is None
+    run = load(with_scans(write_run(tmp_path / "with")))
+    scan = run.scans[PACKAGE]
+    assert scan["permissions"][0]["dangerous"] and scan["libraries"][0]["name"] == "Google Firebase Analytics"
+    assert load(with_scans(write_run(tmp_path / "unread")), capture=False).scans is None
+
+
+def test_scans_that_are_incomplete_or_do_not_conform_are_refused(tmp_path):
+    assert refused(with_scans(write_run(tmp_path / "short"), count=2)) == "incomplete_export"
+    no_permissions = {k: v for k, v in SCAN.items() if k != "permissions"}
+    assert refused(with_scans(write_run(tmp_path / "broken"), scans=(no_permissions,))) == "invalid_record"
+
+
 # -- a real run folder of Loki --------------------------------------------------------------------
 
 

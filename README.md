@@ -11,9 +11,9 @@ which a data flow is withheld or changed. Only Heimdall and Loki touch the devic
 
 - **Loki** drives the app in both runs and applies the intervention from its configuration: it
   controls **Heimdall**'s capture (app scope, blocked hosts) and instruments the app with Frida
-  (a data source passed through or changed). Skuld asks Loki for runs through Loki's command line
-  (`loki -c … replay …`, with a configuration that differs in the one setting of the condition) and
-  reads the run folders Loki writes.
+  (a data source passed through or changed). Skuld reads the run folders Loki writes, and is to ask
+  Loki for runs through Loki's command line (`loki -c … replay …`, with a configuration that differs
+  in the one setting of the condition), which is not built yet.
 - **Verðandi** annotates the captured messages. The records pass between the components in the
   formats of **Ratatoskr**.
 
@@ -28,9 +28,11 @@ for a claim, the functional oracle. A run that Loki did not verify is invalid fo
 Python 3.12 or newer.
 
 ```bash
-pip install -e "../Ratatoskr[validate]"   # until Ratatoskr is on its remote
 pip install -e ".[dev]"
 ```
+
+Ratatoskr comes from its tag `0.3.0` over SSH. To work on both, install a checkout of it in editable
+mode afterwards: `pip install -e "../Ratatoskr[validate]"`.
 
 ## Usage
 
@@ -42,14 +44,17 @@ run.actions  # what was done to the app, Loki's 'action' events
 run.source_reads  # what the app read of an instrumented source, and what it was handed
 run.changes  # source settings changed during the run, with their times
 run.messages  # the captured HTTP messages (captured_http_message)
+run.connections  # the captured connections (captured_connection)
 run.verified  # Loki's verification of the instrumentation; run.verification has the details
+run.scans  # by package: the permissions an app requests and its tracker libraries (if the run exported scans)
 ```
 
-A run is refused (`RunRefused.reason`) if it did not end in order (`unfinished`), was not captured
-or its capture failed (`no_capture`, `capture_failed`; `load(…, capture=False)` does not read the
-capture), Loki did not validate its export (`export_not_validated`), the export is not complete
-(`incomplete_export`), or its instrumentation record does not conform to Ratatoskr's schemas
-(`invalid_record`), which Skuld checks again itself.
+A run is refused (`RunRefused.reason`) if the folder is not a run (`not_a_run`), its record is of a
+version Skuld does not read (`unsupported_version`), it did not end in order (`unfinished`), was not
+captured or its capture failed (`no_capture`, `capture_failed`; `load(…, capture=False)` does not
+read the capture), Loki did not validate its export (`export_not_validated`), the export is not
+complete (`incomplete_export`), or its instrumentation record or its scans do not conform to
+Ratatoskr's schemas (`invalid_record`), which Skuld checks again itself.
 
 ## Tests
 
@@ -63,4 +68,4 @@ the sibling `Loki/runs/`. It is skipped if there is none.
 
 ## License
 
-GPL-3.0, see [LICENSE](LICENSE).
+GPL-3.0-only, see [LICENSE](LICENSE).
