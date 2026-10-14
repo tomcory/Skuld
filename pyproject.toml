@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skuld"
+description = "Expectation pipeline of the Asgard suite: purpose-conditioned counterfactual analysis of app data practices"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Thomas Cory" }]
+requires-python = ">=3.12"
+dynamic = ["version"]
+dependencies = [
+    # the record schemas, and what checks the records of a Loki run folder against them
+    "ratatoskr[validate] @ git+https://github.com/tomcory/ratatoskr@v0.2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.dynamic]
+version = { attr = "skuld.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["skuld*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]  # line length is the formatter's job; it leaves long strings and comments alone
