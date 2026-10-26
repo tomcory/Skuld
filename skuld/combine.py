@@ -3,22 +3,23 @@ E's combination (E def:combination), one rule for every channel and every model 
 they are of one type, about aligned purposes and the same subject and component (for an alternative of an
 experiment, the same alternative); related claims that agree in status are corroborated into one combined claim that
 cites them; where they disagree, the claim of greatest strength decides if it is supported or refuted, and the
-combined claim takes its status; otherwise the combined claim is conflicted if its claims speak both for and against
-it, else not assessable, with the reason, if one of them is, and not established if not. One sample of a model that
-supports a claim by documents therefore decides over samples that do not.
+combined claim takes its status and its value; otherwise the combined claim is conflicted if its claims speak both
+for and against it, else not assessable, with the reason, if one of them is, and not established if not. One sample
+of a model that supports a claim by documents therefore decides over samples that do not.
 
 A combined claim cites the evidence of its claims that agree with its status, and its uncertainty is, per factor, the
 least over them where the factor applies, or the highest over all of them where none agrees. The combination calls no
 model and yields no finding: the claims it combines are kept, in the samples and the case report they are read from.
 
     hypotheses    the expectation stage's claims across its samples: purposes aligned by node and beneficiary within a
-                  practice (E's ≈), and the alternatives of each combined purpose by component; they enter the
+                  practice (E's ≈), and the dependencies of each combined purpose by component; they enter the
                   assessment stage as its hypotheses, and nothing of the assessment stage passes back into them
-    experimental  the experimental channel's claims, per case purpose, related to the hypothesis purposes aligned with
-                  it: a hypothesis purpose of a practice is aligned with the case purpose of the same beneficiary
-                  whose node is its own or the nearest above it (≈), which raises its semantic uncertainty to
-                  moderate. Where no hypothesis aligns, reasoning is silent on the case's purpose, and the experiment's
-                  claim stands alone.
+    alternatives  the reasoning tier's Alternative claims across its samples, by purpose and component
+    experimental  the experimental channel's claims with the hypotheses of aligned purposes: a hypothesis purpose of a
+                  practice is aligned with the case purpose of the same beneficiary whose node is its own or the
+                  nearest above it (≈), which raises its semantic uncertainty to moderate; an experiment's Dependency
+                  claim is combined with the hypotheses' on the same component. Where no hypothesis aligns, reasoning
+                  is silent on the case's purpose, and the experiment's claim stands combined alone.
 
 A claim that rests on a purpose takes the purpose's semantic uncertainty where it is higher than its own.
 """
@@ -28,12 +29,12 @@ from skuld.uncertainty import FACTORS, ORDER, highest
 STRENGTH = {"own": 0, "doc": 1, "run": 2}
 DECISIVE = ("supported", "refuted")
 #: What a combined claim carries over from the claim that decides it
-CARRIED = ("stage", "tier", "case", "scope", "component", "alternative", "level", "removal")
+CARRIED = ("stage", "tier", "case", "scope", "component", "relationship", "alternative", "level")
 
 
 def decide(members: list[dict]) -> tuple[str, dict | None]:
     """The status of related claims, and the claim that decides it: the strongest supported or refuted claims if
-    they agree, else conflicted; without one, their common status, else not assessable if one
+    they agree in status and value, else conflicted; without one, their common status, else not assessable if one
     is, else not established."""
     decisive = [m for m in members if m["status"] in DECISIVE]
     if not decisive:
@@ -42,7 +43,7 @@ def decide(members: list[dict]) -> tuple[str, dict | None]:
             return statuses.pop(), _strongest(members) or members[0]
         return ("not_assessable" if "not_assessable" in statuses else "not_established"), None
     top = _top(decisive)
-    if len({m["status"] for m in top}) == 1:
+    if len({(m["status"], m.get("relationship")) for m in top}) == 1:
         return top[0]["status"], top[0]
     return "conflicted", None
 
@@ -142,8 +143,8 @@ class Numbers:
 def hypotheses(claims: list[dict], number: Numbers) -> list[dict]:
     """
     The expectation stage's claims combined across its samples: per practice, purposes aligned by node and beneficiary
-    (E's ≈), and the alternatives of each combined purpose by component. Each combined claim cites the sample claims
-    it combines (`of`) and takes the purpose of the claim that decides it; alternatives name the combined purpose in
+    (E's ≈), and the dependencies of each combined purpose by component. Each combined claim cites the sample claims
+    it combines (`of`) and takes the purpose of the claim that decides it; dependencies name the combined purpose in
     `basis`.
     """
     purposes: dict[tuple, list[dict]] = {}
@@ -157,16 +158,28 @@ def hypotheses(claims: list[dict], number: Numbers) -> list[dict]:
         out.append(p)
         for m in members:
             of_purpose[m["id"]] = p
-    alternatives: dict[tuple, list[dict]] = {}
+    dependencies: dict[tuple, list[dict]] = {}
     for c in claims:
-        if c["type"] == "alternative" and c.get("basis") and c["basis"][0] in of_purpose:
+        if c["type"] == "dependency" and c.get("basis") and c["basis"][0] in of_purpose:
             p = of_purpose[c["basis"][0]]
-            alternatives.setdefault((c["subject"], p["id"], c["component"]), []).append(c)
+            dependencies.setdefault((c["subject"], p["id"], c["component"]), []).append(c)
     by_id = {p["id"]: p for p in out}
-    for (subject, pid, _), members in alternatives.items():
+    for (subject, pid, _), members in dependencies.items():
         p = by_id[pid]
         out.append(on_purpose(combined(number(subject), members, purpose=p["purpose"], basis=[pid]), p))
     return out
+
+
+def alternatives(claims: list[dict], hypotheses: list[dict], number: Numbers) -> list[dict]:
+    """The reasoning tier's Alternative claims combined across its samples, per practice, purpose and component."""
+    by_id = {h["id"]: h for h in hypotheses}
+    groups: dict[tuple, list[dict]] = {}
+    for c in claims:
+        groups.setdefault((c["subject"], c["basis"][0], c["component"]), []).append(c)
+    return [
+        on_purpose(combined(number(subject), members, basis=[pid]), by_id[pid])
+        for (subject, pid, _), members in groups.items()
+    ]
 
 
 def aligned(hypotheses: list[dict], case_purposes: list[dict], vocabulary) -> dict[str, dict]:
@@ -213,8 +226,14 @@ def experimental(hypotheses: list[dict], premises: list[dict], vocabulary, numbe
         for x in mine:
             k = (x["case"], x["purpose"]["id"])
             groups.setdefault((k, x["type"], x["component"], x.get("alternative")), []).append(x)
+        for h in own:
+            if h["type"] != "dependency" or not h.get("basis"):
+                continue
+            for k, hids in by_case_purpose.items():
+                if h["basis"][0] in hids and (key := (k, "dependency", h["component"], None)) in groups:
+                    groups[key].append(h)
         for (k, _, _, _), members in groups.items():
-            x = members[0]
+            x = next(m for m in members if m["stage"] == "assessment")
             basis = sorted(by_case_purpose.get(k, []))
             claim = combined(
                 number(subject),

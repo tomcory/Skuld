@@ -71,7 +71,6 @@ class Relation:
     alignment: str | None = None
     condition: str | None = None
     silence: list[str] = field(default_factory=list)
-    question: str | None = None  # O–E: dependency or minimisation, which its outcome answers
     reason: str | None = None  # where no claim it relates explains its outcome
 
 

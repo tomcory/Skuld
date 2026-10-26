@@ -254,7 +254,7 @@ def less_invasive_alternative(
 ):
     """Concerns (v) and coverage per practice and supported inferred purpose, from the assessment stage's combined
     Alternative claims and the experiments' (`combine.experimental`) whose basis names the purpose; `judged` names
-    the practices stage-1 samples asked about."""
+    the practices whose minimisation samples are kept."""
     r = frame.requirement("data_minimised")
     concerns, covered = [], []
     for h in hypotheses:

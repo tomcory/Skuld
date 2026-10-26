@@ -117,22 +117,23 @@ class FakeModel(Provider):
                     "cites": {"outcome": ["D1"]},
                 }
             ],
-            "alternatives": [
-                {
-                    "practice": practice,
-                    "purpose": "p1",
-                    "component": f"{practice}.data",
-                    "alternative": "match installs without the advertising ID",
-                    "level": "TECHNICALLY_SUPPORTED",
-                    "cites": ["D1", practice],
-                },
+            "dependencies": [
                 {
                     "practice": practice,
                     "purpose": "p1",
                     "component": f"{practice}.recipient",
-                    "alternative": "attribute installs in-house",
-                    "level": "TECHNICALLY_SUPPORTED",
-                    "cites": [practice],
+                    "relationship": "ESSENTIAL",
+                    "steps": [
+                        {"text": "Attribution is what AdCo does.", "cites": ["D1"]},
+                        {"text": "The app sends it, so it is needed.", "cites": [practice]},
+                    ],
+                },
+                {
+                    "practice": practice,
+                    "purpose": "p1",
+                    "component": f"{practice}.data",
+                    "relationship": "ESSENTIAL",
+                    "steps": [{"text": "It is sent.", "cites": [practice]}],
                 },
             ],
         }
@@ -226,13 +227,14 @@ def test_readings_apply_the_status_rules_and_the_citation_rule(workspace):
     purpose = by[("purpose", "")]
     assert purpose["status"] == "supported" and purpose["purpose"]["role"] == "ancillary"
     assert purpose["purpose"]["beneficiary"] == "provider"
-    data = by[("alternative", "data")]
-    # a passage describes the mechanism; the practice cited beside it does not count
-    assert (data["status"], data["level"]) == ("supported", "technically_supported")
-    assert data["basis"] == [purpose["id"]] and data["alternative"] == "match installs without the advertising ID"
-    recipient = by[("alternative", "recipient")]
-    assert (recipient["status"], recipient["level"]) == ("not_established", "plausible")
-    assert recipient["sufficiency"]["reason"] == "own_knowledge"
+    recipient = by[("dependency", "recipient")]
+    # the step citing the practice is dropped; the remaining one cites a passage
+    assert (recipient["status"], recipient["relationship"]) == ("supported", "essential")
+    assert recipient["dropped_steps"][0]["step"] == 1
+    data = by[("dependency", "data")]
+    assert data["status"] == "not_established" and len(data["dropped_steps"]) == 1
+    assert data["sufficiency"]["reason"] == "own_knowledge"
+    assert not [c for c in claims if c["type"] == "alternative"]
     # a screen or passage must show the outcome, what the processing is for; the practice shows only that it happens
     shown = answer["purposes"][0]
     practice = shown["practice"]
@@ -245,13 +247,9 @@ def test_readings_apply_the_status_rules_and_the_citation_rule(workspace):
     assert c["status"] == "supported"
     (c,) = expectation.read({"purposes": [{**shown, "cites": ["A1", "D1"]}]}, name, context, practices)
     assert c["status"] == "not_established"
-    # an alternative claimed plausible stays plausible, whatever it cites
-    plausible = {**answer["alternatives"][0], "level": "PLAUSIBLE"}
-    *_, c = expectation.read({**answer, "alternatives": [plausible]}, name, context, practices)
-    assert (c["status"], c["level"]) == ("not_established", "plausible")
-    # an alternative of a purpose not named, or of a component the practice lacks, is dropped
-    stray = [{**plausible, "purpose": "p9"}, {**plausible, "component": f"{practice}.nothing"}]
-    assert [c["type"] for c in expectation.read({**answer, "alternatives": stray}, name, context, practices)] == [
+    # no dependency identified is silence: no claim
+    silent = {**answer["dependencies"][0], "relationship": "NO_DEPENDENCY_IDENTIFIED"}
+    assert [c["type"] for c in expectation.read({**answer, "dependencies": [silent]}, name, context, practices)] == [
         "purpose"
     ]
 

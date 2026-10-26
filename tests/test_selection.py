@@ -103,17 +103,27 @@ def test_a_hypothesis_aligns_with_the_nearest_case_purpose_above_it_of_its_benef
     assert to == {"claim:P:1": cases[1]}
 
 
-def test_a_removal_names_the_aligned_hypotheses_and_stands_alone_where_reasoning_is_silent():
+def test_a_comparison_decides_over_reasoning_and_stands_alone_where_reasoning_is_silent():
     h = hypothesis("claim:P-loc:1", "P-loc", "RequestedServiceProvision")
+    guessed = {
+        **h,
+        "id": "claim:P-loc:2",
+        "type": "dependency",
+        "basis": ["claim:P-loc:1"],
+        "component": "P-loc.data",
+        "relationship": "essential",
+        "status": "supported",
+        "strength": "doc",
+    }
     premises = [
-        premise(1, "alternative", "refuted", alternative="forecast:G-remove", level="demonstrated", removal=True),
-        premise(3, "alternative", "supported", subject="P-ads", node="ServiceProvision", removal=True),
+        premise(1, "dependency", "refuted", relationship="essential"),
+        premise(3, "dependency", "supported", subject="P-ads", node="ServiceProvision", relationship="not_dependent"),
     ]
-    out = combine.experimental([h], premises, PURPOSES, combine.Numbers())
-    removal = next(c for c in out if c["subject"] == "P-loc")
-    assert (removal["status"], removal["removal"], removal["strength"]) == ("refuted", True, "run")
-    assert removal["of"] == ["ex:forecast:1"] and removal["basis"] == ["claim:P-loc:1"]
-    assert removal["challenging"] == ["x1"] and removal["supporting"] == []
+    out = combine.experimental([h, guessed], premises, PURPOSES, combine.Numbers())
+    essential = next(c for c in out if c["type"] == "dependency" and c["subject"] == "P-loc")
+    assert (essential["status"], essential["relationship"], essential["strength"]) == ("refuted", "essential", "run")
+    assert essential["of"] == ["ex:forecast:1", "claim:P-loc:2"] and essential["basis"] == ["claim:P-loc:1"]
+    assert essential["challenging"] == ["x1"] and essential["supporting"] == []
     silent = next(c for c in out if c["subject"] == "P-ads")
     assert silent["status"] == "supported" and silent["basis"] == [] and silent["of"] == ["ex:forecast:3"]
 

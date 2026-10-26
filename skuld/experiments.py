@@ -727,9 +727,8 @@ def premises(cases: Workspace | None, root: Path, practices: list, item) -> list
                         **({} if decisive else {"reason": c.why, "missing": c.missing}),
                     },
                     **({"strength": "run"} if decisive else {}),
-                    "alternative": f"{case.id}:{c.alternative}",
-                    "level": "demonstrated",
-                    **({"removal": True} if c.removal else {}),
+                    **({"relationship": c.relationship} if c.relationship else {}),
+                    **({"alternative": f"{case.id}:{c.alternative}", "level": "demonstrated"} if c.alternative else {}),
                     **({"reason": c.reason} if c.reason and not decisive else {}),
                 }
                 out.append(x)

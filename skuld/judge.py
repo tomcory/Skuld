@@ -1,20 +1,22 @@
 """
-The assessment stage's reasoning tier (E def:stages): two questions a model answers about what D specified, against
-what O observed and the expectation stage inferred. Alternatives, and so minimisation, are the expectation stage's.
+The assessment stage's reasoning tier (E def:stages): three questions a model answers about what D specified, against
+what O observed and the expectation stage inferred.
 
     specificity    per batch of D's declared purposes, the statements in the provider's words: whether each is
                    specific, by the norms and guidelines on `purpose_specific`
     compatibility  per practice and inferred purpose that no specified purpose covers (Q7): against each specified
                    purpose of the practice's data, by the factors of compatibility the frame names
+    minimisation   per practice with a supported inferred purpose: less invasive alternatives of its components
 
 A context holds the application, the practices as O states them, the expectation stage's combined Purpose claims as
 hypotheses (combine.hypotheses), D's declarations of purpose marked as declarations (kind `declaration`, the only kind
-that may come from D's report: gate 1) and passages: the norms on the question's requirement (the corpus's norms/).
-Samples are kept under
+that may come from D's report: gate 1) and passages: the norms on the question's requirement (the corpus's norms/),
+and for minimisation the corpus's passages on the practice's components. Samples are kept under
 assessment/<question>/<subject>/s<seed>/ (ask.py).
 
 The readings apply gate 2: a step citing a declaration may establish what was specified, never that processing is
-compatible with a purpose, so such a step is dropped, with the reason, from a judgement that a purpose is compatible. Each reading gives a sample's judgement of one proposition, which the
+compatible with a purpose or needed for one, so such a step is dropped, with the reason, from a judgement that a
+purpose is compatible and from an alternative. Each reading gives a sample's judgement of one proposition, which the
 combination (combine.py) combines across samples like any claim; concerns.py turns the combined judgements into
 concerns:
 
@@ -22,6 +24,8 @@ concerns:
                    step cites the context, the statement and a norm among it
     compatibility  per specified purpose: not compatible, supported if a factor step remains and every step cites the
                    context, something other than declarations among it; compatible or undecided names no concern
+    minimisation   Alternative claims of the assessment stage: supported if technically supported and every step cites
+                   the context, a passage of documentation among it
 """
 
 import json
@@ -41,13 +45,14 @@ from skuld.context import part as _part
 from skuld.corpus import Corpus
 from skuld.inputs import Assessment
 
-SPECIFICITY, COMPATIBILITY = "specificity", "compatibility"
-QUESTIONS = (SPECIFICITY, COMPATIBILITY)
+SPECIFICITY, COMPATIBILITY, MINIMISATION = "specificity", "compatibility", "minimisation"
+QUESTIONS = (SPECIFICITY, COMPATIBILITY, MINIMISATION)
 #: The context procedure's and the prompt's version per question
-VERSIONS = {SPECIFICITY: "1", COMPATIBILITY: "1"}
+VERSIONS = {SPECIFICITY: "1", COMPATIBILITY: "1", MINIMISATION: "2"}
 REQUIREMENT = {
     SPECIFICITY: "purpose_specific",
     COMPATIBILITY: "purpose_compatible",
+    MINIMISATION: "data_minimised",
 }
 #: The kinds of part a stage-2 context may hold, each with the origins its provenance may have; D's report only as a
 #: declaration
@@ -119,6 +124,26 @@ SCHEMAS = {
                                 },
                             },
                         },
+                    },
+                },
+            }
+        },
+    },
+    MINIMISATION: {
+        "type": "object",
+        "required": ["alternatives"],
+        "properties": {
+            "alternatives": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["purpose", "component", "alternative", "level", "steps"],
+                    "properties": {
+                        "purpose": {"type": "string"},
+                        "component": {"type": "string"},
+                        "alternative": {"type": "string"},
+                        "level": {"enum": ["PLAUSIBLE", "TECHNICALLY_SUPPORTED"]},
+                        "steps": _STEPS,
                     },
                 },
             }
@@ -354,6 +379,7 @@ def questions(
         )
 
     practices = {p.id: p for p in subjects.practices}
+    supported = [h for h in hypotheses if h["type"] == "purpose" and h["status"] == "supported"]
     if a.declaration is not None and subjects.comparability.get("comparable") is not False:
         for case in limitation(subjects, found, hypotheses):
             if case.question is None:
@@ -380,6 +406,29 @@ def questions(
                 )
             )
 
+    for p in subjects.practices:
+        mine = [h for h in supported if h["subject"] == p.id]
+        if not mine:
+            continue
+        parts, hyp = [_application(a), _practice(p, data, names)], {}
+        for k, h in enumerate(mine, 1):
+            parts.append(_hypothesis(f"H{k}", _purpose_text(h["purpose"]), h))
+            hyp[f"H{k}"] = h["id"]
+        documentation = []
+        for kind, value in expectation.components(p).values():
+            for passage in corpus.about(value, None, data) if kind == "D" else corpus.about(None, value, data):
+                if passage not in documentation:
+                    documentation.append(passage)
+        parts += _passages(documentation, "D") + _passages(norms.on(REQUIREMENT[MINIMISATION]), "N", "norms/")
+        out.append(
+            Question(
+                MINIMISATION,
+                p.id,
+                _checked(parts),
+                [],
+                {"practice": p.id, "components": list(expectation.components(p)), "purposes": hyp},
+            )
+        )
     return out
 
 
@@ -435,7 +484,7 @@ def refusals(question: Question, text: str | None, factors: list[str]) -> list[s
     if not isinstance(answer, dict):
         return ["the answer is not an object"]
     ids, out = question.context.ids, []
-    section = {SPECIFICITY: "statements", COMPATIBILITY: "pairs"}[question.question]
+    section = {SPECIFICITY: "statements", COMPATIBILITY: "pairs", MINIMISATION: "alternatives"}[question.question]
     items = [i for i in answer.get(section) or () if isinstance(i, dict)]
     key = {SPECIFICITY: "statement", COMPATIBILITY: "specified"}.get(question.question)
     if key:
@@ -453,6 +502,13 @@ def refusals(question: Question, text: str | None, factors: list[str]) -> list[s
                 for f in i.get("factors") or ()
                 if f.get("factor") not in factors
             ]
+        if question.question == MINIMISATION:
+            if ref(i.get("purpose")) not in question.record["purposes"]:
+                out.append(f"alternatives: {ref(i.get('purpose')) or '(none)'} is not a purpose of the context")
+            if ref(i.get("component")) not in question.record["components"]:
+                out.append(
+                    f"alternatives: {ref(i.get('component')) or '(none)'} is not a component of {question.record['practice']}"
+                )
     return sorted(set(out))
 
 
@@ -660,6 +716,69 @@ def compatibility(answer: dict, name: str, q: Question) -> list[dict]:
     return out
 
 
+def minimisation(answer: dict, name: str, q: Question, hypotheses: dict[str, dict]) -> list[dict]:
+    """The Alternative claims of a minimisation sample, of the assessment stage and the reasoning tier."""
+    ids, documentation = q.context.ids, _documentation(q.context)
+    declarations = q.context.of_kind("declaration")
+    channel = f"reasoning:{name}"
+    out = []
+    for n, item in enumerate(answer.get("alternatives") or ()):
+        label = ref(item.get("purpose"))
+        basis = hypotheses.get(q.record["purposes"].get(label, ""))
+        component = ref(item.get("component"))
+        if basis is None or component not in q.record["components"]:
+            continue
+        steps, dropped = [], []
+        for i, s in enumerate(item.get("steps") or ()):
+            cites = [ref(c) for c in s.get("cites") or ()]
+            if set(cites) & declarations:
+                dropped.append({"step": i, "reason": "cites a declaration as a reason that processing is needed"})
+            else:
+                steps.append(cites)
+        cites = {c for s in steps for c in s}
+        technical = str(item.get("level")).upper() == "TECHNICALLY_SUPPORTED"
+        grounded = _grounded(steps, ids)
+        documented = technical and grounded and bool(cites & documentation)
+        if basis["purpose"]["specificity"] == "vague":
+            status, why, reason = "not_assessable", "purpose_vague", "the purpose is too vague"
+        elif documented:
+            status, why, reason = "supported", None, None
+        elif technical:
+            status, why = "not_established", "own_knowledge"
+            reason = "no step cites documentation of the mechanism, or a step cites nothing"
+        else:
+            status, why, reason = (
+                "not_established",
+                "own_knowledge",
+                "plausible: no cited document describes the mechanism",
+            )
+        out.append(
+            {
+                "id": f"{name}:a{n}",
+                "type": "alternative",
+                "stage": "assessment",
+                "tier": "reasoning",
+                "channels": [channel],
+                "subject": q.record["practice"],
+                "component": component,
+                "alternative": item.get("alternative", ""),
+                "level": "technically_supported" if documented else "plausible",
+                "purpose": basis["purpose"],
+                "basis": [basis["id"]],
+                "status": status,
+                "parts": sorted(cites & ids),
+                "supporting": [],
+                "challenging": [],
+                "strength": "doc" if grounded else "own",
+                "uncertainty": FROM_DOC if grounded else expectation.FROM_OWN,
+                "sufficiency": {"sufficient": status == "supported", **({"reason": why} if why else {})},
+                **({"dropped_steps": dropped} if dropped else {}),
+                **({"reason": reason} if reason else {}),
+            }
+        )
+    return out
+
+
 def stage1(a: Assessment, subjects: Subjects, corpus: Corpus, registry=None) -> list[dict]:
     """The expectation stage's hypotheses from its kept samples, as the assessment reads them."""
     practices = {p.id: p for p in subjects.practices}
@@ -673,7 +792,7 @@ def stage1(a: Assessment, subjects: Subjects, corpus: Corpus, registry=None) -> 
 
 def independent(root: Path, report: dict) -> list[str]:
     """Gate 3 for the assessment stage: every kept stage-2 context passes gate 1, and no item supporting an
-    assessment-stage claim is one of D's. A concern that a purpose is not compatible may
+    assessment-stage claim or a minimisation concern is one of D's. A concern that a purpose is not compatible may
     rest on what D specified; that one is compatible is never stated, and its steps citing declarations are dropped
     by the reading."""
     problems = []
@@ -683,7 +802,9 @@ def independent(root: Path, report: dict) -> list[str]:
         except ContextError as e:
             problems.append(f"{path.parent.relative_to(root)}: {e}")
     items = {e["id"]: e for e in report.get("evidence", [])}
-    results = [c for c in report.get("claims", []) if c.get("stage") == "assessment"]
+    results = [c for c in report.get("claims", []) if c.get("stage") == "assessment"] + [
+        c for c in report.get("concerns", []) if c["step"] == "less_invasive_alternative"
+    ]
     for c in results:
         for x in c.get("supporting", []):
             if (items.get(x, {}).get("claim") or {}).get("dimension") == "D":

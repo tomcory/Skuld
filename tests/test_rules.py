@@ -1,5 +1,5 @@
-"""The experimental channel's status rule: a comparison read as an Alternative claim, a removal among them, and never
-as both supporting and refuting one."""
+"""The experimental channel's status rule row by row: the readings of a comparison, and that no comparison is read
+as both supporting and refuting a claim."""
 
 import ast
 import itertools
@@ -24,19 +24,35 @@ def comparison(aid: str, result: str, worse_: dict | None = None) -> Comparison:
     return Comparison(aid, "c", "p", aid, ["b1"], ["a1"], result, worse=worse_ or {})
 
 
-def removal(result: str, worse_: dict | None = None):
-    return rules.alternative(PURPOSE, alt("R", True), comparison("R", result, worse_), "search_space_not_run")
+def dep(result: str, worse_: dict | None = None) -> tuple[str | None, str]:
+    made = rules.dependency(PURPOSE, COMPONENT, comparison("R", result, worse_), "search_space_not_run")
+    return made.relationship, made.status
 
 
-def test_a_removal_is_an_alternative_like_any_other():
-    preserved = removal("preserves", {"m": "all"})
-    assert (preserved.type, preserved.status, preserved.removal) == ("alternative", "supported", True)
-    assert removal("breaks").status == "refuted"
-    assert removal("undecided").status == "not_established"
+def test_a_preserving_removal_with_no_worse_measurement_is_not_dependent():
+    assert dep("preserves", {"m": "none"}) == ("not_dependent", "supported")
+
+
+def test_a_preserving_removal_with_a_measurement_worse_in_every_run_is_quality_dependent():
+    assert dep("preserves", {"m": "all", "n": "none"}) == ("quality_dependent", "supported")
+
+
+def test_a_preserving_removal_with_mixed_measurements_refutes_essential_only():
+    assert dep("preserves", {"m": "some"}) == ("essential", "refuted")
+
+
+def test_a_breaking_removal_is_essential():
+    assert dep("breaks") == ("essential", "supported")
+
+
+def test_an_undecided_comparison_reads_no_value():
+    assert dep("undecided") == (None, "not_established")
 
 
 def test_one_comparison_never_supports_and_refutes_a_claim():
     for result, w in itertools.product(("preserves", "breaks", "undecided"), ("none", "some", "all")):
+        made = rules.dependency(PURPOSE, COMPONENT, comparison("R", result, {"m": w}), "x")
+        assert not (made.supporting and made.challenging)
         a = rules.alternative(PURPOSE, alt("A"), comparison("A", result, {"m": w}), "x")
         assert not (a.supporting and a.challenging)
 
@@ -60,10 +76,10 @@ def test_preconditions(purpose, present, expected):
     case = Case("c", Feature("F", "F", "e", None, 0, "o"), (purpose,), (COMPONENT,), (alt("R", True),), Path("."))
     made = rules.claims(case, {"e": present}, {}, {})
     assert {c.status for c in made} == {expected}
-    assert [(c.type, c.removal) for c in made] == [("alternative", True)]
+    assert [c.type for c in made] == ["dependency", "alternative"]
 
 
-def test_a_component_without_a_removal_has_its_alternatives_only():
+def test_a_component_without_a_removal_has_no_dependency_claim():
     case = Case("c", Feature("F", "F", "e", None, 0, "o"), (PURPOSE,), (COMPONENT,), (alt("A"),), Path("."))
     made = rules.claims(case, {"e": True}, {("p", "A"): comparison("A", "preserves")}, {})
     assert [(c.type, c.status) for c in made] == [("alternative", "supported")]

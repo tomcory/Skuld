@@ -4,11 +4,11 @@ E's relations to its expectation, pass-through and open conditions.
 O–E, by rule, per practice, supported Purpose claim, question and component (data or recipient), over E's combined
 claims; a relation names the claims it reads in `to`, and its outcome is a function of them (`outcome`):
 
-    dependency    the experiments' removals of the component, for a case purpose ≈ the purpose: functional (data) or
-                  recipient dependency supported if a removal breaks the purpose (its alternative refuted); no
-                  functional dependency established, or recipient dependency not established, if one preserves it
-                  (demonstrated); conflicting if removals disagree; insufficient evidence otherwise, not assessable if
-                  every removal is
+    dependency    the Dependency claims on the component for the purpose (the hypotheses', and the experiments' for a
+                  case purpose ≈ it), decided by the combination's rule: functional (data) or recipient dependency
+                  supported if the deciding claim supports essential or quality_dependent; no functional dependency
+                  established, or recipient dependency not established, otherwise; conflicting if the claims of
+                  greatest strength disagree, not assessable if every claim is
     minimisation  the Alternative claims on the component for the purpose: an alternative demonstrated if one is
                   supported at that level, else technically supported if one is at that level; else insufficient
                   evidence (a plausible alternative, or one refuted, has no outcome of its own), not assessable if
@@ -75,6 +75,8 @@ UNRELATED = {
     "declares_retention": "E relates no declared retention",
     "declares_transfer": "E relates no declared transfers",
 }
+#: The values of a Dependency claim that state a functional dependency
+DEPENDS = ("essential", "quality_dependent")
 
 
 def e_ref(claim_id: str) -> dict:
@@ -82,20 +84,19 @@ def e_ref(claim_id: str) -> dict:
     return {"dimension": "E", "claim": claim_id}
 
 
-def outcome(question: str, aspect: str, claims: list[dict]) -> tuple[str, dict | None]:
-    """The O–E outcome of a question for a component from the Alternative claims a relation reads, and the claim that
-    decides it."""
+def outcome(aspect: str, claims: list[dict]) -> tuple[str, dict | None]:
+    """The O–E outcome for a component from the claims a relation reads (all Dependency or all Alternative claims),
+    and the claim that decides it."""
     if not claims:
         return INSUFFICIENT, None
     if all(c["status"] == "not_assessable" for c in claims):
         return NOT_ASSESSABLE, None
-    if question == "dependency":
+    if claims[0]["type"] == "dependency":
         status, decider = combine.decide(claims)
         if status == "conflicted":
             return CONFLICTING, None
-        if status not in combine.DECISIVE:
-            return INSUFFICIENT, None
-        return DEPENDENCY[(aspect, status == "refuted")], decider
+        depends = status == "supported" and decider.get("relationship") in DEPENDS
+        return DEPENDENCY[(aspect, depends)], decider if status in combine.DECISIVE else None
     if any(c["status"] == "conflicted" for c in claims):
         return CONFLICTING, None
     for level in ("demonstrated", "technically_supported"):
@@ -109,7 +110,7 @@ def o_e(subjects: Subjects, hypotheses: list[dict], alternatives: list[dict], te
     """The O–E relations: per practice E formed an expectation of."""
     out: list[Relation] = []
 
-    def add(p, aspect: str | None, read: list[dict], found: str, reason: str | None = None, question=None) -> None:
+    def add(p, aspect: str | None, read: list[dict], found: str, reason: str | None = None) -> None:
         out.append(
             Relation(
                 id="",
@@ -120,16 +121,15 @@ def o_e(subjects: Subjects, hypotheses: list[dict], alternatives: list[dict], te
                 to=[e_ref(c["id"]) for c in read],
                 subject=p.id,
                 aspect=aspect,
-                question=question,
                 reason=reason,
             )
         )
 
     def relate(p, questions: dict[tuple, list[dict]]) -> int:
         n = 0
-        for (question, aspect), claims in questions.items():
+        for (_, aspect), claims in questions.items():
             if claims:
-                add(p, aspect, claims, outcome(question, aspect, claims)[0], question=question)
+                add(p, aspect, claims, outcome(aspect, claims)[0])
                 n += 1
         return n
 
@@ -143,20 +143,26 @@ def o_e(subjects: Subjects, hypotheses: list[dict], alternatives: list[dict], te
             for aspect in ("data", "recipient"):
                 component = f"{p.id}.{aspect}"
                 mine = [x for x in tested if h["id"] in x["basis"] and x["component"] == component]
-                questions[("dependency", aspect)] = [x for x in mine if x.get("removal")]
+                combined_in = {m for x in mine for m in x["of"]}
+                questions[("dependency", aspect)] = [x for x in mine if x["type"] == "dependency"] + [
+                    c
+                    for c in hypotheses
+                    if c["type"] == "dependency"
+                    and c.get("basis") == [h["id"]]
+                    and c["component"] == component
+                    and c["id"] not in combined_in
+                ]
                 questions[("minimisation", aspect)] = [
                     c for c in alternatives if c["basis"] == [h["id"]] and c["component"] == component
-                ] + mine
+                ] + [x for x in mine if x["type"] == "alternative"]
             if not relate(p, questions):
-                add(p, None, [h], INSUFFICIENT, "no alternative names the purpose")
+                add(p, None, [h], INSUFFICIENT, "no claim of dependency or alternative names the purpose")
         alone: dict[str, dict[tuple, list[dict]]] = {}
         for x in tested:
             if x["subject"] == p.id and not x["basis"]:
-                questions = alone.setdefault(f"{x['case']}/{x['purpose']['id']}", {})
-                aspect = x["component"].rsplit(".", 1)[1]
-                if x.get("removal"):
-                    questions.setdefault(("dependency", aspect), []).append(x)
-                questions.setdefault(("minimisation", aspect), []).append(x)
+                question = "dependency" if x["type"] == "dependency" else "minimisation"
+                key = (question, x["component"].rsplit(".", 1)[1])
+                alone.setdefault(f"{x['case']}/{x['purpose']['id']}", {}).setdefault(key, []).append(x)
         for questions in alone.values():
             relate(p, questions)
     return out
@@ -317,8 +323,8 @@ def open_conditions(
     features: list[str],
 ) -> list[dict]:
     """The conditions E could not decide: a relation's condition, a party, a requirement's undecided condition; and,
-    for every alternative an experiment demonstrated (a removal among them), that it holds for the features the case
-    report covers."""
+    for every experimental claim that a purpose is achieved without a component or with less of it (not dependent,
+    or an alternative demonstrated), that it holds for the features the case report covers."""
     out: dict[str, dict] = {}
 
     def entry(key: str, text: str) -> dict:
@@ -337,7 +343,12 @@ def open_conditions(
             continue
         for cid in s.conditions:
             entry(f"frame:{cid}", frame.conditions[cid].text)["qualifies"].append(information[s.requirement])
-    shown = [x["id"] for x in tested if x["status"] == "supported" and x["type"] == "alternative"]
+    shown = [
+        x["id"]
+        for x in tested
+        if x["status"] == "supported"
+        and ((x["type"] == "dependency" and x.get("relationship") == "not_dependent") or x["type"] == "alternative")
+    ]
     if shown:
         text = f"holds for the features the case report covers ({', '.join(features)})"
         entry("features", text)["qualifies"] += shown

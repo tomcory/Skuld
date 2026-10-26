@@ -2,22 +2,23 @@
 The expectation stage (E def:stages): what each practice can be expected to serve and need, from what O observed, the
 screens around it and documentation, without anything the provider says.
 
-One batch per episode in which a practice first occurred, so that each practice is asked about once; practices of no
-known episode form the batch `launch`. The batch's screens are those of every episode its practices occurred in, in
-the first run that has them, with the screens the notice classifier (Ratatoskr's `notices`, R-7) takes for consent dialogs or privacy notices
+One batch per episode (Q2): the practices that occurred in it, answered each in its own part of the schema; practices
+of no known episode form the batch `launch`. The batch's screens are those of the episode in the first run that has
+them, with the screens the notice classifier (Ratatoskr's `notices`, R-7) takes for consent dialogs or privacy notices
 left out and recorded as left out, so that what D collects as declarations never reaches this stage (gate 1). The
 context holds no part of D's report: `check` refuses one.
 
 A sample per batch and seed (`skuld expect`) is kept under expectation/<batch>/s<seed>/ (ask.py); `read` turns an
-answer into Purpose and Alternative claims of the expectation stage by E's status rules; the occurrence of a practice,
-which the context states, is evidence of neither (gate 2).
+answer into Purpose and Dependency claims of the expectation stage by E's status rules, with the citation rule (gate
+2): a step that cites a practice, the occurrence of the processing, as a reason it is needed is dropped, with the
+reason. Alternatives are the reasoning tier's (judge.py).
 
     Purpose      supported if specific and a screen or passage of the context shows its outcome, what the processing
                  is for (the practice gives its action and object, and its occurrence shows nothing of what it is
                  for, so citing it does not count); strength own otherwise
-    Alternative  per purpose and component, a less invasive way to achieve the purpose: technically supported, and
-                 supported, if it cites only the context and a passage among it describes the mechanism; plausible and
-                 not established otherwise; a purpose too vague makes it not assessable
+    Dependency   one value per purpose and component: essential or quality_dependent, supported if steps remain and
+                 each cites the context; not_dependent needs a run, so it is never supported here; no dependency
+                 identified is silence and makes no claim; a purpose too vague makes it not assessable
 """
 
 import json
@@ -38,9 +39,9 @@ from skuld.corpus import Corpus
 from skuld.inputs import Assessment
 from skuld.runs import RunRefused, load
 
-VERSION = "5"
+VERSION = "4"
 PROMPT = "expectation"
-PROMPT_VERSION = "5"
+PROMPT_VERSION = "4"
 PROCEDURE = {"id": "skuld.expectation", "version": VERSION}
 #: The kinds of part a stage-1 context may hold, each with the origins its provenance may have; never D's report
 KINDS = {"application": ("input",), "practice": ("o_report",), "screen": ("run",), "passage": ("corpus",)}
@@ -48,6 +49,11 @@ KINDS = {"application": ("input",), "practice": ("o_report",), "screen": ("run",
 SCREEN_TEXT, MAX_SCREENS = 600, 30
 #: Attempts per sample: a refused answer is asked once more, with the refusal
 ATTEMPTS = 2
+#: The answer's dependencies as a Dependency claim's value; NO_DEPENDENCY_IDENTIFIED is silence and makes no claim
+ANSWERED = {"ESSENTIAL": "essential", "QUALITY_DEPENDENT": "quality_dependent", "NOT_DEPENDENT": "not_dependent"}
+SILENT = "NO_DEPENDENCY_IDENTIFIED"
+#: Values a document can establish; not_dependent needs a run
+FROM_DOCUMENTS = ("essential", "quality_dependent")
 #: The answer's beneficiaries as a purpose names them
 BENEFICIARY = {"USER": "user", "PROVIDER": "provider", "OTHER": "other"}
 #: The screens a batch of practices of no known episode is given: the first ones of the run
@@ -60,9 +66,17 @@ _CITES = {"type": "array", "items": {"type": "string"}}
 PARTS = ("action", "object", "beneficiary", "context", "outcome")
 SHOWN = ("outcome",)
 GROUNDS = ("screen", "passage")
+_STEPS = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "required": ["text", "cites"],
+        "properties": {"text": {"type": "string"}, "cites": _CITES},
+    },
+}
 ANSWER_SCHEMA = {
     "type": "object",
-    "required": ["purposes", "alternatives"],
+    "required": ["purposes", "dependencies"],
     "properties": {
         "purposes": {
             "type": "array",
@@ -81,18 +95,17 @@ ANSWER_SCHEMA = {
                 },
             },
         },
-        "alternatives": {
+        "dependencies": {
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["practice", "purpose", "component", "alternative", "level", "cites"],
+                "required": ["practice", "purpose", "component", "relationship", "steps"],
                 "properties": {
                     "practice": {"type": "string"},
                     "purpose": {"type": "string"},
                     "component": {"type": "string"},
-                    "alternative": {"type": "string"},
-                    "level": {"enum": ["PLAUSIBLE", "TECHNICALLY_SUPPORTED"]},
-                    "cites": _CITES,
+                    "relationship": {"enum": [*ANSWERED, SILENT]},
+                    "steps": _STEPS,
                 },
             },
         },
@@ -154,10 +167,6 @@ def _screens(run, episode: str | None, first: int | None = None) -> list[tuple[s
         if first is not None and len(shown) >= first:
             break
     return shown
-
-
-def _order(episode: str) -> tuple:
-    return (episode == "?", len(episode), episode)
 
 
 def batches(a: Assessment, subjects: Subjects) -> list[Batch]:
@@ -271,7 +280,7 @@ def refusals(text: str | None, batch: Batch, ids: set[str]) -> list[str]:
     out = []
     answered = {ref(p.get("practice")) for p in answer.get("purposes") or ()}
     out += [f"practice {pid} has no purpose" for pid in practices if pid not in answered]
-    for section in ("purposes", "alternatives"):
+    for section in ("purposes", "dependencies"):
         for item in answer.get(section) or ():
             pid = ref(item.get("practice"))
             if pid not in practices:
@@ -427,36 +436,42 @@ def read(answer: dict, sample: str, context: Context, practices: dict[str, Pract
         )
         purposes[(practice, p["id"])] = c
 
-    for n, alt in enumerate(answer.get("alternatives") or ()):
-        practice, component = ref(alt.get("practice")), ref(alt.get("component"))
-        basis = purposes.get((practice, alt.get("purpose")))
-        if basis is None or component not in components(practices[practice]):
+    for n, d in enumerate(answer.get("dependencies") or ()):
+        practice, component = ref(d.get("practice")), ref(d.get("component"))
+        value = ANSWERED.get(str(d.get("relationship")).upper())
+        basis = purposes.get((practice, d.get("purpose")))
+        if basis is None or value is None or component not in components(practices[practice]):
             continue
-        cites = [ref(c) for c in alt.get("cites") or ()]
-        documentation = [c for c in cites if kinds.get(c) == "passage"]
-        technical = str(alt.get("level")).upper() == "TECHNICALLY_SUPPORTED"
-        grounded = cited([c for c in cites if c not in practice_parts], ids)
-        documented = technical and grounded and bool(documentation)
+        steps, dropped = [], []
+        for i, s in enumerate(d.get("steps") or ()):
+            cites = [ref(c) for c in s.get("cites") or ()]
+            if set(cites) & practice_parts:
+                dropped.append({"step": i, "reason": "cites the occurrence of a practice as a reason it is needed"})
+            else:
+                steps.append(cites)
+        documented = bool(steps) and all(cited(c, ids) for c in steps)
         if basis["purpose"]["specificity"] == "vague":
             status, why, prose = "not_assessable", "purpose_vague", "the purpose is too vague"
+        elif value not in FROM_DOCUMENTS:
+            status, why, prose = "not_established", "needs_run", "not dependent needs a run without the component"
         elif documented:
             status, why, prose = "supported", None, None
         else:
-            status, why, prose = "not_established", "own_knowledge", "no cited document describes the mechanism"
+            status, why, prose = "not_established", "own_knowledge", "a step does not cite the context"
         claim(
-            "alternative",
+            "dependency",
             practice,
             n,
             status,
-            grounded,
+            documented,
             why,
             prose,
             component=component,
-            alternative=alt.get("alternative", ""),
-            level="technically_supported" if documented else "plausible",
+            relationship=value,
             purpose=basis["purpose"],
             basis=[basis["id"]],
-            parts=sorted(set(documentation)),
+            parts=sorted({x for c in steps for x in c if x in ids}),
+            **({"dropped_steps": dropped} if dropped else {}),
         )
     return claims
 

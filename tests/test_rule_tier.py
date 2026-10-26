@@ -266,9 +266,9 @@ def test_the_fixtures_reports_are_valid_and_pilates_reproduces_the_worked_exampl
         and c["purpose"]["id"] == "P-L1"
     ]
     assert all(c["basis"] == [] for c in launch)
-    # the identifier's removal preserves the launch: one claim, of no dependency and of an alternative at once
-    assert {(c["type"], bool(c.get("removal")), c["status"], c.get("strength")) for c in launch} == {
-        ("alternative", True, "supported", "run")
+    assert {(c["type"], c.get("relationship"), c["status"], c.get("strength")) for c in launch} >= {
+        ("dependency", "not_dependent", "supported", "run"),
+        ("alternative", None, "supported", "run"),
     }
     if not (root / "assessment").is_dir():
         return
