@@ -10,10 +10,10 @@
         "seed": 1
       },
       "expect": {
-        "temperature": 0.6
+        "temperature": 0.4
       },
       "judge": {
-        "temperature": 0.6
+        "temperature": 0.4
       }
     }
   },

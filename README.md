@@ -87,7 +87,7 @@ git):
 ```
 
 How Skuld runs is in `config.json`, laid over Ratatoskr's defaults: the default model, the sampling of each task (the
-generator at temperature 0.2 from seed 1, both stages at 0.6 with a seed per sample, 8,192
+generator at temperature 0.2 from seed 1, both stages at 0.4 with a seed per sample, 8,192
 tokens; the stages' seeds), and the
 client (Ollama, a 30-minute timeout, no response cache, since the samples are Skuld's record of every answer). The
 server's address is read from `OLLAMA_BASE_URL`. The generator and both stages ask through `ask.py`.

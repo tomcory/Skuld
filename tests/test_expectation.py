@@ -185,7 +185,7 @@ def test_samples_are_kept_and_the_consent_screen_never_reaches_the_model(workspa
     assert len(samples) == 4 and len(model.prompts) == 4
     assert all(PURPOSE_TEXT not in p for p in model.prompts)
     record = json.loads((samples[0].folder / "record.json").read_text())
-    assert record["model"]["name"] == "fake" and record["options"]["temperature"] == 0.6
+    assert record["model"]["name"] == "fake" and record["options"]["temperature"] == 0.4
     expectation.expect(a, built, load_corpus(a.corpus), seeds=[1, 2], provider=model)
     assert len(model.prompts) == 4  # kept, not asked again
 
