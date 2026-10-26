@@ -1,0 +1,11 @@
+id: android-unique-identifiers
+title: Best practices for unique identifiers (Android Developers)
+source: https://developer.android.com/identity/user-data-ids
+retrieved: 2026-10-21
+kind: platform
+about:
+  nodes: [device-or-other-ids.advertising-id, device-or-other-ids.android-id, device-or-other-ids.installation-id, device-or-other-ids.app-set-id]
+  entities: []
+text: >-
+  Use an advertising ID only for advertising and user-analytics use cases that require it; prefer identifiers scoped
+  to the application (such as an app-generated installation ID) for other purposes.

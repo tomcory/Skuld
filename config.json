@@ -1,0 +1,46 @@
+{
+  "model": "gemma4:31b",
+  "sampling": {
+    "default": {
+      "max_tokens": 8192
+    },
+    "tasks": {
+      "propose": {
+        "temperature": 0.2,
+        "seed": 1
+      },
+      "expect": {
+        "temperature": 0.6
+      },
+      "judge": {
+        "temperature": 0.6
+      }
+    }
+  },
+  "client": {
+    "api": "ollama",
+    "timeout": 1800.0,
+    "cache": {
+      "enabled": false
+    }
+  },
+  "expectation": {
+    "seeds": [
+      1,
+      2,
+      3
+    ]
+  },
+  "experiments": {
+    "budget_seconds": 0,
+    "repeats": 3,
+    "run_seconds": 240
+  },
+  "assessment": {
+    "seeds": [
+      1,
+      2,
+      3
+    ]
+  }
+}

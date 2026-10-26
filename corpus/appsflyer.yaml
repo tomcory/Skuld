@@ -1,0 +1,12 @@
+id: appsflyer
+title: AppsFlyer, a mobile measurement partner
+source: https://www.appsflyer.com/glossary/mobile-measurement-partner/
+retrieved: 2026-10-21
+kind: component
+about:
+  nodes: []
+  entities: [appsflyer]
+# In our own words.
+text: >-
+  AppsFlyer is a mobile measurement partner: a service that attributes application installs and in-app events to the
+  marketing campaigns that led to them, and reports these to the application's provider and its advertising partners.

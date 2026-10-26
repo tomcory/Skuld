@@ -1,0 +1,23 @@
+id: gdpr-art-6-4
+title: GDPR Article 6(4), compatibility of further processing
+source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
+retrieved: 2026-10-24
+verified: {by: Thomas Cory, date: 2026-10-24}
+kind: norm
+about:
+  requirements: [purpose_compatible]
+text: >-
+  Where the processing for a purpose other than that for which the personal data have been collected is not based on the 
+  data subject’s consent or on a Union or Member State law which constitutes a necessary and proportionate measure in a 
+  democratic society to safeguard the objectives referred to in Article 23(1), the controller shall, in order to 
+  ascertain whether processing for another purpose is compatible with the purpose for which the personal data are 
+  initially collected, take into account, inter alia: 
+  (a) any link between the purposes for which the personal data have been collected and the purposes of the intended 
+  further processing;
+  (b) the context in which the personal data have been collected, in particular regarding the relationship between data 
+  subjects and the controller;
+  (c) the nature of the personal data, in particular whether special categories of personal data are processed, pursuant 
+  to Article 9, or whether personal data related to criminal convictions and offences are processed, pursuant to 
+  Article 10;
+  (d) the possible consequences of the intended further processing for data subjects;
+  (e) the existence of appropriate safeguards, which may include encryption or pseudonymisation.

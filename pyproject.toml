@@ -13,10 +13,17 @@ requires-python = ">=3.12"
 dynamic = ["version"]
 dependencies = [
     # the record schemas, and what checks the records of a Loki run folder against them
-    "ratatoskr[validate] @ git+ssh://git@github.com/tomcory/Ratatoskr.git@0.3.0",
+    "ratatoskr[validate,client] @ git+ssh://git@github.com/tomcory/Ratatoskr.git@0.12.0",
+    # the named inputs of a case
+    "pyyaml>=6",
 ]
 
+[project.scripts]
+skuld = "skuld.cli:main"
+
 [project.optional-dependencies]
+# the model calls of the generator and both stages
+reason = ["ratatoskr[ollama,openai,anthropic] @ git+ssh://git@github.com/tomcory/Ratatoskr.git@0.12.0"]
 dev = ["pytest>=8"]
 
 [tool.setuptools.dynamic]
@@ -24,6 +31,9 @@ version = { attr = "skuld.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["skuld*"]
+
+[tool.setuptools.package-data]
+skuld = ["prompts/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

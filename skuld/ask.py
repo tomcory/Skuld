@@ -1,0 +1,184 @@
+"""
+One way to ask a model, shared by the generator and the reasoning channel's stages.
+
+A *sample* is a folder that keeps what was asked and what came back:
+
+    record.json   what identifies the request (the caller's keys: prompt, procedure, options, ...), the model by API,
+                  name and digest, the answer's digest and when it was asked
+    prompt.txt    the prompt
+    answer.json   the answer, as the model gave it
+
+A sample is reused while the keys its caller names as its identity, and the model's name, are unchanged; a request
+whose sample is missing or changed is asked, unless offline. Asking goes through Ratatoskr's client with the model's
+default reasoning and a streamed response, and with the client's own response cache off: the samples are Skuld's
+record of every answer, which a report is rebuilt from (EV-E-REPLAY).
+
+`ask_with_feedback` asks again where the caller refuses an answer, with the refusal appended to the prompt, a sample of
+its own per attempt and the next seed.
+"""
+
+import hashlib
+import json
+import shutil
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+from ratatoskr.llm import Call, Client, Options, Provider
+
+from skuld import config
+
+#: The token limit of every request; a thinking model's reasoning counts towards it
+MAX_TOKENS = 8192
+
+
+class AskError(Exception):
+    """A model could not be asked (offline without a kept sample is not an error: the answer is then None)."""
+
+
+@dataclass
+class Sample:
+    folder: Path
+    record: dict
+    text: str | None  # None: offline, and no kept answer for this request
+    reused: bool
+
+
+def sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def client(api: str, provider: Provider | None = None) -> Client:
+    """A client for Skuld's requests: config.json's client section, without the response cache, raising on failure."""
+    return Client.from_config(config.load(), api=api, provider=provider, cache=False, raise_errors=True)
+
+
+def _kept(folder: Path, record: dict, identity: tuple[str, ...]) -> str | None:
+    path, answer = folder / "record.json", folder / "answer.json"
+    if not path.is_file() or not answer.is_file():
+        return None
+    kept = json.loads(path.read_text(encoding="utf-8"))
+    if all(kept.get(k) == record[k] for k in identity) and kept["model"]["name"] == record["model"]["name"]:
+        return answer.read_text(encoding="utf-8")
+    return None
+
+
+def ask(
+    folder: Path,
+    prompt: str,
+    schema: dict,
+    record: dict,
+    identity: tuple[str, ...],
+    *,
+    model: str,
+    api: str,
+    options: Options,
+    offline: bool = False,
+    provider: Provider | None = None,
+    files: dict[str, str] | None = None,
+) -> Sample:
+    """
+    The sample of a request in `folder`: kept, or asked now. `record` holds the request's identity under the keys
+    `identity` names, and gets the model, the options, the answer's digest and the time; `files` are written into the
+    folder beside the answer (a context, for example).
+    """
+    record = {**record, "model": {"api": api, "name": model}, "options": _options(options)}
+    text = _kept(folder, record, (*identity, "options"))
+    if text is not None:
+        return Sample(folder, json.loads((folder / "record.json").read_text(encoding="utf-8")), text, True)
+    if offline:
+        return Sample(folder, record, None, False)
+    asking = client(api, provider)
+    call = Call(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        json_schema=schema,
+        options=options,
+        think=None,
+        model_options={"stream": True},
+    )
+    try:
+        result = asking.sync.chat(call)
+        digest = asking.sync.digests().get(model)
+    except Exception as e:
+        raise AskError(f"{model}: {type(e).__name__}: {e}") from e
+    record["model"]["digest"] = digest
+    record["answer"] = {"sha256": sha256(result.content)}
+    record["created"] = datetime.now(UTC).isoformat(timespec="seconds")
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, content in (files or {}).items():
+        (folder / name).write_text(content, encoding="utf-8")
+    (folder / "prompt.txt").write_text(prompt, encoding="utf-8")
+    (folder / "answer.json").write_text(result.content, encoding="utf-8")
+    (folder / "record.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return Sample(folder, record, result.content, False)
+
+
+def ask_with_feedback(
+    folders: Callable[[int], Path],
+    prompt: str,
+    schema: dict,
+    record: Callable[[str], dict],
+    identity: tuple[str, ...],
+    refuse: Callable[[str | None], list[str]],
+    *,
+    attempts: int,
+    seed: int,
+    model: str,
+    api: str,
+    options: Options,
+    offline: bool = False,
+    provider: Provider | None = None,
+    files: dict[str, str] | None = None,
+) -> tuple[Sample | None, list[str], int]:
+    """
+    Ask until `refuse` finds nothing wrong with an answer, at most `attempts` times: attempt n has its own folder
+    (`folders(n)`), samples with seed + n - 1, and its prompt carries the previous attempt's refusals. Returns the
+    last sample, its refusals (empty if accepted) and the attempts made; the samples of later attempts, kept from an
+    earlier request, are removed. Offline, an attempt that is not kept ends the asking: the last kept attempt stands,
+    with its refusals, or, if none is kept, a sample whose text is None, and nothing is removed.
+    """
+    sample, previous, refused = None, None, []
+    for attempt in range(1, attempts + 1):
+        asked = prompt
+        if refused:
+            asked += "\n\nYour previous answer was refused:\n" + "\n".join(f"- {p}" for p in refused)
+            asked += "\nAnswer again, mending these."
+        sample = ask(
+            folders(attempt),
+            asked,
+            schema,
+            record(asked),
+            identity,
+            model=model,
+            api=api,
+            options=options.model_copy(update={"seed": seed + attempt - 1}),
+            offline=offline,
+            provider=provider,
+            files=files,
+        )
+        if sample.text is None:
+            if previous is not None:  # offline: the last kept attempt stands, with its refusals
+                return previous, refused, attempt - 1
+            return sample, refused, attempt
+        previous = sample
+        refused = refuse(sample.text)
+        if not refused:
+            if not offline:
+                _drop_later(folders, attempt, attempts)
+            return sample, [], attempt
+    return sample, refused, attempts
+
+
+def _drop_later(folders: Callable[[int], Path], accepted: int, attempts: int) -> None:
+    """Removes the samples of attempts after an accepted one: they answered an earlier request, not this one."""
+    for later in range(accepted + 1, attempts + 1):
+        folder = folders(later)
+        if (folder / "record.json").is_file():
+            shutil.rmtree(folder)
+
+
+def _options(options: Options) -> dict:
+    """The options a sample records: those that identify the request (as samples recorded them before)."""
+    return {"temperature": options.temperature, "seed": options.seed}

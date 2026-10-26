@@ -1,0 +1,13 @@
+id: wp260-purposes
+title: Guidelines on transparency under Regulation 2016/679 (WP260 rev.01), on the language of purposes
+source: https://www.edpb.europa.eu/system/files/documents/2023-09/wp260rev01_en.pdf
+retrieved: 2026-10-24
+verified: {by: Thomas Cory, date: 2026-10-24}
+kind: guideline
+about:
+  requirements: [purpose_specific]
+text: >-
+  The information should be concrete and definitive; it should not be phrased in abstract or ambivalent terms or leave 
+  room for different interpretations. In particular the purposes of, and legal basis for, processing the personal data 
+  should be clear. [...] Language qualifiers such as “may”, “might”, “some”, “often” and “possible” should also be 
+  avoided.
