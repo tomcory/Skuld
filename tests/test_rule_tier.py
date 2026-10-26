@@ -239,7 +239,7 @@ def test_the_fixtures_reports_are_valid_and_pilates_reproduces_the_worked_exampl
             shown = [relations[i] for i in c["relations"] if relations[i]["outcome"].startswith("alternative")]
             assert [r["outcome"] for r in shown] == ["alternative_demonstrated"]
             read = [claims[t["claim"]] for r in shown for t in r["to"]]
-            assert any((x["level"], x["strength"]) == ("demonstrated", "run") for x in read)
+            assert any((x["level"], x.get("strength")) == ("demonstrated", "run") for x in read)
     if not name.startswith("pilates"):
         return
     practices = {p["id"]: p for p in report["subjects"]["practices"]}
