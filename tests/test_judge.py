@@ -304,3 +304,25 @@ def test_the_assessments_provenance_is_complete_its_rebuild_identical_and_tamper
     answer = next(a.root.glob("assessment/*/*/s1/answer.json"))
     answer.write_text(answer.read_text() + " ")
     assert any("its answer does not verify" in p for p in check_assessment(a, report))
+
+
+def test_the_same_words_on_two_channels_are_one_statement(tmp_path):
+    report = d_report()
+    notice = json.loads(json.dumps(report["claims"][1]))
+    notice["channel"] = notice["provenance"][0]["channel"] = "in_app"
+    report["claims"].append(notice)
+    report["channels"].append(
+        {"channel": "in_app", "document": "notice", "status": "analysed", "accessible": True, "annotations": []}
+    )
+    run = run_folder(tmp_path)
+    o = tmp_path / "o.json"
+    o.write_text(json.dumps(o_report(run.name)))
+    d = tmp_path / "d" / "report.json"
+    d.parent.mkdir()
+    d.write_text(json.dumps(report))
+    root = tmp_path / "ws"
+    inputs.describe_assessment(root, PACKAGE, "1.0", [(o, run.name)], d, run, corpus_folder(tmp_path))
+    a = inputs.load_assessment(root)
+    found = judge.statements(a, assessment.build(a, None))
+    (shared,) = [s for s in found if s.text == "provide and improve the Service"]
+    assert shared.channels == ["policy", "in_app"] and len(shared.declarations) == 2

@@ -154,10 +154,10 @@ SCHEMAS = {
 
 @dataclass
 class Statement:
-    """A declared purpose in the provider's words: one text of a channel, and the declarations that state it."""
+    """A declared purpose in the provider's words: one text, the channels that state it and their declarations."""
 
     id: str
-    channel: str
+    channels: list[str]
     text: str
     sentence: str | None
     declarations: list[str]  # D-n
@@ -204,7 +204,8 @@ def _sentences(a: Assessment) -> dict[str, list]:
 
 
 def statements(a: Assessment, subjects: Subjects) -> list[Statement]:
-    """D's declared purposes with a text in the provider's words, one per channel and text, in D's order."""
+    """D's declared purposes with a text in the provider's words, one per text (the same words on several channels are
+    judged once), in D's order."""
     claims, sentences = _d_claims(a), _sentences(a)
     out: dict[tuple, Statement] = {}
     for d in subjects.declarations:
@@ -215,13 +216,15 @@ def statements(a: Assessment, subjects: Subjects) -> list[Statement]:
             span = pointer.get("span") or {}
             if not span.get("text"):
                 continue
-            key = (d.channel, span["text"])
+            key = " ".join(span["text"].lower().split())
             s = out.get(key)
             if s is None:
                 unit = span.get("unit")
                 passages = sentences.get(pointer.get("document"), [])
                 sentence = passages[unit].get("passage") if isinstance(unit, int) and unit < len(passages) else None
-                s = out[key] = Statement(f"Q{len(out) + 1}", d.channel, span["text"], sentence, [], [], [])
+                s = out[key] = Statement(f"Q{len(out) + 1}", [], span["text"], sentence, [], [], [])
+            if d.channel not in s.channels:
+                s.channels.append(d.channel)
             if d.id not in s.declarations:
                 s.declarations.append(d.id)
                 s.pointers.append(d.claim["claim"])
@@ -360,7 +363,7 @@ def questions(
         batch = found[n : n + BATCH]
         parts = [_application(a)]
         for s in batch:
-            quoted = f'"{s.text}" ({s.channel})'
+            quoted = f'"{s.text}" ({", ".join(s.channels)})'
             if s.sentence and s.sentence.strip() != s.text:
                 quoted += f', in: "{s.sentence[:SENTENCE]}"'
             parts.append(_declaration(s.id, quoted, s.pointers))
