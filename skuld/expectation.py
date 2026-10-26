@@ -347,6 +347,8 @@ def expect(
             if sample.text is not None and refused:
                 sample.record["refused"] = refused
             out.append(sample)
+    if not offline:
+        ask.supersede(a.root / "expectation", {a.root / "expectation" / b.key for b in batches(a, subjects)})
     return out
 
 

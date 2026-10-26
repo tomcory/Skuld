@@ -303,3 +303,16 @@ def test_a_refused_answer_is_asked_again_with_the_refusal_and_the_retry_is_read(
 
     shutil.rmtree(a.root / "expectation" / "launch" / "s1" / "a2")
     assert "launch/s1" in [n for n, _, _ in expectation.kept(a, built, load_corpus(a.corpus))]
+
+
+def test_a_batch_no_longer_asked_moves_to_superseded_on_an_online_run(workspace):
+    a, built = workspace
+    expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=FakeModel())
+    stale = a.root / "expectation" / "e9" / "s1"
+    stale.mkdir(parents=True)
+    (stale / "record.json").write_text("{}")
+    expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], offline=True)
+    assert stale.is_dir()  # offline, nothing moves
+    expectation.expect(a, built, load_corpus(a.corpus), seeds=[2], provider=FakeModel())
+    assert not stale.exists() and list((a.root / "superseded").glob("*/expectation/e9/s1/record.json"))
+    assert (a.root / "expectation" / "launch" / "s1").is_dir()  # another seed of a current batch stays

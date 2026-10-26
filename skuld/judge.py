@@ -562,6 +562,10 @@ def judge(
             if sample.text is not None and refused:
                 sample.record["refused"] = refused
             out.append((q, sample))
+    if not offline:
+        current = {a.root / "assessment" / q.question / q.subject for q, _ in out}
+        for question in only:
+            ask.supersede(a.root / "assessment" / question, current)
     return out
 
 

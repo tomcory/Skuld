@@ -238,7 +238,7 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
                 for p in built.practices
             ],
             "declarations": [{"id": d.id, "claim": d.claim, "kind": d.kind} for d in built.declarations],
-            "collection": _collection(built, statuses, refs),
+            "collection": _collection(built, statuses),
         },
         "features": _features(built, o_reports),
         "evidence": item.items,
@@ -579,7 +579,8 @@ def _sources(a: inputs.Assessment) -> dict:
     }
 
 
-def _collection(built, statuses, refs) -> dict | None:
+def _collection(built, statuses) -> dict | None:
+    """The collection's documents and transparency statuses; what decided each condition is in subjects.json."""
     if built.collection is None:
         return None
     documents = [
@@ -596,15 +597,6 @@ def _collection(built, statuses, refs) -> dict | None:
                 "status": s.status,
                 **({"conditions": s.conditions} if s.conditions else {}),
                 **({"addressed_by": s.addressed_by} if s.addressed_by else {}),
-                "decided_by": refs(
-                    [
-                        x
-                        for cid in s.decided_by
-                        for side in ("holds", "fails")
-                        for v in s.decided_by[cid][side].values()
-                        for x in v
-                    ]
-                ),
             }
             for s in statuses
         ],

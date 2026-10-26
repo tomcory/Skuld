@@ -187,3 +187,24 @@ def _drop_later(folders: Callable[[int], Path], accepted: int, attempts: int) ->
 def _options(options: Options) -> dict:
     """The options a sample records: those that identify the request (as samples recorded them before)."""
     return {"temperature": options.temperature, "seed": options.seed}
+
+
+def supersede(root: Path, current: set[Path], when: str | None = None) -> list[Path]:
+    """Moves the folders under `root` that no current question names (a batch or subject no longer asked about), with
+    every sample in them, to superseded/<date>/ beside the workspace's other superseded samples, so that only the
+    samples of current questions stay. The samples of a current question are kept, whatever their seeds."""
+    if not root.is_dir():
+        return []
+    when = when or datetime.now(UTC).date().isoformat()
+    workspace = root.parent if root.name == "expectation" else root.parent.parent
+    moved = []
+    for folder in sorted(p for p in root.iterdir() if p.is_dir()):
+        if folder in current:
+            continue
+        target = workspace / "superseded" / when / folder.relative_to(workspace)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.move(str(folder), str(target))
+        moved.append(folder)
+    return moved
