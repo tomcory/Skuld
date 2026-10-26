@@ -527,10 +527,11 @@ def judge(
     names: dict[str, str] | None = None,
     only: tuple[str, ...] = QUESTIONS,
 ) -> list[tuple[Question, ask.Sample]]:
-    """The samples of the reasoning tier: per question and seed, kept or asked."""
+    """The samples of the reasoning tier: per question and seed, kept or asked, as many at a time as the server
+    takes."""
     seeds = seeds or config.load()["assessment"]["seeds"]
     model = model or a.models.get("assessment") or a.models["expectation"]
-    out = []
+    jobs = []
     for q in questions(a, subjects, corpus, norms, hypotheses, names):
         if q.question not in only:
             continue
@@ -546,25 +547,30 @@ def judge(
                 "norms": {"sha256": norms.sha256},
                 "context": {"sha256": q.context.sha256},
             }
-            sample, refused, _ = ask.ask_with_feedback(
-                lambda attempt, q=q, seed=seed: sample_folder(a.root, q, seed, attempt),
-                text,
-                SCHEMAS[q.question],
-                lambda asked, record=record: {**record, "prompt": {**record["prompt"], "sha256": ask.sha256(asked)}},
-                ("question", "subject", "procedure", "prompt", "corpus", "norms", "context"),
-                lambda answer, q=q: refusals(q, answer, factors),
-                attempts=ATTEMPTS,
-                seed=seed,
-                model=model,
-                api=api,
-                options=config.options("judge", seed=seed),
-                offline=offline,
-                provider=provider,
-                files={"context.json": json.dumps({"parts": list(q.context.parts)}, indent=1, ensure_ascii=False)},
-            )
-            if sample.text is not None and refused:
-                sample.record["refused"] = refused
-            out.append((q, sample))
+
+            def one(q=q, seed=seed, record=record, text=text) -> tuple[Question, ask.Sample]:
+                sample, refused, _ = ask.ask_with_feedback(
+                    lambda attempt: sample_folder(a.root, q, seed, attempt),
+                    text,
+                    SCHEMAS[q.question],
+                    lambda asked: {**record, "prompt": {**record["prompt"], "sha256": ask.sha256(asked)}},
+                    ("question", "subject", "procedure", "prompt", "corpus", "norms", "context"),
+                    lambda answer: refusals(q, answer, factors),
+                    attempts=ATTEMPTS,
+                    seed=seed,
+                    model=model,
+                    api=api,
+                    options=config.options("judge", seed=seed),
+                    offline=offline,
+                    provider=provider,
+                    files={"context.json": json.dumps({"parts": list(q.context.parts)}, indent=1, ensure_ascii=False)},
+                )
+                if sample.text is not None and refused:
+                    sample.record["refused"] = refused
+                return q, sample
+
+            jobs.append(one)
+    out = ask.concurrently(jobs, model)
     if not offline:
         current = {a.root / "assessment" / q.question / q.subject for q, _ in out}
         for question in only:

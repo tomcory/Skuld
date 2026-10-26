@@ -21,11 +21,13 @@ import hashlib
 import json
 import shutil
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 from ratatoskr.llm import Call, Client, Options, Provider
+from ratatoskr.llm.client import default_limit
 
 from skuld import config
 
@@ -118,6 +120,17 @@ def ask(
     (folder / "answer.json").write_text(result.content, encoding="utf-8")
     (folder / "record.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return Sample(folder, record, result.content, False)
+
+
+def limit(model: str) -> int:
+    """The simultaneous requests the server takes for a model: config.json's client.limits over Ratatoskr's."""
+    return default_limit(model, config.load()["client"]["limits"])
+
+
+def concurrently[T](jobs: list[Callable[[], T]], model: str) -> list[T]:
+    """The results of `jobs`, in their order, at most `limit(model)` of them asking at a time."""
+    with ThreadPoolExecutor(max_workers=limit(model)) as pool:
+        return list(pool.map(lambda job: job(), jobs))
 
 
 def ask_with_feedback(

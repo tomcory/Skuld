@@ -290,8 +290,8 @@ def test_a_refused_answer_is_asked_again_with_the_refusal_and_the_retry_is_read(
     a, built = workspace
     model = Incomplete()
     expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=model)
-    assert len(model.prompts) == 4  # two batches, each asked twice
-    assert "has no purpose" in model.prompts[1]
+    assert len(model.prompts) == 4  # two batches, each asked twice, the second time with the refusal
+    assert sum("has no purpose" in p for p in model.prompts) == 2
     names = [n for n, _, _ in expectation.kept(a, built, load_corpus(a.corpus))]
     assert sorted(names) == ["e1/s1/a2", "launch/s1/a2"]
     # asked again with an answer accepted at once, the retry of the earlier request goes

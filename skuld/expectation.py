@@ -307,12 +307,13 @@ def expect(
     provider=None,
     names: dict[str, str] | None = None,
 ) -> list[ask.Sample]:
-    """The samples of the expectation stage: per batch and seed, kept or asked."""
+    """The samples of the expectation stage: per batch and seed, kept or asked, as many at a time as the server
+    takes."""
     data, purposes = vocabulary(DATA), vocabulary(PURPOSES)
     template = prompt_template()
     seeds = seeds or config.load()["expectation"]["seeds"]
     model = model or a.models["expectation"]
-    out = []
+    jobs = []
     for batch in batches(a, subjects):
         context = assemble(batch, a, corpus, data, names)
         prompt = template.format(context=render(context), nodes=", ".join(n.id for n in purposes))
@@ -328,25 +329,30 @@ def expect(
                 "corpus": {"sha256": corpus.sha256},
                 "context": {"sha256": context.sha256},
             }
-            sample, refused, _ = ask.ask_with_feedback(
-                lambda attempt, batch=batch, seed=seed: sample_folder(a.root, batch, seed, attempt),
-                prompt,
-                ANSWER_SCHEMA,
-                lambda asked, record=record: {**record, "prompt": {**record["prompt"], "sha256": ask.sha256(asked)}},
-                ("batch", "practices", "procedure", "prompt", "corpus", "context"),
-                lambda text, batch=batch, ids=ids: refusals(text, batch, ids),
-                attempts=ATTEMPTS,
-                seed=seed,
-                model=model,
-                api=api,
-                options=config.options("expect", seed=seed),
-                offline=offline,
-                provider=provider,
-                files={"context.json": json.dumps({"parts": list(context.parts)}, indent=1, ensure_ascii=False)},
-            )
-            if sample.text is not None and refused:
-                sample.record["refused"] = refused
-            out.append(sample)
+
+            def one(batch=batch, seed=seed, record=record, prompt=prompt, ids=ids, context=context) -> ask.Sample:
+                sample, refused, _ = ask.ask_with_feedback(
+                    lambda attempt: sample_folder(a.root, batch, seed, attempt),
+                    prompt,
+                    ANSWER_SCHEMA,
+                    lambda asked: {**record, "prompt": {**record["prompt"], "sha256": ask.sha256(asked)}},
+                    ("batch", "practices", "procedure", "prompt", "corpus", "context"),
+                    lambda text: refusals(text, batch, ids),
+                    attempts=ATTEMPTS,
+                    seed=seed,
+                    model=model,
+                    api=api,
+                    options=config.options("expect", seed=seed),
+                    offline=offline,
+                    provider=provider,
+                    files={"context.json": json.dumps({"parts": list(context.parts)}, indent=1, ensure_ascii=False)},
+                )
+                if sample.text is not None and refused:
+                    sample.record["refused"] = refused
+                return sample
+
+            jobs.append(one)
+    out = ask.concurrently(jobs, model)
     if not offline:
         ask.supersede(a.root / "expectation", {a.root / "expectation" / b.key for b in batches(a, subjects)})
     return out
