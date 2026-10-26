@@ -1,6 +1,8 @@
-"""Skuld's configuration: its config.json (at the repository's root) over Ratatoskr's defaults."""
+"""Skuld's configuration: its config.json (at the repository's root, or the file SKULD_CONFIG names) over Ratatoskr's
+defaults."""
 
 import functools
+import os
 from pathlib import Path
 
 from ratatoskr import config as ratatoskr_config
@@ -12,7 +14,7 @@ CONFIG = Path(__file__).resolve().parents[1] / "config.json"
 @functools.cache
 def load() -> dict:
     """Skuld's config.json over Ratatoskr's defaults: the default model, the sampling of each task, the client."""
-    return ratatoskr_config.load(CONFIG)
+    return ratatoskr_config.load(Path(os.environ.get("SKULD_CONFIG") or CONFIG))
 
 
 def options(task: str, **overrides) -> Options:

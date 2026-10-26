@@ -4,7 +4,7 @@ One way to ask a model, shared by the generator and the reasoning channel's stag
 A *sample* is a folder that keeps what was asked and what came back:
 
     record.json   what identifies the request (the caller's keys: prompt, procedure, options, ...), the model by API,
-                  name and digest, the answer's digest and when it was asked
+                  name and digest, the answer's digest, when it was asked and what it cost (seconds, tokens)
     prompt.txt    the prompt
     answer.json   the answer, as the model gave it
 
@@ -105,6 +105,11 @@ def ask(
         raise AskError(f"{model}: {type(e).__name__}: {e}") from e
     record["model"]["digest"] = digest
     record["answer"] = {"sha256": sha256(result.content)}
+    record["cost"] = {
+        "seconds": round(result.seconds, 3),
+        "prompt_tokens": result.prompt_tokens,
+        "output_tokens": result.output_tokens,
+    }
     record["created"] = datetime.now(UTC).isoformat(timespec="seconds")
     folder.mkdir(parents=True, exist_ok=True)
     for name, content in (files or {}).items():
