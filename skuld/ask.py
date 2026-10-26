@@ -79,13 +79,15 @@ def ask(
     offline: bool = False,
     provider: Provider | None = None,
     files: dict[str, str] | None = None,
+    think: bool | None = None,
 ) -> Sample:
     """
     The sample of a request in `folder`: kept, or asked now. `record` holds the request's identity under the keys
     `identity` names, and gets the model, the options, the answer's digest and the time; `files` are written into the
-    folder beside the answer (a context, for example).
+    folder beside the answer (a context, for example). `think` switches a thinking model's reasoning on or off; None
+    leaves the model's default and is not recorded, so that samples asked before the setting existed stay kept.
     """
-    record = {**record, "model": {"api": api, "name": model}, "options": _options(options)}
+    record = {**record, "model": {"api": api, "name": model}, "options": _options(options, think)}
     text = _kept(folder, record, (*identity, "options"))
     if text is not None:
         return Sample(folder, json.loads((folder / "record.json").read_text(encoding="utf-8")), text, True)
@@ -97,7 +99,7 @@ def ask(
         messages=[{"role": "user", "content": prompt}],
         json_schema=schema,
         options=options,
-        think=None,
+        think=think,
         model_options={"stream": True},
     )
     try:
@@ -111,6 +113,7 @@ def ask(
         "seconds": round(result.seconds, 3),
         "prompt_tokens": result.prompt_tokens,
         "output_tokens": result.output_tokens,
+        "thinking_chars": len(result.thinking or ""),
     }
     record["created"] = datetime.now(UTC).isoformat(timespec="seconds")
     folder.mkdir(parents=True, exist_ok=True)
@@ -149,6 +152,7 @@ def ask_with_feedback(
     offline: bool = False,
     provider: Provider | None = None,
     files: dict[str, str] | None = None,
+    think: bool | None = None,
 ) -> tuple[Sample | None, list[str], int]:
     """
     Ask until `refuse` finds nothing wrong with an answer, at most `attempts` times: attempt n has its own folder
@@ -175,6 +179,7 @@ def ask_with_feedback(
             offline=offline,
             provider=provider,
             files=files,
+            think=think,
         )
         if sample.text is None:
             if previous is not None:  # offline: the last kept attempt stands, with its refusals
@@ -197,9 +202,9 @@ def _drop_later(folders: Callable[[int], Path], accepted: int, attempts: int) ->
             shutil.rmtree(folder)
 
 
-def _options(options: Options) -> dict:
+def _options(options: Options, think: bool | None = None) -> dict:
     """The options a sample records: those that identify the request (as samples recorded them before)."""
-    return {"temperature": options.temperature, "seed": options.seed}
+    return {"temperature": options.temperature, "seed": options.seed, **({"think": think} if think is not None else {})}
 
 
 def supersede(root: Path, current: set[Path], when: str | None = None) -> list[Path]:

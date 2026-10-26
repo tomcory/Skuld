@@ -190,6 +190,31 @@ def test_samples_are_kept_and_the_consent_screen_never_reaches_the_model(workspa
     assert len(model.prompts) == 4  # kept, not asked again
 
 
+def test_a_sample_records_the_thinking_switch_only_where_it_is_set(workspace, tmp_path, monkeypatch):
+    from skuld import config
+
+    a, built = workspace
+    model = FakeModel()
+    expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=model)
+    record = json.loads((a.root / "expectation" / "launch" / "s1" / "record.json").read_text())
+    assert "think" not in record["options"] and "thinking_chars" in record["cost"]
+    switched = json.loads(config.CONFIG.read_text())
+    switched["expectation"]["think"] = False
+    (tmp_path / "config.json").write_text(json.dumps(switched))
+    monkeypatch.setenv("SKULD_CONFIG", str(tmp_path / "config.json"))
+    config.load.cache_clear()
+    try:
+        asked = len(model.prompts)
+        expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=model)
+        # switched off, the reasoning makes another request: asked again, not kept
+        assert len(model.prompts) == 2 * asked
+        record = json.loads((a.root / "expectation" / "launch" / "s1" / "record.json").read_text())
+        assert record["options"]["think"] is False
+    finally:
+        monkeypatch.delenv("SKULD_CONFIG")
+        config.load.cache_clear()
+
+
 def test_readings_apply_the_status_rules_and_the_citation_rule(workspace):
     a, built = workspace
     expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=FakeModel())

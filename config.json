@@ -29,7 +29,8 @@
       1,
       2,
       3
-    ]
+    ],
+    "think": null
   },
   "experiments": {
     "budget_seconds": 0,
@@ -41,6 +42,7 @@
       1,
       2,
       3
-    ]
+    ],
+    "think": null
   }
 }

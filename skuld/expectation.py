@@ -312,6 +312,7 @@ def expect(
     data, purposes = vocabulary(DATA), vocabulary(PURPOSES)
     template = prompt_template()
     seeds = seeds or config.load()["expectation"]["seeds"]
+    think = config.load()["expectation"].get("think")
     model = model or a.models["expectation"]
     jobs = []
     for batch in batches(a, subjects):
@@ -346,6 +347,7 @@ def expect(
                     offline=offline,
                     provider=provider,
                     files={"context.json": json.dumps({"parts": list(context.parts)}, indent=1, ensure_ascii=False)},
+                    think=think,
                 )
                 if sample.text is not None and refused:
                     sample.record["refused"] = refused

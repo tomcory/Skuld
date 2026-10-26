@@ -530,6 +530,7 @@ def judge(
     """The samples of the reasoning tier: per question and seed, kept or asked, as many at a time as the server
     takes."""
     seeds = seeds or config.load()["assessment"]["seeds"]
+    think = config.load()["assessment"].get("think")
     model = model or a.models.get("assessment") or a.models["expectation"]
     jobs = []
     for q in questions(a, subjects, corpus, norms, hypotheses, names):
@@ -564,6 +565,7 @@ def judge(
                     offline=offline,
                     provider=provider,
                     files={"context.json": json.dumps({"parts": list(q.context.parts)}, indent=1, ensure_ascii=False)},
+                    think=think,
                 )
                 if sample.text is not None and refused:
                     sample.record["refused"] = refused
