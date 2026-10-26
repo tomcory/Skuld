@@ -35,6 +35,7 @@ from skuld import (
     assessment,
     combine,
     concerns,
+    config,
     correspondence,
     expectation,
     experiments,
@@ -147,7 +148,8 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
         ]
         for s in statuses
     }
-    stated, covered = concerns.information_not_given(a.frame, statuses, evidence_of)
+    recall = set(config.load()["assessment"].get("recall_established") or ())
+    stated, covered = concerns.information_not_given(a.frame, statuses, evidence_of, recall)
     number = combine.Numbers()
     stage1, components = _expectation(a, built, item, registry)
     hypotheses = combine.hypotheses(stage1, number)

@@ -3,7 +3,8 @@ E's concerns (E def:concern), by four rules:
 
     (i)   information not given, for the collection and a transparency requirement (rule tier): supported if its
           status is missing, citing what decides that it applies and D's silence on its label; supported under an
-          open condition if missing_if
+          open condition if missing_if. That no document bears the label is D's analysis not finding it: where a
+          document of a channel whose analysis has no established recall is silent, U_s is moderate
     (ii)  not specific, for a declared purpose (reasoning tier): stated where a sample judges it not specific;
           supported if the samples' combined judgement is
     (iii) no specified purpose covers it, for a practice and a supported inferred purpose: stated where no purpose
@@ -32,7 +33,7 @@ from skuld import combine
 from skuld.transparency import MISSING, MISSING_IF, NOT_APPLICABLE, Status
 from skuld.uncertainty import highest
 
-VERSION = "6"
+VERSION = "7"
 COMPONENT = {"role": "method", "id": "skuld.concerns", "version": VERSION}
 
 #: Of a rule-tier concern of information not given: as certain as D's annotations and O's claims it reads
@@ -79,9 +80,12 @@ def _concern(frame: Frame, requirement: str, **fields) -> Concern:
     return Concern(requirement=r.id, principle=r.principle, provisions=list(r.provisions), **fields)
 
 
-def information_not_given(frame: Frame, statuses: list[Status], evidence_of: dict[str, list[str]]):
+def information_not_given(
+    frame: Frame, statuses: list[Status], evidence_of: dict[str, list[str]], recall: set[str] = frozenset()
+):
     """Concerns (i) and coverage for the collection, from its transparency statuses. `evidence_of` gives, per
-    requirement, the evidence items that decide its applicability."""
+    requirement, the evidence items that decide its applicability; `recall`, the channels of D whose analysis has
+    an established recall."""
     concerns, covered = [], []
     for s in statuses:
         r = frame.requirement(s.requirement)
@@ -89,6 +93,10 @@ def information_not_given(frame: Frame, statuses: list[Status], evidence_of: dic
         if s.status not in (MISSING, MISSING_IF):
             continue
         conditional = s.status == MISSING_IF
+        unproven = [ch for ch in s.silent if ch not in recall]
+        uncertainty = {**BY_RULE, "n": "moderate"} if conditional else dict(BY_RULE)
+        if unproven:
+            uncertainty["s"] = "moderate"
         concerns.append(
             _concern(
                 frame,
@@ -97,11 +105,12 @@ def information_not_given(frame: Frame, statuses: list[Status], evidence_of: dic
                 step="information_not_given",
                 tier="rule",
                 status="supported",
-                uncertainty={**BY_RULE, "n": "moderate"} if conditional else BY_RULE,
+                uncertainty=uncertainty,
                 observability="E1",
                 condition=list(s.conditions),
                 supporting=evidence_of.get(r.id, []),
-                silence=[f"D: no accessible document bears the label {r.label}"],
+                silence=[f"D: no accessible document bears the label {r.label}"]
+                + ([f"D: no established recall for {', '.join(unproven)}"] if unproven else []),
                 reason=(
                     f"missing if {', '.join(s.conditions)}, which no dimension decides"
                     if conditional

@@ -164,6 +164,12 @@ def test_transparency_reads_ds_annotations_on_accessible_documents_only(tmp_path
     assert k["dpo_contact"].condition == ["dpo_designated"]
     assert ("controller_name", "collection", True) in {(c.requirement, c.subject, c.applies) for c in covered}
     assert not any(c.requirement == "controller_name" for c in stated)
+    # D's silence: the policy's analysis has no established recall, so "not found" is not certain
+    assert by["right_to_restrict"].silent == ["policy"]
+    assert k["right_to_restrict"].uncertainty["s"] == "moderate"
+    assert any("no established recall" in x for x in k["right_to_restrict"].silence)
+    stated, _ = concerns.information_not_given(f, list(by.values()), {}, recall={"policy"})
+    assert {c.requirement: c for c in stated}["right_to_restrict"].uncertainty["s"] == "low"
 
 
 def test_every_claim_is_passed_on_with_its_relations_or_a_reason(tmp_path):

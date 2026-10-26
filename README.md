@@ -91,7 +91,10 @@ How Skuld runs is in `config.json`, laid over Ratatoskr's defaults: the default 
 generator at temperature 0.2 from seed 1, both stages at 0.4 with a seed per sample, 8,192
 tokens; the stages' seeds), and the
 client (Ollama, a 30-minute timeout, no response cache, since the samples are Skuld's record of every answer). The
-server's address is read from `OLLAMA_BASE_URL`. The generator and both stages ask through `ask.py`.
+server's address is read from `OLLAMA_BASE_URL`. The generator and both stages ask through `ask.py`. The assessment's
+`recall_established` names D's channels whose analysis has an established recall (the Data safety section): where a
+document of any other channel is silent on a requirement, the concern that its information is not given has moderate
+semantic uncertainty, since its silence may be the analysis missing it.
 
 An assessment workspace (`assessment.yaml`, written by `skuld describe`) names everything an assessment of the version
 reads by digest, the exploration by the records its screens are read from (run.json, events.jsonl, graph.json);
