@@ -26,6 +26,8 @@ A claim that rests on a purpose takes the purpose's semantic uncertainty where i
 
 from skuld.uncertainty import FACTORS, ORDER, highest
 
+#: The strength of a sample's or an experiment's claim, by which the combination decides; a combined claim states it
+#: only if supported or refuted, and then it is doc or run, since no rule lets own knowledge decide
 STRENGTH = {"own": 0, "doc": 1, "run": 2}
 DECISIVE = ("supported", "refuted")
 #: What a combined claim carries over from the claim that decides it

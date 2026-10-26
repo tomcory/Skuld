@@ -221,6 +221,11 @@ def test_the_fixtures_reports_are_valid_and_pilates_reproduces_the_worked_exampl
         if c["status"] in ("supported", "refuted") and c["observability"] in ("E3", "E4")
     ]
     claims = {c["id"]: c for c in report["claims"]}
+    # a claim has a strength only if it is supported or refuted, and it is doc or run: own knowledge decides nothing
+    assert all(
+        ("strength" in c) == (c["status"] in ("supported", "refuted")) and c.get("strength", "doc") in ("doc", "run")
+        for c in claims.values()
+    )
     if name.startswith("de.wetteronline") and (root / "expectation").is_dir():
         # one decimal of the location preserves the forecast: a demonstrated minimisation concern, still a judgement
         # of what is necessary; its O–E relation reads the run

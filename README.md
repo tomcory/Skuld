@@ -21,7 +21,8 @@ The experimental channel of E report 0.3 is kept as the assessment's experiments
 Loki made for them (`skuld run`, with a qualifying replay first), each intervention verified with Verðandi's report of
 the run, the cases' functional oracles and the comparisons (`skuld analyse`: the case report, Ratatoskr's
 `expectation_report`, which holds the measurements, from which the assessment makes its claims), and a generator
-(`skuld propose`) that writes cases from Loki's exploration and a catalogue of feature families. The plan is [`SKULD_REDESIGN_PLAN.md`](../SKULD_REDESIGN_PLAN.md); the model is
+(`skuld propose`) that writes cases from Loki's exploration and a catalogue of feature families. Experiments are off
+by default, and an assessment needs neither the generator nor the catalogue: both serve only experiments. The plan is [`SKULD_REDESIGN_PLAN.md`](../SKULD_REDESIGN_PLAN.md); the model is
 [`ODE/expectation/expectation.tex`](../ODE/expectation/expectation.tex).
 
 ## Role in Asgard
