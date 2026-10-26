@@ -192,7 +192,8 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
                 *built.components,
                 correspondence.COMPONENT,
                 relations.COMPONENT,
-                concerns.COMPONENT,
+                {**concerns.COMPONENT, "recall_established": sorted(recall)},
+                *_declaration_analysis(a),
                 {"role": "frame", "id": a.frame.id, "version": a.frame.version, "sha256": a.frame.digest()},
                 {"role": "vocabulary", "id": DATA, "version": data.version},
                 {"role": "vocabulary", "id": RECIPIENT_TYPES, "version": vocabulary(RECIPIENT_TYPES).version},
@@ -333,6 +334,27 @@ def _part_items(
     run = pointer.get("run") or pointer["record"]
     fields = {"kind": "doc", "method": f"{part['kind']} of {run}", "citation": {"id": run, "at": pointer["record"]}}
     return [item(key, {**base, **fields})]
+
+
+def _declaration_analysis(a: inputs.Assessment) -> list[dict]:
+    """The D analysis whose report the assessment read: the transparency concerns' error rates depend on it, so a
+    calibration holds for it alone. Its modules where D's report names them, else its version."""
+    if a.declaration is None:
+        return []
+    header = a.declaration.load().get("report", {})
+    named = [
+        {"role": "declaration_analysis", **{k: m[k] for k in ("id", "version", "sha256") if k in m}}
+        for m in header.get("components") or ()
+        if "id" in m
+    ]
+    return named or [
+        {
+            "role": "declaration_analysis",
+            "id": "urda",
+            "version": header.get("urda", ""),
+            "sha256": a.declaration.sha256,
+        }
+    ]
 
 
 def _record_components(components: dict, record: dict, stage: str) -> None:

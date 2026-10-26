@@ -227,6 +227,9 @@ def test_the_fixtures_reports_are_valid_and_pilates_reproduces_the_worked_exampl
         if c["status"] in ("supported", "refuted") and c["observability"] in ("E3", "E4")
     ]
     claims = {c["id"]: c for c in report["claims"]}
+    # the D analysis read is named, since the transparency concerns' calibration holds for it alone
+    if inputs.load_assessment(root).declaration is not None:
+        assert [c for c in report["report"]["components"] if c["role"] == "declaration_analysis"]
     # a claim has a strength only if it is supported or refuted, and it is doc or run: own knowledge decides nothing
     assert all(
         ("strength" in c) == (c["status"] in ("supported", "refuted")) and c.get("strength", "doc") in ("doc", "run")
