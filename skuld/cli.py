@@ -8,7 +8,7 @@ skuld run <workspace> --recorded … --config … --device …: the runs, made b
 skuld analyse <workspace>: the expectation report.
 skuld check <workspace>: the provenance of the report (every digest verifies, every pointer resolves).
 skuld expect <workspace>: the expectation stage's samples (contexts without D, and the model's answers).
-skuld judge <workspace>: the assessment stage's reasoning tier: specificity, compatibility and minimisation samples.
+skuld judge <workspace>: the assessment stage's reasoning tier: specificity and compatibility samples.
 skuld describe <workspace> --package … --version … --observation …: write the assessment workspace's assessment.yaml.
 skuld assess <workspace>: the assessment of the version from what is kept (subjects, both stages), no model asked.
 skuld select <workspace>: the choice of experiments from the assessment, each choice and refusal with its reason.
@@ -99,13 +99,13 @@ def build_parser() -> argparse.ArgumentParser:
     expect_.add_argument("--corpus", type=Path, default=CORPUS)
     expect_.add_argument("--registry", type=Path, help="the recipient registry (default: Ratatoskr's built one)")
     judge_ = commands.add_parser(
-        "judge", help="ask the model the reasoning tier's questions (specificity, compatibility, minimisation)"
+        "judge", help="ask the model the reasoning tier's questions (specificity, compatibility)"
     )
     judge_.add_argument("workspace", type=Path)
     judge_.add_argument("--model", default=None, help="(default: the assessment's, else config.json's)")
     judge_.add_argument("--api", default="ollama")
     judge_.add_argument("--seeds", type=int, nargs="+", default=None, help="(default: config.json's, 1 2 3)")
-    judge_.add_argument("--question", choices=["specificity", "compatibility", "minimisation"], nargs="+")
+    judge_.add_argument("--question", choices=["specificity", "compatibility"], nargs="+")
     judge_.add_argument("--offline", action="store_true", help="only the samples kept")
     judge_.add_argument("--corpus", type=Path, default=CORPUS)
     judge_.add_argument("--registry", type=Path, help="the recipient registry (default: Ratatoskr's built one)")

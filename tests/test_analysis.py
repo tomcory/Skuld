@@ -39,13 +39,12 @@ def technical(report: dict, alternative: str) -> str:
     return _comparison(next(k for k in report["comparisons"] if k["alternative"] == alternative)).technical()
 
 
-def test_preserving_removals_show_no_dependency_and_demonstrate_the_alternatives(tmp_path):
+def test_preserving_removals_are_demonstrated_alternatives(tmp_path):
     report, made = analysed(ws.build(tmp_path))
     validate("expectation_report", report)
-    for component, alternative in (("aaid", "A1"), ("tracker", "A2")):
-        dependency = claim(made, "dependency", "P1", component=component)
-        assert (dependency.relationship, dependency.status) == ("not_dependent", "supported")
-        assert claim(made, "alternative", "P1", alternative=alternative).status == "supported"
+    for alternative in ("A1", "A2"):
+        removal = claim(made, "alternative", "P1", alternative=alternative)
+        assert (removal.status, removal.removal) == ("supported", True)
     assert {c.status for c in made if c.purpose == "P2"} == {"not_assessable"}
     assert {c.why for c in made if c.purpose == "P2"} == {"oracle_not_observable"}
 
@@ -53,9 +52,9 @@ def test_preserving_removals_show_no_dependency_and_demonstrate_the_alternatives
 def test_a_supported_status_rests_on_its_comparison_and_a_refuted_one_challenges(tmp_path):
     plan = [(c, {"done": c != "A1"}) for _ in range(3) for c in ("baseline", "A1", "A2")]
     _, made = analysed(ws.build(tmp_path, plan))
-    supported = claim(made, "dependency", "P1", component="aaid")
+    supported = claim(made, "alternative", "P1", alternative="A2")
     refuted = claim(made, "alternative", "P1", alternative="A1")
-    assert supported.supporting == ["k:start:P1:A1"] and supported.challenging == []
+    assert supported.supporting == ["k:start:P1:A2"] and supported.challenging == []
     assert refuted.challenging == ["k:start:P1:A1"] and refuted.supporting == []
 
 
@@ -150,25 +149,25 @@ def test_a_hooked_source_the_application_did_not_read_holds_its_effect(tmp_path)
     assert a1["verification"]["effect"][0]["note"] == "the application did not read the source"
 
 
-def test_a_breaking_removal_supports_essential_and_refutes_its_alternative(tmp_path):
+def test_a_breaking_removal_is_a_refuted_alternative(tmp_path):
     plan = [(c, {"done": c != "A1"}) for _ in range(3) for c in ("baseline", "A1", "A2")]
     _, made = analysed(ws.build(tmp_path, plan))
-    dependency = claim(made, "dependency", "P1", component="aaid")
-    assert (dependency.relationship, dependency.status) == ("essential", "supported")
     assert claim(made, "alternative", "P1", alternative="A1").status == "refuted"
 
 
-def test_a_measurement_worse_in_every_run_reads_quality_dependent(tmp_path):
+def test_a_measurement_worse_in_every_run_is_the_trade_off_of_a_demonstrated_removal(tmp_path):
     plan = [(c, {"app_messages": 0 if c == "A1" else 2}) for _ in range(3) for c in ("baseline", "A1", "A2")]
-    _, made = analysed(ws.build(tmp_path, plan))
-    dependency = claim(made, "dependency", "P1", component="aaid")
-    assert (dependency.relationship, dependency.status) == ("quality_dependent", "supported")
+    report, made = analysed(ws.build(tmp_path, plan))
+    assert claim(made, "alternative", "P1", alternative="A1").status == "supported"
+    comparison = next(k for k in report["comparisons"] if k["alternative"] == "A1")
+    assert comparison["tradeoff"]["measurements"]["app_messages"]["worse"] == "all"
 
 
 def test_a_difference_within_the_tolerance_is_no_difference(tmp_path):
     plan = [(c, {"app_messages": 1 if c == "A1" else 2}) for _ in range(3) for c in ("baseline", "A1", "A2")]
-    _, made = analysed(ws.build(tmp_path, plan))
-    assert claim(made, "dependency", "P1", component="aaid").relationship == "not_dependent"
+    report, _ = analysed(ws.build(tmp_path, plan))
+    comparison = next(k for k in report["comparisons"] if k["alternative"] == "A1")
+    assert comparison["tradeoff"]["measurements"]["app_messages"]["worse"] == "none"
 
 
 def test_an_unverified_intervention_is_no_evidence(tmp_path):
@@ -183,8 +182,8 @@ def test_an_unverified_intervention_is_no_evidence(tmp_path):
     inputs.freeze(root, ws.AUTHOR, now=datetime.fromisoformat(ws.FIXED))
     report, made = analysed(root)
     assert all(r["verification"]["status"] == "failed" for r in report["runs"] if r["alternative"] == "A1")
-    dependency = claim(made, "dependency", "P1", component="aaid")
-    assert (dependency.status, dependency.why) == ("not_established", "intervention_not_verified")
+    removal = claim(made, "alternative", "P1", alternative="A1")
+    assert (removal.status, removal.why) == ("not_established", "intervention_not_verified")
 
 
 def test_a_run_whose_instrumentation_failed_is_no_evidence(tmp_path):
@@ -261,9 +260,7 @@ def test_the_dry_run_gives_the_worked_examples_experimental_claims():
     for case, purpose in (("launch", "P-L1"), ("onboarding", "P-O1")):
         for component in ("x-aaid", "x-appsflyer"):
             mine = [c for c in by_case[case] if c.purpose == purpose and c.component == component]
-            dependency = next(c for c in mine if c.type == "dependency")
-            assert (dependency.relationship, dependency.status) == ("not_dependent", "supported")
-            assert next(c for c in mine if c.type == "alternative").status == "supported"
+            assert [(c.removal, c.status) for c in mine] == [(True, "supported")]
     assert {c.status for c in by_case["launch"] if c.purpose == "P-L2"} == {"not_assessable"}
     assert technical(report, "A1") == "moderate"
     assert all(r["verification"]["status"] in ("verified", "not_applicable") for r in report["runs"])

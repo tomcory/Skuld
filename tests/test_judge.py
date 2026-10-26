@@ -121,19 +121,7 @@ class FakeJudge(Provider):
                 ]
             }
         else:
-            practice = next(i for i in ids if i.startswith("P-"))
-            docs = [i for i in ids if re.fullmatch(r"D\d+", i)]
-            answer = {
-                "alternatives": [
-                    {
-                        "purpose": "H1",
-                        "component": f"{practice}.data",
-                        "alternative": "match installs without the identifier",
-                        "level": "TECHNICALLY_SUPPORTED" if docs else "PLAUSIBLE",
-                        "steps": [{"text": "The documentation describes it.", "cites": docs[:1] or ["own knowledge"]}],
-                    }
-                ]
-            }
+            raise AssertionError("the reasoning tier asks specificity and compatibility only")
         return LLMResponse(text=json.dumps(answer))
 
 
@@ -149,8 +137,9 @@ def test_stage_hypotheses_combine_aligned_purposes_across_samples(workspace):
     hypotheses = combine.hypotheses(claims, combine.Numbers())
     combined = [h for h in hypotheses if h["type"] == "purpose"]
     assert len(combined) == 2 and all(len(h["of"]) == 2 and h["status"] == "supported" for h in combined)
-    dependencies = [h for h in hypotheses if h["type"] == "dependency"]
-    assert all(h["basis"][0] in {c["id"] for c in combined} for h in dependencies)
+    alternatives = [h for h in hypotheses if h["type"] == "alternative"]
+    assert alternatives and all(h["basis"][0] in {c["id"] for c in combined} for h in alternatives)
+    assert all(len(h["of"]) == 2 for h in alternatives)
 
 
 def test_stage_2_contexts_mark_declarations_and_ask_compatibility_only_where_nothing_covers(workspace):
@@ -167,7 +156,7 @@ def test_stage_2_contexts_mark_declarations_and_ask_compatibility_only_where_not
     assert [q.record["practice"] for q in compatibility] == [by_data["app-activity.app-interactions"]]
     texts = [p["text"] for p in compatibility[0].context.parts if p["kind"] == "declaration"]
     assert len(texts) == 2 and not any("Purpose)" in t for t in texts)
-    assert len([q for (kind, _), q in questions.items() if kind == "minimisation"]) == 2
+    assert {kind for kind, _ in questions} == {"specificity", "compatibility"}
     # gate 1: a part of D's report that is not marked as a declaration is refused
     passage = {
         "id": "X1",
@@ -208,8 +197,7 @@ def test_the_assessment_states_concerns_ii_to_v_and_gate_3_holds(workspace):
     found, norms, hypotheses = tools(a, built)
     model = FakeJudge()
     samples = judge.judge(a, built, found, norms, hypotheses, FACTORS, seeds=[1], provider=model)
-    assert len(samples) == len(model.prompts) == 4  # specificity, one compatibility, two minimisation
-    assert all("Personal data to provide" not in p for p in model.prompts if "less invasive" in p)
+    assert len(samples) == len(model.prompts) == 2  # specificity, one compatibility
     report = assess(a.root)
     assert report["report"]["cost"]["model_calls"] == 0
     stated = {(c["step"], c["subject"]): c for c in report["concerns"]}
@@ -244,7 +232,7 @@ def test_the_assessment_states_concerns_ii_to_v_and_gate_3_holds(workspace):
     assert concern["status"] == "not_established" and "undecided" in concern["reason"]
 
     # a tampered stage-2 context that gives D's report other than as a declaration fails the report
-    path = next((a.root / "assessment" / "minimisation").glob("*/s1/context.json"))
+    path = next((a.root / "assessment" / "compatibility").glob("*/s1/context.json"))
     parts = json.loads(path.read_text())["parts"]
     parts.append(
         {"id": "X1", "kind": "passage", "text": "t", "provenance": [{"origin": "d_report", "record": "/claims/1"}]}
@@ -258,8 +246,10 @@ def test_without_kept_samples_the_tier_is_a_gap(workspace):
     a, _ = workspace
     report = assess(a.root)
     absent = {g["of"] for g in report["gaps"] if g["reason"] == "source_absent"}
-    assert absent >= {"purpose_specific", "purpose_compatible", "data_minimised"}
-    assert not any(c["tier"] == "reasoning" and c["status"] == "supported" for c in report["concerns"])
+    assert absent >= {"purpose_specific", "purpose_compatible"}
+    judged = [c for c in report["concerns"] if c["tier"] == "reasoning" and c["status"] == "supported"]
+    # minimisation needs no judge: it reads stage 1's alternatives
+    assert {c["step"] for c in judged} == {"less_invasive_alternative"}
 
 
 def test_the_assessments_provenance_is_complete_its_rebuild_identical_and_tampering_is_found(workspace):

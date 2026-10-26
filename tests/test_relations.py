@@ -15,25 +15,21 @@ def claim(cid, type_, status, strength=None, **fields):
     return out
 
 
-def outcome(claims, aspect="data"):
-    found, best = relations.outcome(aspect, claims)
+def outcome(claims, aspect="data", question="minimisation"):
+    found, best = relations.outcome(question, aspect, claims)
     return found, (best or {}).get("id")
 
 
-def test_a_dependency_is_decided_by_the_value_of_the_strongest_claim():
-    essential = claim("d1", "dependency", "supported", "doc", relationship="essential")
-    independent = claim("d2", "dependency", "supported", "run", relationship="not_dependent")
-    assert outcome([essential]) == ("functional_dependency_supported", "d1")
-    assert outcome([essential], "recipient")[0] == "recipient_dependency_supported"
-    # a run that preserves the purpose without the component decides over documents
-    assert outcome([essential, independent]) == ("no_functional_dependency_established", "d2")
-    assert outcome([essential, {**independent, "strength": "doc"}])[0] == "conflicting"
-    # a run that preserves the purpose with some measurement worse refutes essential
-    refuted = claim("d4", "dependency", "refuted", "run", relationship="essential")
-    assert outcome([essential, refuted]) == ("no_functional_dependency_established", "d4")
-    assert outcome([refuted], "recipient") == ("recipient_dependency_not_established", "d4")
-    proposed = claim("d5", "dependency", "not_established", "own", relationship="essential")
-    assert outcome([proposed]) == ("no_functional_dependency_established", None)
+def test_a_dependency_is_read_from_the_removals_of_the_component():
+    preserved = claim("r1", "alternative", "supported", "run", level="demonstrated", removal=True)
+    broken = claim("r2", "alternative", "refuted", "run", level="demonstrated", removal=True)
+    assert outcome([preserved], question="dependency") == ("no_functional_dependency_established", "r1")
+    assert outcome([broken], "recipient", "dependency") == ("recipient_dependency_supported", "r2")
+    assert outcome([preserved, broken], question="dependency")[0] == "conflicting"
+    untried = claim("r3", "alternative", "not_established", removal=True)
+    assert outcome([untried], question="dependency")[0] == "insufficient_evidence"
+    unobservable = claim("r4", "alternative", "not_assessable", removal=True, reason="no oracle")
+    assert outcome([unobservable], question="dependency")[0] == "not_assessable"
 
 
 def test_minimisation_takes_the_deciding_claims_level_and_strength():
@@ -63,11 +59,11 @@ def test_every_practice_e_formed_an_expectation_of_is_related():
         purpose("claim:P1:1", "P1"),
         claim(
             "claim:P1:2",
-            "dependency",
+            "alternative",
             "supported",
             "doc",
             subject="P1",
-            relationship="essential",
+            level="technically_supported",
             basis=["claim:P1:1"],
             component="P1.data",
         ),
@@ -80,6 +76,7 @@ def test_every_practice_e_formed_an_expectation_of_is_related():
         "supported",
         "run",
         level="demonstrated",
+        removal=True,
         subject="P3",
         basis=[],
         of=["ex:forecast:1"],
@@ -87,12 +84,14 @@ def test_every_practice_e_formed_an_expectation_of_is_related():
         component="P3.data",
         purpose={"id": "P-F1"},
     )
-    out = {(r.subject, tuple(t["claim"] for t in r.to)): r for r in relations.o_e(subjects, hypotheses, [], [alone])}
-    assert out[("P1", ("claim:P1:2",))].outcome == "functional_dependency_supported"
-    assert out[("P2", ("claim:P2:1",))].outcome == "insufficient_evidence"
-    assert out[("P3", ("claim:P3:1",))].reason == "no claim of dependency or alternative names the purpose"
-    # reasoning is silent on the case's purpose: the experiment is related for it
-    assert out[("P3", ("claim:P3:2",))].outcome == "alternative_demonstrated"
+    found = relations.o_e(subjects, hypotheses, [hypotheses[1]], [alone])
+    out = {(r.subject, r.question, tuple(t["claim"] for t in r.to)): r for r in found}
+    assert out[("P1", "minimisation", ("claim:P1:2",))].outcome == "alternative_technically_supported"
+    assert out[("P2", None, ("claim:P2:1",))].outcome == "insufficient_evidence"
+    assert out[("P3", None, ("claim:P3:1",))].reason == "no alternative names the purpose"
+    # reasoning is silent on the case's purpose: the experiment's removal is related for it, as both questions
+    assert out[("P3", "minimisation", ("claim:P3:2",))].outcome == "alternative_demonstrated"
+    assert out[("P3", "dependency", ("claim:P3:2",))].outcome == "no_functional_dependency_established"
     assert all(t["dimension"] == "E" for r in out.values() for t in r.to)
 
 

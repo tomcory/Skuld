@@ -4,15 +4,15 @@ conflict, the reason of a claim that cannot assess), and the claims a purpose's 
 from skuld import combine
 
 
-def claim(cid, status, strength=None, supporting=(), challenging=(), s="low", value="essential"):
+def claim(cid, status, strength=None, supporting=(), challenging=(), s="low"):
     c = {
         "id": cid,
-        "type": "dependency",
+        "type": "alternative",
         "channels": [cid],
         "subject": "P",
         "purpose": {"node": "ServiceProvision", "beneficiary": "user"},
         "component": "P.data",
-        "relationship": value,
+        "alternative": "an app-generated identifier",
         "status": status,
         "supporting": list(supporting),
         "challenging": list(challenging),
@@ -32,21 +32,16 @@ def test_agreeing_claims_are_corroborated_at_the_lowest_uncertainty():
     assert c["uncertainty"]["s"] == "moderate"
 
 
-def test_the_strongest_claim_decides_a_disagreement_and_its_value():
+def test_the_strongest_claim_decides_a_disagreement():
     c = combine.combined(
         "C", [claim("rs", "supported", "doc", ["x"]), claim("ex", "refuted", "run", challenging=["k"])]
     )
     assert (c["status"], c["strength"], c["challenging"], c["supporting"]) == ("refuted", "run", ["k"], [])
-    shown = claim("ex", "supported", "run", ["k"], value="not_dependent")
-    c = combine.combined("C", [claim("rs", "supported", "doc", ["x"]), shown])
-    assert (c["status"], c["relationship"]) == ("supported", "not_dependent")
 
 
-def test_equally_strong_claims_that_disagree_in_status_or_value_are_conflicted():
+def test_equally_strong_claims_that_disagree_are_conflicted():
     c = combine.combined("C", [claim("a", "supported", "doc", ["x"]), claim("b", "refuted", "doc", challenging=["y"])])
     assert c["status"] == "conflicted" and c["supporting"] == ["x"] and c["challenging"] == ["y"]
-    other = claim("b", "supported", "doc", ["y"], value="quality_dependent")
-    assert combine.combined("C", [claim("a", "supported", "doc", ["x"]), other])["status"] == "conflicted"
 
 
 def test_a_claim_without_a_decisive_status_does_not_outweigh_one_with_it():

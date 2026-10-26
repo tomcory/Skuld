@@ -7,13 +7,13 @@ is asked here (`skuld expect` and `skuld judge` ask).
                     to subjects.json
     rule tier       O–D correspondence (correspondence.py), the collection's transparency statuses
                     (transparency.py), concern (i)
-    expectation     stage 1's claims from its kept samples (expectation.py), combined across samples into the
-                    assessment stage's hypotheses (combine.hypotheses)
+    expectation     stage 1's Purpose and Alternative claims from its kept samples (expectation.py), combined across
+                    samples into the assessment stage's hypotheses (combine.hypotheses)
     experiments     the experimental channel's claims, read by the status rule (rules.py) from the case report's
                     measurements, per practice whose component a case varies (experiments.premises), combined with
                     the hypotheses of aligned purposes (combine.experimental)
-    reasoning tier  the judgements of its kept samples (judge.py), combined across samples: concerns (ii), (iii)
-                    and (v) (concerns.py), the reasoning tier's Alternative claims (combine.alternatives)
+    reasoning tier  the judgements of its kept samples (judge.py), combined across samples: concerns (ii) and (iii)
+                    (concerns.py); concern (v) from the expectation stage's and the experiments' Alternative claims
     relations       O–E and D–E (relations.py), which concern (v) cites; pass-through and open conditions
     report          the combined claims (the claims they combine stay in the samples and the case report), the
                     concerns, E's coverage, the gaps someone could act on, the provenance check (provenance.py)
@@ -152,18 +152,18 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
     stage1, components = _expectation(a, built, item, registry)
     hypotheses = combine.hypotheses(stage1, number)
     applicability = frame.applicability(a.frame, decided)
-    tier = _reasoning_tier(a, built, hypotheses, item, registry, applicability, number)
+    tier = _reasoning_tier(a, built, hypotheses, item, registry, applicability)
     premises = experiments.premises(a.cases, root, built.practices, item)
     tested = combine.experimental(hypotheses, premises, purposes, number)
-    more, cover = concerns.less_invasive_alternative(
-        a.frame, hypotheses, tier["alternatives"], tier["judged"], applicability, tested
-    )
+    alternatives = [h for h in hypotheses if h["type"] == "alternative"]
+    asked = {c["subject"] for c in stage1}
+    more, cover = concerns.less_invasive_alternative(a.frame, hypotheses, alternatives, asked, applicability, tested)
     stated += tier["concerns"] + more
     covered += tier["covered"] + cover
     concerns.number(stated)
     components += [c for c in tier["components"] if c not in components]
 
-    expected = relations.o_e(built, hypotheses, tier["alternatives"], tested)
+    expected = relations.o_e(built, hypotheses, alternatives, tested)
     if a.declaration is not None:
         vague = {
             d: c.id
@@ -177,7 +177,7 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
     for c in stated:
         if c.step == "less_invasive_alternative":
             c.relations = [r.id for r in expected if r.type == "O-E" and {t["claim"] for t in r.to} & set(c.basis)]
-    claims = hypotheses + tier["alternatives"] + tested
+    claims = hypotheses + tested
     case_features = sorted({c.feature.id for c in a.cases.cases}) if a.cases else []
     open_ = relations.open_conditions(built, every, statuses, a.frame, stated, tested, case_features)
 
@@ -258,7 +258,7 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
     if write:
         (root / REPORT).write_text(json.dumps(report, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
         (root / MARKDOWN).write_text(markdown(report, built), encoding="utf-8")
-    return report, stage1 + tier["members"] + premises
+    return report, stage1 + premises
 
 
 #: What a rebuilt report may differ in: when it was made and how long it took
@@ -352,17 +352,17 @@ def _record_components(components: dict, record: dict, stage: str) -> None:
 
 
 def _reasoning_tier(
-    a: inputs.Assessment, built, hypotheses: list[dict], item: Evidence, registry, applicability, number
+    a: inputs.Assessment, built, hypotheses: list[dict], item: Evidence, registry, applicability
 ) -> dict:
-    """The reasoning tier's combined Alternative claims, its concerns (ii) and (iii) and their coverage from its kept
-    samples, the samples' components, and the questions expected but not asked."""
+    """The reasoning tier's concerns (ii) and (iii) and their coverage from its kept samples, the samples' components,
+    and the questions expected but not asked."""
     corpus = load_corpus(a.corpus)
     norms = load_corpus(a.corpus / NORMS)
     factors = [f.id for f in a.frame.requirement("purpose_compatible").factors]
     by_id = {h["id"]: h for h in hypotheses}
     d_sha = a.declaration.sha256 if a.declaration else None
     contexts, components = {}, {}
-    specific, compatible, members, judged, asked = [], [], [], set(), {q: 0 for q in judge.QUESTIONS}
+    specific, compatible, asked = [], [], {q: 0 for q in judge.QUESTIONS}
     for name, q, answer in judge.kept(a, built, corpus, norms, hypotheses, factors, expectation.names(registry)):
         record = json.loads((a.root / name / "record.json").read_text(encoding="utf-8"))
         _record_components(components, record, "assessment")
@@ -371,20 +371,13 @@ def _reasoning_tier(
         asked[q.question] += 1
         if q.question == judge.SPECIFICITY:
             specific += judge.specificity(answer, name, q)
-        elif q.question == judge.COMPATIBILITY:
-            compatible += judge.compatibility(answer, name, q)
         else:
-            judged.add(q.record["practice"])
-            members += judge.minimisation(answer, name, q, by_id)
+            compatible += judge.compatibility(answer, name, q)
 
     def items(sample: str, ids: list[str]) -> list[str]:
         parts = contexts[sample]
         return [i for x in ids if x in parts for i in _part_items(item, sample, parts[x], "assessment", d_sha, by_id)]
 
-    for c in members:
-        cited = c.pop("parts", [])
-        if c["status"] == "supported":
-            c["supporting"] = items(c["channels"][0].removeprefix("reasoning:"), cited)
     said = judge.statements(a, built) if a.declaration else []
     stated, covered = concerns.not_specific(a.frame, said, specific, items, applicability)
     if a.declaration is not None and built.comparability.get("comparable") is not False:
@@ -395,9 +388,6 @@ def _reasoning_tier(
         covered += cover
     expected = {q.question for q in judge.questions(a, built, corpus, norms, hypotheses, expectation.names(registry))}
     return {
-        "alternatives": combine.alternatives(members, hypotheses, number),
-        "members": members,
-        "judged": judged,
         "vague": {s.declarations[0]: s.declarations for s in said},
         "concerns": stated,
         "covered": covered,
@@ -449,7 +439,7 @@ def _gaps(
 
     def of_claim(c: dict, reason: str | None = None, required: str | None = None) -> None:
         reason = reason or c["sufficiency"].get("reason") or "not_admitted"
-        what = c.get("relationship") or c.get("alternative") or c["purpose"].get("node")
+        what = c.get("alternative") or c["purpose"].get("node")
         gap(
             c["subject"],
             reason,
@@ -672,9 +662,13 @@ def markdown(report: dict, built) -> str:
             read = [claims[t["claim"]] for t in r["to"] if t["claim"] in claims]
             purpose = next((c["purpose"] for c in read), {})
             name = f"{purpose.get('id', '–')} ({purpose.get('node', '?')})" if purpose else "–"
-            found = relations.outcome(r.get("aspect") or "data", [c for c in read if c["type"] != "purpose"])[1]
+            found = relations.outcome(
+                r.get("question") or "minimisation",
+                r.get("aspect") or "data",
+                [c for c in read if c["type"] != "purpose"],
+            )[1]
             decided = (
-                f"{found['status']}, {found.get('level') or found.get('relationship') or ''} ({found['strength']})"
+                f"{found['status']}, {found.get('level') or ''} ({found['strength']})"
                 if found
                 else r.get("reason", "–")
             )
@@ -710,7 +704,7 @@ def markdown(report: dict, built) -> str:
             "|---|---|---|---|---|",
         ]
         for c in tested:
-            claim = f"{c['type']} {c.get('relationship') or c.get('alternative') or ''}".strip()
+            claim = f"{c['type']} {c.get('alternative') or ''}".strip()
             status = c["status"] + (f" ({c['strength']})" if c.get("strength") else "")
             spoke = ", ".join(c["basis"]) or "silent"
             lines.append(

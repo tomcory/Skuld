@@ -8,8 +8,8 @@
 reports of a version to each other and to a normative frame (Ratatoskr's `gdpr-art5`), in two stages, and reports
 concerns to the Investigator (`skuld assess`, Ratatoskr's `expectation_assessment`): the subjects (O's practices, D's
 declarations and collection); the rule tier (O–D correspondence, transparency, purpose coverage); the expectation
-stage (`skuld expect`, without D); the assessment stage's reasoning tier (`skuld judge`: specificity, compatibility,
-minimisation, against the norms of `corpus/norms/`); and experiments, chosen by the assessment (`skuld select`), whose
+stage (`skuld expect`, without D); the assessment stage's reasoning tier (`skuld judge`: specificity and compatibility,
+against the norms of `corpus/norms/`); and experiments, chosen by the assessment (`skuld select`), whose
 comparisons decide by their strength. One rule combines the claims of every channel and sample, and the report holds
 the combined claims, the concerns, what E assessed (its coverage), and the gaps someone could act on. Every claim and
 concern carries the uncertainty of what it rests on (technical, semantic, normative; U_n by how the requirement is
@@ -69,7 +69,7 @@ git):
   subjects.json           what `skuld assess` built: practices, declarations, the collection, comparability, the
                           recipients' parties, the frame's conditions and every requirement's applicability
   expectation/<batch>/s<seed>/  a stage-1 sample: record (with the notice screens left out), context, prompt, answer
-  assessment/<question>/<subject>/s<seed>/  a stage-2 sample (specificity, compatibility, minimisation)
+  assessment/<question>/<subject>/s<seed>/  a stage-2 sample (specificity, compatibility)
   assessment.json, .md    E's report to the Investigator (Ratatoskr's expectation_assessment): both stages
   inputs/selection.json   the choice of experiments (`skuld select`), each choice and refusal with its reason
   inputs/chosen.yaml      concerns or practices chosen first for experiments, each pursued by the author or in the
@@ -120,8 +120,9 @@ O and D is passed on by reference, related or with the reason it is not.
 
 E also relates the practices and declared purposes to its own expectation, by rule. O–E, per practice, supported
 purpose, question and component, names the claims it reads (`to`), and its outcome is a function of them: functional
-or recipient dependency (by the value of the deciding Dependency claim, the combination's rule deciding between
-them), an alternative demonstrated or technically supported (the deciding claim's level and strength), conflicting,
+or recipient dependency (by the deciding claim of the removals of the component: a removal that breaks the purpose
+supports the dependency, one that preserves it establishes none), an alternative demonstrated or technically
+supported (the deciding claim's level and strength), conflicting,
 insufficient evidence or not assessable; an experiment's claims for a case purpose no inferred purpose aligns with
 are related per case purpose. D–E, per declared purpose, against the inferred purposes of the practices of its data: supported where every
 such practice has a supported purpose the declared node covers, partially where some do, not established where none
@@ -135,38 +136,38 @@ documentation from the corpus; screens Ratatoskr's notice classifier takes for c
 left out, and the sample records which. The context's check refuses any part from D's report or a notice screen. An
 answer that leaves a practice without a purpose, names a practice or component not in the batch, or cites what the
 context does not hold is asked once more with the refusal (s<seed>/a2/; asked again and accepted at once, the retry
-is removed); offline, the last kept attempt stands. The answers become Purpose and Dependency claims under E's status
+is removed); offline, the last kept attempt stands. The answers become Purpose and Alternative claims under E's status
 rules: a purpose is supported only if it is specific and a screen or passage shows its outcome, what the processing is
 for (the practice gives its action and object; citing the practice for the outcome does not count, since that the
 processing happens shows nothing of what it is for), its beneficiary (the user, the provider or another party) and
-context qualifying it; a Dependency claim has one value (essential, quality dependent, or not dependent, which only a
-run supports), no dependency identified makes no claim, and a step that cites a practice as a reason it is needed is
-dropped. Alternatives are the reasoning tier's. `skuld assess` reads the kept samples and asks no model, and fails if a stage-1 sample
+context qualifying it; an alternative is a less invasive way to serve a supported purpose with one component changed,
+plausible, or technically supported where a cited passage describes the mechanism (the practice cited beside it does
+not count), and only a technically supported one is supported. A batch holds the practices whose first episode it is,
+with the screens of all their episodes. `skuld assess` reads the kept samples and asks no model, and fails if a stage-1 sample
 or claim reaches anything of D's.
 
 The assessment stage's reasoning tier (`skuld judge`) reads the expectation stage's claims, combined across samples
 (purposes aligned by node and beneficiary within a practice), as hypotheses, and D's declared purposes as
-declarations, marked as such; the check refuses any other part of D's report. It asks three questions. Specificity:
+declarations, marked as such; the check refuses any other part of D's report. It asks two questions. Specificity:
 D's purpose statements in batches of twenty, each quoted with its sentence, against the norms on specific purposes;
 a statement judged not specific, its action, object or outcome lacking, by steps citing it and a norm, is concern
 (ii). Compatibility: per practice and supported inferred purpose that no specified purpose of its data covers (the
 same DPV node or one above, not the root), one question listing those specified purposes, answered per pair by the
 frame's factors; a step citing a declaration cannot make a purpose compatible and is dropped. A purpose no specified
 purpose covers is concern (iii): supported by the rule tier where none is declared for its data, else by the reasoning
-tier where it is judged not compatible with every one that is. Minimisation: per practice with a supported purpose,
-its components, documentation and norms; an alternative technically supported by a cited document is concern (v).
-The samples' judgements and Alternative claims are combined like every claim: one that a document supports decides
-over samples that name no concern, and the disagreement raises the concern's uncertainty. The norms and guidelines are passages in `corpus/norms/`,
+tier where it is judged not compatible with every one that is. Minimisation needs no question of its own: a technically
+supported alternative of stage 1 is concern (v). The samples' judgements and Alternative claims are combined like
+every claim: one that a document supports decides over samples that name no concern, and the disagreement raises the
+concern's uncertainty. The norms and guidelines are passages in `corpus/norms/`,
 retrieved by requirement, kept apart so that the expectation stage's corpus digest does not change with them.
 
 Experiments are a channel of the assessment stage. `skuld assess` reads the case report's measurements (`report.json`,
 by digest) and makes the experimental channel's claims by its status rule (`rules.py`): from the removal of a
-component one Dependency claim with its value, from each alternative an Alternative claim, demonstrated where the
+component an Alternative claim marked as a removal, from each alternative an Alternative claim, demonstrated where the
 comparison preserves the purpose. They are claims of every practice whose component a case varies: a datum's removal or
 precision the practices of that datum or one below it, a recipient's removal the transmissions to it. A practice's
 hypothesis purpose aligns with the case purpose of its beneficiary whose node is its own or the nearest above (≈),
-and each experiment's claim is combined with the hypotheses of aligned purposes, a comparison deciding by its
-strength; where no hypothesis aligns, reasoning is silent and the comparison stands alone. A demonstrated alternative
+and each experiment's claims name the hypotheses of aligned purposes as their basis; where no hypothesis aligns, reasoning is silent and the comparison stands alone. A demonstrated alternative
 for an aligned case purpose is concern (v), whose O–E relation reads the run. `skuld select` chooses the experiments
 the assessment asks for: per practice and supported purpose whose minimisation neither a document nor an experiment
 decides, and on which Skuld can impose an alternative; those `inputs/chosen.yaml` names first (pursued by the author,

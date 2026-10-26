@@ -241,7 +241,7 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
             read = [
                 by_id[t["claim"]] for t in r["to"] if t["claim"] in by_id and by_id[t["claim"]]["type"] != "purpose"
             ]
-            derived = relations.outcome(r.get("aspect") or "data", read)[0]
+            derived = relations.outcome(r.get("question") or "minimisation", r.get("aspect") or "data", read)[0]
             if read and derived != r["outcome"]:
                 problems.append(f"{r['id']}: its claims give {derived}, not {r['outcome']}")
     for x in report["passed_on"]:

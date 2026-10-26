@@ -15,16 +15,15 @@ For each practice listed in the context (its id starts with P):
    cannot be stated specifically.
 
 2. For each purpose and each component of the practice (its data, and for a transmission its recipient; their ids
-   are the practice's id followed by ".data" or ".recipient"), state the functional dependency of the purpose on the
-   component:
-   - ESSENTIAL: the purpose cannot be achieved without it;
-   - QUALITY_DEPENDENT: achieved without it, less well;
-   - NOT_DEPENDENT: the purpose is achieved as well without it;
-   - NO_DEPENDENCY_IDENTIFIED: you cannot tell.
-   Give your reasoning as numbered steps, each citing the context ids it rests on. That the application does
-   something is never a reason that it needs to: a step may not cite a practice to show that the practice is needed.
+   are the practice's id followed by ".data" or ".recipient"), propose the less invasive alternatives that would still
+   achieve the purpose: a change of the component (less data, coarser data, an identifier of narrower scope,
+   processing on the device, no recipient or a recipient of narrower reach). Give each an evidence level, PLAUSIBLE
+   (coherent, not substantiated by the context) or TECHNICALLY_SUPPORTED (a cited document describes the mechanism by
+   which the purpose is achieved with the alternative), and the ids of the context parts it rests on. That the
+   application does something is never a reason that it needs to. Leave out alternatives that would not achieve the
+   purpose, and give none where you can state none.
 
-Where no part of the context shows a part of a purpose or supports a step, cite "own knowledge" for it.
+Where no part of the context shows a purpose's outcome or supports an alternative, cite "own knowledge" for it.
 
 Nodes of the purpose vocabulary: {nodes}
 
