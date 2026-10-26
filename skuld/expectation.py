@@ -161,26 +161,17 @@ def _order(episode: str) -> tuple:
 
 
 def batches(a: Assessment, subjects: Subjects) -> list[Batch]:
-    """One batch per episode in which a practice first occurred, each practice in one batch only; the batch's screens
-    are those of every episode its practices occurred in, the first episode's first, notices left out."""
+    """One batch per episode, with its practices and screens, notices left out."""
     runs = _runs(a)
-    first: dict[str, list[Practice]] = {}
-    for p in subjects.practices:
-        episodes = sorted(p.episodes or ["?"], key=_order)
-        first.setdefault(episodes[0], []).append(p)
+    keys = sorted({e for p in subjects.practices for e in p.episodes}, key=lambda e: (e == "?", len(e), e))
     out = []
-    for key in sorted(first, key=_order):
-        practices = first[key]
-        episodes = [key] + sorted({e for p in practices for e in p.episodes} - {key}, key=_order)
+    for key in keys:
+        practices = [p for p in subjects.practices if key in p.episodes]
         screens, run_id = [], None
         for run in runs:
-            found = []
-            for episode in episodes:
-                for screen in _screens(run, None, LAUNCH_SCREENS) if episode == "?" else _screens(run, episode):
-                    if screen not in found:
-                        found.append(screen)
-            if found:
-                screens, run_id = found, run.run_id
+            screens = _screens(run, None, LAUNCH_SCREENS) if key == "?" else _screens(run, key)
+            if screens:
+                run_id = run.run_id
                 break
         kept, left_out = [], []
         for sid, text in screens:

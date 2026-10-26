@@ -142,9 +142,8 @@ for (the practice gives its action and object; citing the practice for the outco
 processing happens shows nothing of what it is for), its beneficiary (the user, the provider or another party) and
 context qualifying it; an alternative is a less invasive way to serve a supported purpose with one component changed,
 plausible, or technically supported where a cited passage describes the mechanism (the practice cited beside it does
-not count), and only a technically supported one is supported. A batch holds the practices whose first episode it is,
-with the screens of all their episodes. `skuld assess` reads the kept samples and asks no model, and fails if a stage-1 sample
-or claim reaches anything of D's.
+not count), and only a technically supported one is supported. `skuld assess` reads the kept samples and asks no
+model, and fails if a stage-1 sample or claim reaches anything of D's.
 
 The assessment stage's reasoning tier (`skuld judge`) reads the expectation stage's claims, combined across samples
 (purposes aligned by node and beneficiary within a practice), as hypotheses, and D's declared purposes as
