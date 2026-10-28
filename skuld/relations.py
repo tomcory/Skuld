@@ -40,14 +40,15 @@ is not copied: the Investigator reads it in the report it names, so the claims k
 from ratatoskr import align
 from ratatoskr.vocabularies import Vocabulary
 
-from skuld import combine
+from skuld import combine, parties
 from skuld.assessment import Subjects
+from skuld.common import DATA, vocabulary
 from skuld.correspondence import Relation, covered
 from skuld.inputs import ReportRef
 from skuld.observe import claims as o_claims
 from skuld.transparency import INCOMPLETE, MISSING_IF, UNREAD, Status
 
-VERSION = "2"
+VERSION = "3"
 COMPONENT = {"role": "method", "id": "skuld.relations", "version": VERSION}
 
 CONFLICTING, INSUFFICIENT, NOT_ASSESSABLE, NOT_COMPARABLE = (
@@ -281,21 +282,77 @@ def passed_on(
     return out
 
 
-def from_declaration(declaration: ReportRef | None) -> list[dict]:
-    """D's open conditions, which E does not decide, passed on to the Investigator by the condition they continue:
-    whether a policy's recipient receives data as a third party, whether its data leaves the device."""
+def from_declaration(
+    declaration: ReportRef | None, subjects: Subjects, related: list[Relation], registry=None
+) -> tuple[list[dict], list[dict]]:
+    """D's open conditions: those E decides from O's practices and the parties (`decided`), and those it passes on to
+    the Investigator by the condition they continue (`open`).
+
+        collect  whether a policy's data leaves the device, which Google counts as collection: holds where O observed a
+                 transmission of the data declared (its node or one below), by those practices and their O–D
+                 relations; otherwise open, since O's not observing it is no absence
+        share    whether a recipient receives data as a third party, which Google counts as sharing: fails where every
+                 recipient it names is the provider's own (parties.relate), since no data goes to another company;
+                 otherwise open, since whether a recipient acts as a service provider is a role no register states
+    """
     if declaration is None:
-        return []
-    return [
-        {
-            "id": f"open:D:{o['id']}",
-            "text": o["text"],
-            "qualifies": o["qualifies"],
-            "from": "D",
-            "of": {"report": declaration.sha256, "open": o["id"]},
-        }
-        for o in declaration.load().get("open", [])
-    ]
+        return [], []
+    report = declaration.load()
+    comparable = subjects.comparability.get("comparable") is not False
+    declared = {d.claim["claim"]: d for d in subjects.declarations}
+    provider = parties.controller(report, subjects.application)
+    data = vocabulary(DATA)
+    open_, decided = [], []
+    for o in report.get("open", []):
+        of = {"report": declaration.sha256, "open": o["id"]}
+        named = [declared[c] for c in o["qualifies"] if c in declared and declared[c].channel != "data_safety"]
+        outcome = None
+        if comparable and o.get("predicate") == "collect":
+            nodes = {d.data for d in named if d.type == "declares_collection"}
+            shown = [
+                p
+                for p in subjects.practices
+                if p.claim_type == "transmits"
+                and any(align.data(p.data, n, data).kind in (align.EQUAL, align.NARROWER) for n in nodes)
+            ]
+            if shown:
+                outcome = (
+                    "holds",
+                    {
+                        "claims": [c for p in shown for c in p.claims],
+                        "relations": [
+                            r.id for r in related if r.subject in {p.id for p in shown} and r.aspect == "data"
+                        ],
+                    },
+                    "O observed it transmitted: " + ", ".join(sorted({f"{p.data} to {p.recipient}" for p in shown})),
+                )
+        elif comparable and o.get("predicate") == "share":
+            recipients = [d.value for d in named if d.type == "declares_recipient" and isinstance(d.value, dict)]
+            found = [parties.relate(r["entity"], registry, provider) for r in recipients if r.get("entity")]
+            if recipients and len(found) == len(recipients) and all(f.relation == parties.OWN for f in found):
+                outcome = (
+                    "fails",
+                    {"claims": [d.claim for d in named if d.type == "declares_recipient"]},
+                    "the recipient is the provider's own: " + "; ".join(b for f in found for b in f.basis),
+                )
+        if outcome is None:
+            open_.append(
+                {"id": f"open:D:{o['id']}", "text": o["text"], "qualifies": o["qualifies"], "from": "D", "of": of}
+            )
+        else:
+            result, by, reason = outcome
+            decided.append(
+                {
+                    "id": f"decided:D:{o['id']}",
+                    "text": o["text"],
+                    "from": "D",
+                    "of": of,
+                    "outcome": result,
+                    "by": by,
+                    "reason": reason,
+                }
+            )
+    return open_, decided
 
 
 def _order(relation_id: str) -> tuple:

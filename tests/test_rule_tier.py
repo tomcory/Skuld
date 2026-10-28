@@ -1,5 +1,7 @@
 """Tests of the rule tier: O–D correspondence, transparency statuses, concern (i), pass-through, the report."""
 
+import json
+
 import pytest
 from ratatoskr.frames import Frame
 from ratatoskr.registry import Registry
@@ -295,6 +297,56 @@ def test_ds_findings_and_open_conditions_are_passed_on_and_checked(tmp_path):
     assert "passed on: D finding f2 is unknown" in problems
     assert "open:D:o1: qualifies policy:/nowhere, which is unknown" in problems
     assert "open:D:o1: continues o2, which D's report does not state" in problems
+
+
+def test_e_decides_ds_conditions_that_os_practices_or_the_parties_settle_and_passes_on_the_rest(tmp_path):
+    from skuld.assess import build
+    from skuld.provenance import check_assessment
+
+    registry = tmp_path / "registry.json"
+    registry.write_text(
+        json.dumps(
+            {
+                "entities": [
+                    {"id": "adco", "name": "AdCo", "domains": ["adco.example"], "types": ["advertising"]},
+                    {"id": "exampleco", "name": "Example Co", "domains": ["example.com"]},  # the provider's own
+                ]
+            }
+        )
+    )
+    claims = [
+        d_claim("declares_collection", "personal-info.name"),
+        d_claim(
+            "declares_recipient", "personal-info.email-address", value={"entity": "exampleco", "name": "our group"}
+        ),
+        d_claim("declares_recipient", "personal-info.email-address", value={"entity": "adco", "name": "AdCo"}),
+        d_claim("declares_collection", "location.precise-location"),
+    ]
+    d = d_report(claims)
+    ids = [c["id"] for c in d["claims"]]
+    d["open"] = [
+        {"id": "o1", "text": "whether the name leaves the device", "qualifies": [ids[0]], "predicate": "collect"},
+        {
+            "id": "o2",
+            "text": "whether our group receives it as a third party",
+            "qualifies": [ids[1]],
+            "predicate": "share",
+        },
+        {"id": "o3", "text": "whether AdCo receives it as a third party", "qualifies": [ids[2]], "predicate": "share"},
+        {"id": "o4", "text": "whether the location leaves the device", "qualifies": [ids[3]], "predicate": "collect"},
+    ]
+    a = workspace(tmp_path, [o_report([claim("c1", "personal-info.name", "adco")])], d)
+    report, members = build(a.root, registry, write=False)
+    validate("expectation_assessment", report)
+    decided = {x["of"]["open"]: x for x in report["decided"]}
+    passed = {o["of"]["open"] for o in report["open"] if o.get("from") == "D"}
+    # the name: O saw it transmitted, so it leaves the device
+    assert decided["o1"]["outcome"] == "holds" and decided["o1"]["by"]["claims"] and decided["o1"]["by"]["relations"]
+    # the provider's own group company receives no data as another company
+    assert decided["o2"]["outcome"] == "fails"
+    # whether AdCo acts as a service provider no register states; O saw no location: neither is decided
+    assert passed == {"o3", "o4"} and not ({"o3", "o4"} & set(decided))
+    assert check_assessment(a, report, report, members) == []
 
 
 FIXTURES = [

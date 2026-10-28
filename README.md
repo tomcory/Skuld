@@ -94,6 +94,11 @@ generator at temperature 0.2 from seed 1, both stages at 0.4 with a seed per sam
 tokens; the stages' seeds), and the
 client (Ollama, a 30-minute timeout, no response cache, since the samples are Skuld's record of every answer). The
 server's address is read from `OLLAMA_BASE_URL`. The generator and both stages ask through `ask.py`. The assessment's
+D's open conditions are decided where O's practices or the parties settle them (`relations.from_declaration`): that
+a policy's data leaves the device holds where O observed it transmitted, and that a recipient receives data as a third
+party fails where it is the provider's own; they go to the report's `decided`, with the claims and relations that
+decide them, and the rest to `open`, for the Investigator.
+
 D's silence is read as D defines it: a silence is closed only on a channel exhaustive for the predicate (its rules
 oblige every case, its analysis has established recall), which for D is the Data safety section, for the collection and
 sharing of each data type (`assessment.EXHAUSTIVE`). So a concern that information is not given has moderate semantic

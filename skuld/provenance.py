@@ -260,6 +260,17 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
         problems += [f"{o['id']}: qualifies {q}, which is unknown" for q in o["qualifies"] if q not in names]
         if "of" in o and o["of"]["open"] not in d_open:
             problems.append(f"{o['id']}: continues {o['of']['open']}, which D's report does not state")
+    # a condition E decided continues D's, and what decides it resolves; none is both decided and open
+    passed = {o["of"]["open"] for o in report["open"] if "of" in o}
+    for x in report.get("decided", []):
+        if x["of"]["open"] not in d_open:
+            problems.append(f"{x['id']}: continues {x['of']['open']}, which D's report does not state")
+        if x["of"]["open"] in passed:
+            problems.append(f"{x['id']}: is decided and passed on as open")
+        problems += [f"{x['id']}: {p}" for ref in x["by"].get("claims", []) if (p := claim_ref(ref))]
+        problems += [
+            f"{x['id']}: relation {i} is unknown" for i in x["by"].get("relations", []) if i not in relation_ids
+        ]
     for g in report["gaps"]:
         if g.get("of") and g["of"] not in known | {"collection"} | requirements:
             problems.append(f"{g['id']}: of {g['of']}, which is unknown")

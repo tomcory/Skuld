@@ -181,7 +181,8 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
     claims = hypotheses + tier["alternatives"] + tested
     case_features = sorted({c.feature.id for c in a.cases.cases}) if a.cases else []
     open_ = relations.open_conditions(built, every, statuses, a.frame, stated, tested, case_features)
-    open_ += relations.from_declaration(a.declaration)
+    from_d, settled = relations.from_declaration(a.declaration, built, every, registry)
+    open_ += from_d
 
     report = {
         "report": {
@@ -254,6 +255,7 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
         "passed_on": relations.passed_on(built, a.observations, a.declaration, every, expected=bool(hypotheses)),
         "cases": _cases(a),
         "open": open_,
+        "decided": settled,
         "gaps": _gaps(stated, claims, tested, a, tier["absent"], item),
     }
     validate("expectation_assessment", report)
