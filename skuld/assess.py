@@ -45,6 +45,7 @@ from skuld import (
     relations,
     select,
     transparency,
+    uncertainty,
 )
 from skuld.common import DATA, PURPOSES, RECIPIENT_TYPES, vocabulary
 from skuld.corpus import NORMS
@@ -189,7 +190,8 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
             "created": datetime.now(UTC).isoformat(timespec="seconds"),
             "skuld": skuld.__version__,
             "ratatoskr": ratatoskr.__version__,
-            "claims": {"attributes": {"polarity": "+"}},  # what every claim of E has, stated once
+            # what every claim of E has, stated once; its uncertainty is determined by its kind and premises
+            "claims": {"attributes": {"polarity": "+"}, "determined": {"uncertainty": uncertainty.CLAIMS}},
             "components": [
                 *built.components,
                 correspondence.COMPONENT,
@@ -248,7 +250,7 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
         "features": _features(built, o_reports),
         "evidence": item.items,
         "relations": correspondence.to_json(every),
-        "claims": claims,
+        "claims": [{k: v for k, v in c.items() if k != "uncertainty"} for c in claims],
         "concerns": concerns.to_json(stated),
         "coverage": concerns.coverage(a.frame, covered),
         "passed_on": relations.passed_on(built, a.observations, a.declaration, every, expected=bool(hypotheses)),
@@ -426,7 +428,7 @@ def _reasoning_tier(
         covered += cover
     expected = {q.question for q in judge.questions(a, built, corpus, norms, hypotheses, expectation.names(registry))}
     return {
-        "alternatives": combine.alternatives(members, hypotheses, number),
+        "alternatives": combine.alternatives(members, number),
         "members": members,
         "judged": judged,
         "vague": {s.declarations[0]: s.declarations for s in said},

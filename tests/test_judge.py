@@ -283,13 +283,9 @@ def test_the_assessments_provenance_is_complete_its_rebuild_identical_and_tamper
     by_step = {c["step"]: c for c in report["concerns"]}
     assert by_step["information_not_given"]["uncertainty"]["n"] == "low"
     assert by_step["not_specific"]["uncertainty"]["n"] == "moderate"
-    assert all(c["uncertainty"]["n"] == "not_applicable" for c in report["claims"] if c["stage"] == "expectation")
-    concern = by_step["less_invasive_alternative"]
-    purpose = next(c for c in report["claims"] if c["id"] == concern["purpose"])
-    assert all(
-        uncertainty.ORDER.index(concern["uncertainty"][f]) >= uncertainty.ORDER.index(purpose["uncertainty"][f])
-        for f in uncertainty.FACTORS
-    )
+    # a claim's uncertainty is not stored: the header names the function that determines it
+    assert not any("uncertainty" in c for c in report["claims"])
+    assert report["report"]["claims"]["determined"]["uncertainty"] == uncertainty.CLAIMS
 
     tampered = json.loads(json.dumps(report))
     o_item = next(e for e in tampered["evidence"] if e["kind"] == "claim" and e["claim"]["dimension"] == "O")

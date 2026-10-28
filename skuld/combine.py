@@ -21,7 +21,8 @@ model and yields no finding: the claims it combines are kept, in the samples and
                   claim is combined with the hypotheses' on the same component. Where no hypothesis aligns, reasoning
                   is silent on the case's purpose, and the experiment's claim stands combined alone.
 
-A claim that rests on a purpose takes the purpose's semantic uncertainty where it is higher than its own.
+A combined claim's uncertainty is used here, to set its concerns', and not stored: the assessment names this function
+(`uncertainty.CLAIMS`). A concern resting on a purpose takes the purpose's semantic uncertainty where it is higher.
 """
 
 from skuld.uncertainty import FACTORS, ORDER, highest
@@ -114,15 +115,6 @@ def _uncertainty(members: list[dict], minimum: bool) -> dict:
     return out
 
 
-def on_purpose(claim: dict, purpose: dict) -> dict:
-    """A claim that rests on a purpose, with the purpose's semantic uncertainty where it is higher."""
-    claim["uncertainty"] = {
-        **claim["uncertainty"],
-        "s": highest(claim["uncertainty"]["s"], purpose["uncertainty"]["s"]),
-    }
-    return claim
-
-
 def beneficiary(text: str | None) -> str:
     """A purpose's beneficiary as the alignment compares it: the user, the provider, or another party."""
     t = str(text or "").lower()
@@ -168,20 +160,16 @@ def hypotheses(claims: list[dict], number: Numbers) -> list[dict]:
     by_id = {p["id"]: p for p in out}
     for (subject, pid, _), members in dependencies.items():
         p = by_id[pid]
-        out.append(on_purpose(combined(number(subject), members, purpose=p["purpose"], basis=[pid]), p))
+        out.append(combined(number(subject), members, purpose=p["purpose"], basis=[pid]))
     return out
 
 
-def alternatives(claims: list[dict], hypotheses: list[dict], number: Numbers) -> list[dict]:
+def alternatives(claims: list[dict], number: Numbers) -> list[dict]:
     """The reasoning tier's Alternative claims combined across its samples, per practice, purpose and component."""
-    by_id = {h["id"]: h for h in hypotheses}
     groups: dict[tuple, list[dict]] = {}
     for c in claims:
         groups.setdefault((c["subject"], c["basis"][0], c["component"]), []).append(c)
-    return [
-        on_purpose(combined(number(subject), members, basis=[pid]), by_id[pid])
-        for (subject, pid, _), members in groups.items()
-    ]
+    return [combined(number(subject), members, basis=[pid]) for (subject, pid, _), members in groups.items()]
 
 
 def aligned(hypotheses: list[dict], case_purposes: list[dict], vocabulary) -> dict[str, dict]:

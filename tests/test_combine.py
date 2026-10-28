@@ -72,11 +72,6 @@ def test_where_no_channel_can_decide_the_reason_of_one_that_cannot_assess_is_kep
     )
 
 
-def test_a_claim_on_a_purpose_takes_the_purposes_semantic_uncertainty_where_higher():
-    purpose = {"uncertainty": {"t": "not_applicable", "s": "high", "n": "not_applicable"}}
-    assert combine.on_purpose(claim("a", "supported", "doc", s="moderate"), purpose)["uncertainty"]["s"] == "high"
-
-
 def test_a_beneficiary_is_the_user_the_provider_or_another_party():
     assert [combine.beneficiary(x) for x in ("user", "PROVIDER", "the app provider", "the user's coach", None)] == [
         "user",
