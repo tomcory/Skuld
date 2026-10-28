@@ -172,7 +172,7 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
             if c.step == "not_specific" and c.status == "supported"
             for d in tier["vague"].get(c.subject, [])
         }
-        expected += relations.d_e(built, hypotheses, vague, data, purposes)
+        expected += relations.d_e(built, hypotheses, vague, data, purposes, tested)
     every = related + expected
     correspondence.number(every)
     for c in stated:

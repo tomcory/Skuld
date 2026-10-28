@@ -349,6 +349,54 @@ def test_e_decides_ds_conditions_that_os_practices_or_the_parties_settle_and_pas
     assert check_assessment(a, report, report, members) == []
 
 
+def test_a_declared_necessity_is_refuted_by_a_run_never_supported_and_not_compared_for_no_data(tmp_path):
+    from skuld.common import PURPOSES, vocabulary
+
+    claims = [
+        d_claim("declares_legal_basis", "personal-info.name", value="GDPR-6-1-b", kind="justification"),
+        d_claim("declares_legal_basis", "data", value="GDPR-6-1-b", kind="justification"),  # a list of bases
+        d_claim("declares_legal_basis", "personal-info.email-address", value="GDPR-6-1-b", kind="justification"),
+        d_claim("declares_legal_basis", "personal-info.name", value="GDPR-6-1-a", kind="justification"),  # consent
+    ]
+    a = workspace(tmp_path, [o_report([claim("c1", "personal-info.name", "adco")])], d_report(claims))
+    built = assessment.build(a, REGISTRY)
+    p = built.practices[0]
+    user = {"beneficiary": "user", "provenance": "case"}
+    tested = [
+        {
+            "id": "claim:x:1",
+            "type": "dependency",
+            "subject": p.id,
+            "relationship": "not_dependent",
+            "status": "supported",
+            "strength": "run",
+            "purpose": user,
+            "case": "launch",
+        },
+        {
+            "id": "claim:x:2",
+            "type": "dependency",
+            "subject": p.id,
+            "relationship": "not_dependent",
+            "status": "supported",
+            "strength": "doc",
+            "purpose": user,
+            "case": "launch",
+        },  # a document refutes no necessity
+    ]
+    out = {r.subject: r for r in relations.d_e(built, [], {}, DATA, vocabulary(PURPOSES), tested)}
+    by_value = {d.id: (d.data, d.value) for d in built.declarations}
+    refuted = [r for r in out.values() if r.outcome == relations.NECESSITY_REFUTED]
+    assert [by_value[r.subject] for r in refuted] == [("personal-info.name", "GDPR-6-1-b")]
+    assert [t["claim"] for t in refuted[0].to] == ["claim:x:1"]
+    assert any(r.outcome == "not_comparable" and by_value[r.subject][0] == "data" for r in out.values())
+    # no run for the e-mail address, and consent declares no necessity: no relation, the claim is passed on
+    assert not any(
+        by_value[r.subject] in {("personal-info.email-address", "GDPR-6-1-b"), ("personal-info.name", "GDPR-6-1-a")}
+        for r in out.values()
+    )
+
+
 FIXTURES = [
     "pilatesworkout.yogaworkout.loseweight.workoutapps@1.6.4",
     "air.nn.mobile.app.main@3.8.96",

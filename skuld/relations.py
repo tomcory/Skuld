@@ -29,8 +29,18 @@ it) that its node covers (the node or one above it, as for purpose limitation):
     justification_supported      every practice of its data that E formed an expectation of has a supported Purpose
                                  claim it covers; partially if some do; not established if none does
 
-Not stated: a conflicted justification (E has no claim that challenges a purpose) and a refuted declared necessity
-(D states no necessity its rules read).
+and per declared strict necessity, a legal basis of Art. 6(1)(b) (processing necessary for a contract with the data
+subject), against the experiments' claims for the practices of its data:
+
+    necessity_refuted            a run shows a user's purpose achieved without it: a not-dependent Dependency claim or a
+                                 demonstrated Alternative claim, supported at strength run, for a case purpose of the
+                                 user; holds for the features the case report covers (an open condition)
+    not_comparable               it is declared for no data in particular (the root), as a list of the bases a policy may
+                                 use is, which no practice can refute
+
+A necessity is never supported (E's asymmetry); where no run refutes it, the claim is passed on with the reason. Not
+stated: a conflicted justification, since no channel of the instance refutes a Purpose claim (whether a provider's purpose
+is achieved is decided on its servers, observability E3).
 
 Pass-through: every claim of O's and D's reports passed on to the Investigator by reference (report digest and claim
 id, or JSON pointer for D's claims), with the relations it takes part in or the reason it has none. A claim passed on
@@ -48,7 +58,7 @@ from skuld.inputs import ReportRef
 from skuld.observe import claims as o_claims
 from skuld.transparency import INCOMPLETE, MISSING_IF, UNREAD, Status
 
-VERSION = "3"
+VERSION = "4"
 COMPONENT = {"role": "method", "id": "skuld.relations", "version": VERSION}
 
 CONFLICTING, INSUFFICIENT, NOT_ASSESSABLE, NOT_COMPARABLE = (
@@ -70,9 +80,14 @@ SUPPORTED, PARTIALLY, NOT_ESTABLISHED, TOO_VAGUE = (
     "justification_not_established",
     "purpose_too_vague",
 )
+#: A declared strict necessity refuted: Art. 6(1)(b), processing necessary for a contract with the data subject, for data
+#: whose removal a run shows the user's purposes not to depend on
+NECESSITY_REFUTED = "necessity_refuted"
+#: The legal basis that declares processing necessary: for the performance of a contract with the data subject
+CONTRACT = "GDPR-6-1-b"
 #: Why a claim of D has no relation, by its type
 UNRELATED = {
-    "declares_legal_basis": "E forms no expectation of legal bases",
+    "declares_legal_basis": "E forms no expectation of legal bases; a declared necessity it relates only where a run refutes it",
     "declares_retention": "E relates no declared retention",
     "declares_transfer": "E relates no declared transfers",
 }
@@ -175,9 +190,10 @@ def d_e(
     vague: dict[str, str],
     data: Vocabulary,
     purposes: Vocabulary,
+    tested: list[dict] = (),
 ) -> list[Relation]:
-    """The D–E relations: per positive declared purpose. `vague` names the declarations of a statement concern (ii)
-    supports, with the concern."""
+    """The D–E relations: per positive declared purpose, and per declared strict necessity. `vague` names the
+    declarations of a statement concern (ii) supports, with the concern; `tested`, the experiments' combined claims."""
     out: list[Relation] = []
     comparable = subjects.comparability.get("comparable") is not False
 
@@ -186,6 +202,7 @@ def d_e(
         out.append(relation)
         return relation
 
+    out += _necessity(subjects, tested, data, comparable)
     if not hypotheses:
         return out
     for d in subjects.declarations:
@@ -238,6 +255,52 @@ def d_e(
             subject=d.id,
             reason=f"{k} of {len(decidable)} practices of its data have a supported purpose it covers",
         )
+    return out
+
+
+def _necessity(subjects: Subjects, tested: list[dict], data: Vocabulary, comparable: bool) -> list[Relation]:
+    """The D–E relations of declared strict necessity (Art. 6(1)(b)): refuted where a run shows a user's purpose
+    achieved without the data; none where nothing refutes it."""
+    out = []
+    for d in subjects.declarations:
+        if d.type != "declares_legal_basis" or d.polarity != "+" or d.value != CONTRACT:
+            continue
+        common = {"type": "D-E", "tier": "rule", "of": d.claim, "subject": d.id}
+        if not comparable:
+            out.append(Relation(id="", outcome=NOT_COMPARABLE, reason="O's and D's scopes are not comparable", **common))
+            continue
+        if d.data == data.root or d.data not in data:
+            reason = "it is declared for no data in particular, as a list of the bases a policy may use is"
+            out.append(Relation(id="", outcome=NOT_COMPARABLE, reason=reason, **common))
+            continue
+        practices = {
+            p.id
+            for p in subjects.practices
+            if p.data in data and align.data(p.data, d.data, data).kind in (align.EQUAL, align.NARROWER)
+        }
+        shown = [
+            x
+            for x in tested
+            if x["subject"] in practices
+            and x["status"] == "supported"
+            and x.get("strength") == "run"
+            and (x.get("purpose") or {}).get("beneficiary") == "user"
+            and (
+                (x["type"] == "dependency" and x.get("relationship") == "not_dependent")
+                or (x["type"] == "alternative" and x.get("level") == "demonstrated")
+            )
+        ]
+        if shown:
+            cases = sorted({x.get("case") or "?" for x in shown})
+            out.append(
+                Relation(
+                    id="",
+                    outcome=NECESSITY_REFUTED,
+                    to=[e_ref(x["id"]) for x in shown],
+                    reason=f"a run shows the user's purposes of {', '.join(cases)} achieved without its data",
+                    **common,
+                )
+            )
     return out
 
 

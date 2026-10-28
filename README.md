@@ -94,6 +94,11 @@ generator at temperature 0.2 from seed 1, both stages at 0.4 with a seed per sam
 tokens; the stages' seeds), and the
 client (Ollama, a 30-minute timeout, no response cache, since the samples are Skuld's record of every answer). The
 server's address is read from `OLLAMA_BASE_URL`. The generator and both stages ask through `ask.py`. The assessment's
+A declared necessity, a legal basis of Art. 6(1)(b), is related to E's experiments: refuted where a run shows a user's
+purpose achieved without its data (a not-dependent Dependency or a demonstrated Alternative claim at strength run),
+never supported, and not comparable where it is declared for no data in particular, as a policy's list of possible bases
+is. A conflicted justification is not reached: no channel refutes a Purpose claim.
+
 D's open conditions are decided where O's practices or the parties settle them (`relations.from_declaration`): that
 a policy's data leaves the device holds where O observed it transmitted, and that a recipient receives data as a third
 party fails where it is the provider's own; they go to the report's `decided`, with the claims and relations that
