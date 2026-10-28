@@ -26,6 +26,7 @@ one below it, of the same beneficiary.
 from dataclasses import asdict, dataclass, field
 
 from ratatoskr import align
+from ratatoskr import claims as claim_views
 from ratatoskr.registry import Registry
 from ratatoskr.vocabularies import Vocabulary
 
@@ -96,12 +97,13 @@ def _recipient_outcome(practice: Practice, value: dict, registry: Registry | Non
         if r.kind == align.SAME_OWNER:
             return HIERARCHICALLY, f"same owner ({r.common})"
         return None
-    if value.get("category"):
-        if value["category"] == types.root:
+    category = value.get("category") or next(iter(value.get("categories") or ()), None)
+    if category:
+        if category == types.root:
             return PARTIALLY, "by the root category only"  # 'recipients' says only that someone receives
-        r = align.recipient_category(entity, value["category"], registry, types)
+        r = align.recipient_category(entity, category, registry, types)
         if r.kind in (align.EQUAL, align.NARROWER):
-            return HIERARCHICALLY, f"by category ({value['category']})"
+            return HIERARCHICALLY, f"by category ({category})"
     return None
 
 
@@ -136,8 +138,9 @@ def relate(
     """The O–D relations of an assessment's practices and D's declarations of practice."""
     if d_report is None:
         return []
-    definitions = {c["channel"]: c.get("definitions") for c in d_report["claims"]}
-    qualifiers = {f"/claims/{n}": c.get("qualifiers") or {} for n, c in enumerate(d_report["claims"])}
+    d_claims = claim_views.of_report(d_report)
+    definitions = {c["channels"][0]: c.get("definitions") for c in d_claims}
+    qualifiers = {c["id"]: c.get("qualifiers") or {} for c in d_claims}
     analysed = {d["channel"] for d in subjects.collection["documents"] if d["status"] == "analysed"} & set(
         PRACTICE_CHANNELS
     )

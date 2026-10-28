@@ -54,7 +54,7 @@ Python 3.12 or newer.
 pip install -e ".[dev]"
 ```
 
-Ratatoskr comes from its tag `0.12.0` over SSH. To work on both, install a checkout of it in editable
+Ratatoskr comes from its tag `0.13.0` over SSH. To work on both, install a checkout of it in editable
 mode afterwards: `pip install -e "../Ratatoskr[validate]"`.
 
 ## Usage
@@ -105,8 +105,8 @@ runs, D's report), NeuroNation 3.8.96 (the exploration's O report, D without a p
 
 `skuld assess` builds the subjects. A practice is O's claims aggregated by claim type, data node, recipient (register
 entity, else domain) and actor, across the version's O reports, with the episodes and contexts it occurred in and its
-configuration u0; a combined claim and the channel claims it combines count once. Declarations are D's claims, by
-pointer into D's report. Whether a recipient is the provider or another organisation is decided from the register's
+configuration u0; a combined claim and the channel claims it combines count once. Declarations are D's claims,
+computed from its derived documents and named by id (`<channel>:<JSON Pointer>`). Whether a recipient is the provider or another organisation is decided from the register's
 owner, the controller and the e-mail domains D's documents name, and the package's domain; what that leaves open goes
 to the Investigator. Each condition of the frame is decided from O's and D's claims by direction: O decides what is
 processed, D the legal bases, and a provider's denial is recorded but never makes a requirement inapplicable.
@@ -120,7 +120,10 @@ no practice matches are declared without observation, citing O's silence; a prac
 declarations relates to all of them, the best alignment deciding. The collection's transparency status per
 requirement reads D's annotations on accessible documents and the frame's applicability; a requirement that applies
 and is not addressed is concern (i), one that applies only under an undecided condition holds under it. Every claim of
-O and D is passed on by reference, related or with the reason it is not.
+O and D is passed on by reference, related or with the reason it is not, and so is every finding of D; D's open
+conditions are passed on to the Investigator. O's and D's claims are read through Ratatoskr's `claims.of_report`, which
+gives O's with what its report states once and computes D's from its derived documents (ids `<channel>:<JSON
+Pointer>`); D's annotations are `tilt.annotations` of the same documents.
 
 E also relates the practices and declared purposes to its own expectation, by rule. O–E, per practice, supported
 purpose, question and component, names the claims it reads (`to`), and its outcome is a function of them: functional

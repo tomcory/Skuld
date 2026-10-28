@@ -11,6 +11,7 @@ import subprocess
 from pathlib import Path
 
 import jsonschema
+from ratatoskr import claims as claim_views
 from ratatoskr.schemas import validate
 
 from skuld.configuration import recipient as recipient_of
@@ -61,8 +62,9 @@ def source_reads(report: dict, source: str) -> list[dict]:
 
 def claims(report: dict) -> list[dict]:
     """O's claims of the run, each once: the combined claims and the channels' claims that none of them combines."""
-    combined = {i for c in report["claims"] if c.get("combined") for i in c.get("of") or ()}
-    return [c for c in report["claims"] if c["id"] not in combined]
+    found = claim_views.of_report(report)  # with what the report states once (status, application, polarity)
+    combined = {i for c in found if c.get("combined") for i in c.get("of") or ()}
+    return [c for c in found if c["id"] not in combined]
 
 
 def transmissions_to(report: dict, recipient: str) -> list[dict]:

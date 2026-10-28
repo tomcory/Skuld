@@ -20,7 +20,8 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 
-from ratatoskr import align
+from ratatoskr import align, tilt
+from ratatoskr import claims as claim_views
 from ratatoskr.registry import Registry
 
 from skuld import parties
@@ -140,39 +141,41 @@ def _episode_order(episode: str) -> tuple:
 
 
 def declarations(report: ReportRef | None) -> list[Declaration]:
-    """D's claims, by JSON pointer into its report."""
+    """D's claims, computed from its derived documents (ratatoskr.claims), by their ids; a recipient claim's value is
+    its recipient."""
     if report is None:
         return []
     out = []
-    for n, claim in enumerate(report.load()["claims"]):
-        pointer = f"/claims/{n}"
+    for n, claim in enumerate(claim_views.of_report(report.load())):
+        value = claim.get("recipient") if claim["type"] == "declares_recipient" else claim.get("value")
         out.append(
             Declaration(
                 f"D-{n}",
                 claim["kind"],
                 claim["type"],
-                claim["channel"],
-                claim.get("data", "?"),
-                claim.get("value"),
-                (claim.get("qualifiers") or {}).get("polarity", "+"),
-                _ref("D", report, pointer),
+                claim["channels"][0],
+                claim["datum"]["node"],
+                value,
+                claim.get("polarity", "+"),
+                _ref("D", report, claim["id"]),
             )
         )
     return out
 
 
 def collection(report: ReportRef | None) -> dict | None:
-    """D's documents with their accessibility and requirement annotations (by label and polarity)."""
+    """D's documents with their accessibility and requirement annotations (by label and polarity): an analysed
+    document is accessible unless the report says otherwise, and its annotations are a view of it (tilt.annotations)."""
     if report is None:
         return None
     documents = []
     for ch in report.load()["channels"]:
         entry = {"channel": ch["channel"], "document": ch.get("document"), "status": ch["status"]}
         if ch["status"] == "analysed":
-            entry["accessible"] = ch.get("accessible", False)
+            entry["accessible"] = ch.get("accessible", True)
             entry["annotations"] = [
                 {"requirement": a["requirement"], "path": a["path"], "polarity": a["polarity"]}
-                for a in ch.get("annotations", [])
+                for a in tilt.annotations(ch.get("tilt") or {})
             ]
         documents.append(entry)
     return {"documents": documents}

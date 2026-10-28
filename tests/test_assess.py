@@ -51,21 +51,26 @@ def o_report(claims, statuses=(), version="1.0"):
 
 
 def d_report(claims, documents=(), version="1.0"):
+    """A D report whose claims are given rather than projected from its documents (no projection in its header), each
+    with an id as D's projection would give it."""
     channels = [
-        {"channel": "policy", "document": "p", "status": "analysed", "accessible": True, "annotations": [], "tilt": t}
-        for t in documents
+        {"channel": "policy", "document": "p", "status": "analysed", "complete": True, "tilt": t} for t in documents
     ]
+    for n, c in enumerate(claims):
+        c.setdefault("id", f"{c['channels'][0]}:/dataDisclosed/{n}")
     return {"collection": {"package": PACKAGE, "store_version": version}, "channels": channels, "claims": claims}
 
 
 def declared(ctype, polarity="+", kind="practice", value=None):
+    """A D claim in the shared claim's shape; a recipient claim's value is its recipient."""
     return {
         "type": ctype,
         "kind": kind,
-        "channel": "policy",
-        "data": "data",
-        "value": value,
-        "qualifiers": {"polarity": polarity},
+        "channels": ["policy"],
+        "datum": {"node": "data"},
+        **({"recipient": value} if ctype == "declares_recipient" else {"value": value}),
+        "polarity": polarity,
+        "qualifiers": {},
     }
 
 
@@ -126,7 +131,7 @@ def test_parties_relate_recipients_to_the_controller():
 def test_declarations_are_referenced_by_pointer_and_the_collection_keeps_accessibility(tmp_path):
     d = d_report([declared("declares_collection"), declared("declares_purpose", kind="justification")], [{}])
     built = assessment.build(workspace(tmp_path, [o_report([])], d), None)
-    assert [x.claim["claim"] for x in built.declarations] == ["/claims/0", "/claims/1"]
+    assert [x.claim["claim"] for x in built.declarations] == ["policy:/dataDisclosed/0", "policy:/dataDisclosed/1"]
     assert built.declarations[1].kind == "justification"
     assert built.collection["documents"][0]["accessible"] is True
     assert built.comparability["comparable"] is True

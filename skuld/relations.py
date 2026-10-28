@@ -275,7 +275,27 @@ def passed_on(
             out.append(_entry(ref, related, in_practice, comparable, expected, "O"))
     for d in subjects.declarations:
         out.append(_entry(d.claim, related, in_practice, comparable, expected, "D", d))
+    # D's findings go on to the Investigator by reference (DM9)
+    for f in declaration.load().get("findings", []) if declaration else ():
+        out.append({"finding": {"report": declaration.sha256, "finding": f["id"]}})
     return out
+
+
+def from_declaration(declaration: ReportRef | None) -> list[dict]:
+    """D's open conditions, which E does not decide, passed on to the Investigator by the condition they continue:
+    whether a policy's recipient receives data as a third party, whether its data leaves the device."""
+    if declaration is None:
+        return []
+    return [
+        {
+            "id": f"open:D:{o['id']}",
+            "text": o["text"],
+            "qualifies": o["qualifies"],
+            "from": "D",
+            "of": {"report": declaration.sha256, "open": o["id"]},
+        }
+        for o in declaration.load().get("open", [])
+    ]
 
 
 def _order(relation_id: str) -> tuple:

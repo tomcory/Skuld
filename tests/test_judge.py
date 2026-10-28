@@ -21,17 +21,18 @@ def purpose(text, node, data="data", unit=None):
     return {
         "type": "declares_purpose",
         "kind": "justification",
-        "channel": "policy",
-        "data": data,
+        "channels": ["policy"],
+        "datum": {"node": data},
         "value": node,
-        "qualifiers": {"polarity": "+"},
-        "provenance": [{"channel": "policy", "document": "policy", "span": span}],
+        "polarity": "+",
+        "qualifiers": {},
+        "evidence": [{"channel": "policy", "document": "policy", "span": span}],
     }
 
 
 def d_report():
     claims = [
-        {"type": "declares_collection", "kind": "practice", "channel": "policy", "data": "data", "qualifiers": {}},
+        {"type": "declares_collection", "kind": "practice", "channels": ["policy"], "datum": {"node": "data"}},
         purpose("provide and improve the Service", "ImproveExistingProductsAndServices", unit=0),
         purpose("process your payments", "PaymentManagement"),
         purpose("market our products", "Marketing", data="device-or-other-ids"),  # covers the identifier only
@@ -40,6 +41,9 @@ def d_report():
     channels = [
         {"channel": "policy", "document": "policy", "status": "analysed", "accessible": True, "annotations": []}
     ]
+    for n, c in enumerate(claims):
+        c["id"] = f"policy:/dataDisclosed/{n}"
+        c.setdefault("polarity", "+")
     return {"collection": {"package": PACKAGE, "store_version": "1.0"}, "channels": channels, "claims": claims}
 
 
@@ -291,12 +295,12 @@ def test_the_assessments_provenance_is_complete_its_rebuild_identical_and_tamper
     o_item = next(e for e in tampered["evidence"] if e["kind"] == "claim" and e["claim"]["dimension"] == "O")
     o_item["claim"]["claim"] = "c999"
     d_item = next(e for e in tampered["evidence"] if e["kind"] == "claim" and e["claim"]["dimension"] == "D")
-    d_item["claim"]["claim"] = "/claims/999"
+    d_item["claim"]["claim"] = "policy:/dataDisclosed/999"
     tampered["concerns"][0].setdefault("supporting", []).append("item:9999")
     tampered["claims"][0]["of"].append("launch/s1:p99")
     problems = check_assessment(a, tampered, report, members)
     assert any("O claim c999 is unknown" in p for p in problems)
-    assert any("/claims/999 does not resolve" in p for p in problems)
+    assert any("D claim policy:/dataDisclosed/999 is unknown" in p for p in problems)
     assert any("item:9999 is no item" in p for p in problems)
     assert any("launch/s1:p99 is no claim it could combine" in p for p in problems)
     assert any("rebuilt" in p for p in problems)
@@ -309,7 +313,9 @@ def test_the_assessments_provenance_is_complete_its_rebuild_identical_and_tamper
 def test_the_same_words_on_two_channels_are_one_statement(tmp_path):
     report = d_report()
     notice = json.loads(json.dumps(report["claims"][1]))
-    notice["channel"] = notice["provenance"][0]["channel"] = "in_app"
+    notice["channels"] = ["in_app"]
+    notice["evidence"][0]["channel"] = "in_app"
+    notice["id"] = "in_app:/dataDisclosed/0"
     report["claims"].append(notice)
     report["channels"].append(
         {"channel": "in_app", "document": "notice", "status": "analysed", "accessible": True, "annotations": []}

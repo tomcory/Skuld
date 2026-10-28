@@ -34,6 +34,7 @@ from importlib import resources
 from pathlib import Path
 
 from ratatoskr import align
+from ratatoskr import claims as claim_views
 from ratatoskr.vocabularies import Vocabulary
 
 from skuld import ask, combine, config, correspondence, expectation
@@ -161,7 +162,7 @@ class Statement:
     text: str
     sentence: str | None
     declarations: list[str]  # D-n
-    pointers: list[str]  # /claims/n
+    pointers: list[str]  # D's claim ids
     nodes: list[str]
 
 
@@ -185,8 +186,9 @@ class Question:
     record: dict = field(default_factory=dict)  # what the sample records besides: practice, purpose, declarations
 
 
-def _d_claims(a: Assessment) -> list[dict]:
-    return a.declaration.load()["claims"] if a.declaration else []
+def _d_claims(a: Assessment) -> dict[str, dict]:
+    """D's claims by id, computed from its derived documents (ratatoskr.claims)."""
+    return claim_views.by_id(a.declaration.load()) if a.declaration else {}
 
 
 def _sentences(a: Assessment) -> dict[str, list]:
@@ -211,8 +213,8 @@ def statements(a: Assessment, subjects: Subjects) -> list[Statement]:
     for d in subjects.declarations:
         if d.type != "declares_purpose":
             continue
-        claim = claims[int(d.claim["claim"].rsplit("/", 1)[1])]
-        for pointer in claim.get("provenance") or ():
+        claim = claims[d.claim["claim"]]
+        for pointer in claim.get("evidence") or ():
             span = pointer.get("span") or {}
             if not span.get("text"):
                 continue

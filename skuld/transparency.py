@@ -6,7 +6,8 @@ The transparency status of the collection, per requirement of the frame that a d
     missing          otherwise, if it applies
     missing_if       otherwise: missing if its undecided conditions hold
 
-The annotations and the accessibility are D's (its report, schema 3); the applicability is decided from O's and D's
+The annotations are views of D's derived documents (ratatoskr.tilt.annotations; D's report, schema 4), and a document
+is accessible where D's report does not say otherwise; the applicability is decided from O's and D's
 claims together (frame.py). The status is one of the collection, not of a document: information may be layered.
 """
 
@@ -26,7 +27,7 @@ class Status:
     applicability: str
     status: str
     conditions: list[str] = field(default_factory=list)  # for missing_if: the undecided conditions
-    addressed_by: list[dict] = field(default_factory=list)  # pointers into D's report
+    addressed_by: list[dict] = field(default_factory=list)  # D's values, <channel>:<JSON Pointer>
     decided_by: dict[str, dict] = field(default_factory=dict)  # condition -> what decided it, by dimension
     silent: list[str] = field(default_factory=list)  # for missing and missing_if: the channels whose silence it reads
 
@@ -37,13 +38,13 @@ def statuses(frame: Frame, subjects: Subjects, decided: dict[str, Decision], d_s
         return []
     labelled: dict[str, list[dict]] = {}
     read = []
-    for n, document in enumerate(subjects.collection["documents"]):
+    for document in subjects.collection["documents"]:
         if document["status"] != "analysed" or not document.get("accessible"):
             continue
         read.append(document["channel"])
-        for m, a in enumerate(document.get("annotations", [])):
-            pointer = f"/channels/{n}/annotations/{m}"
-            labelled.setdefault(a["requirement"], []).append({"dimension": "D", "report": d_sha256, "claim": pointer})
+        for a in document.get("annotations", []):
+            value = f"{document['channel']}:{a['path']}"
+            labelled.setdefault(a["requirement"], []).append({"dimension": "D", "report": d_sha256, "claim": value})
     values = {cid: d.value for cid, d in decided.items()}
     out = []
     for r in frame.labelled():

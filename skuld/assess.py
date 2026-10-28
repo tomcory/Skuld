@@ -182,12 +182,14 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
     claims = hypotheses + tier["alternatives"] + tested
     case_features = sorted({c.feature.id for c in a.cases.cases}) if a.cases else []
     open_ = relations.open_conditions(built, every, statuses, a.frame, stated, tested, case_features)
+    open_ += relations.from_declaration(a.declaration)
 
     report = {
         "report": {
             "created": datetime.now(UTC).isoformat(timespec="seconds"),
             "skuld": skuld.__version__,
             "ratatoskr": ratatoskr.__version__,
+            "claims": {"attributes": {"polarity": "+"}},  # what every claim of E has, stated once
             "components": [
                 *built.components,
                 correspondence.COMPONENT,
@@ -321,7 +323,7 @@ def _part_items(
                 {**base, "kind": "claim", "claim": {"dimension": "D", "report": d_report, "claim": p["record"]}},
             )
             for n, p in enumerate(part["provenance"])
-            if p["record"].startswith("/claims/")
+            if p.get("origin") == "d_report"
         ]
     if part["kind"] == "practice":
         return [item(key, {**base, "kind": "claim", "claim": json.loads(pointer["record"])})]

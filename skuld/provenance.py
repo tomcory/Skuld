@@ -12,6 +12,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from ratatoskr import claims as claim_views
+
 from skuld.inputs import ASSESSMENT, Workspace, digest, frozen
 
 
@@ -87,19 +89,6 @@ def _resolve(pointer: dict, runs, observations, recorded) -> str | None:
 # -- the assessment's report ------------------------------------------------------------------------------------------
 
 
-def _pointer(document, pointer: str) -> bool:
-    node = document
-    for token in pointer.lstrip("/").split("/"):
-        token = token.replace("~1", "/").replace("~0", "~")
-        if isinstance(node, list) and token.isdigit() and int(token) < len(node):
-            node = node[int(token)]
-        elif isinstance(node, dict) and token in node:
-            node = node[token]
-        else:
-            return False
-    return True
-
-
 def _samples(root: Path) -> tuple[dict[str, list[dict]], list[str]]:
     """Every kept sample's context parts by its name, and the problems of their digests."""
     contexts, problems = {}, []
@@ -149,6 +138,8 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
         if digest(a.declaration.path) != a.declaration.sha256:
             problems.append("D's report does not verify")
         d_report = json.loads(a.declaration.path.read_text(encoding="utf-8"))
+    o_ids = {sha: {c["id"] for c in o["claims"]} for sha, o in o_reports.items()}
+    d_claims = claim_views.by_id(d_report) if d_report is not None else {}
     case_report = None
     for ref in report.get("cases", []):
         path = root / ref["path"]
@@ -181,10 +172,10 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
             o = o_reports.get(ref["report"])
             if o is None:
                 return "an O report the assessment does not read"
-            return None if ref["claim"] in {c["id"] for c in o["claims"]} else f"O claim {ref['claim']} is unknown"
+            return None if ref["claim"] in o_ids[ref["report"]] else f"O claim {ref['claim']} is unknown"
         if d_report is None or a.declaration.sha256 != ref["report"]:
             return "a D report the assessment does not read"
-        return None if _pointer(d_report, ref["claim"]) else f"D pointer {ref['claim']} does not resolve"
+        return None if ref["claim"] in d_claims else f"D claim {ref['claim']} is unknown"
 
     items = {e["id"]: e for e in report["evidence"]}
     claims = {c["id"] for c in report["claims"]}
@@ -244,7 +235,14 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
             derived = relations.outcome(r.get("aspect") or "data", read)[0]
             if read and derived != r["outcome"]:
                 problems.append(f"{r['id']}: its claims give {derived}, not {r['outcome']}")
+    findings = {f["id"] for f in (d_report or {}).get("findings", [])}
     for x in report["passed_on"]:
+        if "finding" in x:
+            if d_report is None or x["finding"]["report"] != a.declaration.sha256:
+                problems.append("passed on: a finding of a D report the assessment does not read")
+            elif x["finding"]["finding"] not in findings:
+                problems.append(f"passed on: D finding {x['finding']['finding']} is unknown")
+            continue
         if problem := claim_ref(x["claim"]):
             problems.append(f"passed on: {problem}")
         problems += [f"passed on: relation {i} is unknown" for i in x.get("relations", []) if i not in relation_ids]
@@ -255,8 +253,13 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
         if e["requirement"] not in requirements
     ]
     known = claims | concerns | relation_ids
+    d_open = {o["id"] for o in (d_report or {}).get("open", [])}
     for o in report["open"]:
-        problems += [f"{o['id']}: qualifies {q}, which is unknown" for q in o["qualifies"] if q not in known]
+        # a condition passed on from D qualifies D's claims, by their ids
+        names = known | set(d_claims) if o.get("from") == "D" else known
+        problems += [f"{o['id']}: qualifies {q}, which is unknown" for q in o["qualifies"] if q not in names]
+        if "of" in o and o["of"]["open"] not in d_open:
+            problems.append(f"{o['id']}: continues {o['of']['open']}, which D's report does not state")
     for g in report["gaps"]:
         if g.get("of") and g["of"] not in known | {"collection"} | requirements:
             problems.append(f"{g['id']}: of {g['of']}, which is unknown")

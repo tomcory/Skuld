@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+from ratatoskr import claims as claim_views
 from ratatoskr.vocabularies import Vocabulary
 
 #: Passages given per component at most
@@ -130,7 +131,7 @@ def coverage(corpus: Corpus, reports: list[dict], vocabulary: Vocabulary) -> dic
     """
     found: dict[str, dict] = {}
     for report in reports:
-        for claim in report.get("claims") or ():
+        for claim in claim_views.of_report(report):
             entity = (claim.get("recipient") or {}).get("entity")
             keys = [("entity", entity)] if entity and entity != "?" else []
             node = (claim.get("datum") or {}).get("node")

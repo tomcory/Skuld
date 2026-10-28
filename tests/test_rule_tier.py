@@ -33,6 +33,8 @@ def d_report(claims, channels=None, version="1.0", documents=None):
             "tilt": {},
         },
     ]
+    for n, c in enumerate(claims):
+        c.setdefault("id", f"{c['channels'][0]}:/dataDisclosed/{n}")
     return {
         "collection": {"package": "com.example.app", "store_version": version},
         "channels": channels,
@@ -42,7 +44,11 @@ def d_report(claims, channels=None, version="1.0", documents=None):
 
 def d_claim(ctype, data, polarity="+", channel="policy", value=None, kind="practice", **qualifiers):
     c = declared(ctype, polarity=polarity, value=value, kind=kind)
-    c.update(channel=channel, data=data, definitions="google-play-data-safety" if channel == "data_safety" else None)
+    c.update(
+        channels=[channel],
+        datum={"node": data},
+        definitions="google-play-data-safety" if channel == "data_safety" else None,
+    )
     c["qualifiers"].update(qualifiers)
     return c
 
@@ -135,16 +141,14 @@ def test_transparency_reads_ds_annotations_on_accessible_documents_only(tmp_path
             "document": "p",
             "status": "analysed",
             "accessible": True,
-            "tilt": {},
-            "annotations": [{"requirement": "controller_name", "path": "$.controller.name", "polarity": "+"}],
+            "tilt": {"controller": {"name": "Example GmbH", "_provenance": []}},
         },
         {
             "channel": "in_app",
             "document": "n",
             "status": "analysed",
             "accessible": False,
-            "tilt": {},
-            "annotations": [{"requirement": "right_to_restrict", "path": "$.rightToRestriction", "polarity": "+"}],
+            "tilt": {"rightToRestriction": {"available": True, "_provenance": []}},
         },
     ]
     a = workspace(tmp_path, [o_report([claim("c1", "personal-info.name", "adco")])], d_report([], channels))
@@ -154,7 +158,7 @@ def test_transparency_reads_ds_annotations_on_accessible_documents_only(tmp_path
     by = {s.requirement: s for s in transparency.statuses(f, built, decided, a.declaration.sha256)}
     assert (
         by["controller_name"].status == "addressed"
-        and by["controller_name"].addressed_by[0]["claim"] == "/channels/0/annotations/0"
+        and by["controller_name"].addressed_by[0]["claim"] == "policy:/controller/name"
     )
     assert by["right_to_restrict"].status == "missing"  # only an inaccessible document says it
     assert (by["dpo_contact"].status, by["dpo_contact"].conditions) == ("missing_if", ["dpo_designated"])
@@ -189,10 +193,10 @@ def test_every_claim_is_passed_on_with_its_relations_or_a_reason(tmp_path):
     built = assessment.build(a, REGISTRY)
     rel = correspondence.relate(built, a.declaration.load(), [], REGISTRY, DATA, TYPES)
     out = {e["claim"]["claim"]: e for e in relations.passed_on(built, a.observations, a.declaration, rel)}
-    assert set(out) == {"c1", "c2", "/claims/0", "/claims/1"}
-    assert out["c1"]["relations"] and out["/claims/0"]["relations"]
+    assert set(out) == {"c1", "c2", "policy:/dataDisclosed/0", "policy:/dataDisclosed/1"}
+    assert out["c1"]["relations"] and out["policy:/dataDisclosed/0"]["relations"]
     assert out["c2"]["not_related"] == "not_assessable" and "not a practice" in out["c2"]["reason"]
-    assert out["/claims/1"]["reason"] == "E's expectation stage has no claims"
+    assert out["policy:/dataDisclosed/1"]["reason"] == "E's expectation stage has no claims"
 
 
 FIXTURES = [

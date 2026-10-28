@@ -280,7 +280,12 @@ def observation_report(run_id: str, *, aaid: str, blocked: bool) -> dict:
             _claim("t2", "transmits", "data", {"endpoint": {"host": "t.tracker.example"}, "entity": "tracker"}, ["x1"])
         )
     return {
-        "report": {"created": "2026-10-21T12:00:00+00:00", "verdandi": "3.0.0", "components": []},
+        "report": {
+            "created": "2026-10-21T12:00:00+00:00",
+            "verdandi": "3.0.0",
+            "components": [],
+            "claims": {"attributes": {"application": PACKAGE, "status": "supported", "polarity": "+"}},
+        },
         "observations": [{"id": run_id, "package": PACKAGE, "version": "1.0", "files": []}],
         "vocabulary": {"id": "asgard-data", "version": "1.0.0"},
         "scopes": [],
@@ -364,11 +369,9 @@ def _claim(cid: str, type_: str, node: str, recipient: dict | None, evidence: li
     claim = {
         "id": cid,
         "type": type_,
-        "application": PACKAGE,
         "datum": {"node": node},
+        "channels": ["value_matching"],
         "qualifiers": {"occurrence": "observed", "actor": "?", "frequency": 1, "contexts": [{"time": "t"}]},
-        "polarity": "+",
-        "status": "supported",
         "observations": ["r"],
         "evidence": evidence,
         "uncertainty": LOW,
