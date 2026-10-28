@@ -28,5 +28,6 @@ the section is shown or hidden with C, and the browser remembers the choice. A d
 | holds | it does not | H |
 | unsure | cannot be decided from what is shown; left out of the scores | U |
 
-← → move between items, O jumps to the next item without a decision, / searches the document. A note is saved with the
+On the first visit a tour highlights each part of the page in turn and explains it (Back, Next, Skip; ← →, Enter, Esc);
+**Tour** in the header starts it again. ← → move between items, O jumps to the next item without a decision, / searches the document. A note is saved with the
 decision.

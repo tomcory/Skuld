@@ -22,20 +22,28 @@
         .screen { background: #f1f3f5; border-radius: .25rem; padding: .2rem .4rem; margin-bottom: .25rem; }
         kbd { font-size: .75rem; }
         [v-cloak] { display: none; }
+        /* the tour: a spotlight on one element, the rest of the page dimmed, and a card that explains it */
+        .tour-shade { position: fixed; inset: 0; z-index: 1050; }
+        .tour-spot { position: fixed; z-index: 1051; border-radius: .4rem; box-shadow: 0 0 0 9999px rgba(15, 23, 42, .55);
+                     outline: 2px solid #0d6efd; outline-offset: 2px; pointer-events: none; transition: all .2s ease; }
+        .tour-card { position: fixed; z-index: 1052; width: 340px; transition: top .2s ease, left .2s ease; }
     </style>
 </head>
 <body>
 <div id="app" class="container-fluid py-3" v-cloak>
     <nav class="d-flex flex-wrap align-items-center gap-3 mb-3">
         <h1 class="h5 m-0">Calibration review</h1>
-        <span class="text-secondary small" v-if="progress">{{ progress.calibration }} · {{ progress.reviewed }}/{{ progress.total }} decided
+        <span class="text-secondary small" v-if="progress" data-tour="progress">{{ progress.calibration }} · {{ progress.reviewed }}/{{ progress.total }} decided
             ({{ progress.counts.fails }} fails, {{ progress.counts.holds }} holds, {{ progress.counts.unsure }} unsure)</span>
         <div class="flex-grow-1" style="min-width: 160px">
             <div class="progress" style="height: .5rem" v-if="progress">
                 <div class="progress-bar" :style="{width: (100 * progress.reviewed / progress.total) + '%'}"></div>
             </div>
         </div>
-        <button class="btn btn-sm btn-outline-secondary" @click="help = !help"><i class="bi bi-question-circle"></i> Help</button>
+        <span class="d-flex gap-2" data-tour="help">
+            <button class="btn btn-sm btn-outline-secondary" @click="startTour()"><i class="bi bi-signpost-2"></i> Tour</button>
+            <button class="btn btn-sm btn-outline-secondary" @click="help = !help"><i class="bi bi-question-circle"></i> Help</button>
+        </span>
     </nav>
 
     <div class="alert alert-info small" v-if="help">
@@ -57,38 +65,43 @@
         <div class="col-lg-5">
             <div class="card shadow-sm mb-3">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
+                    <div class="d-flex justify-content-between align-items-start" data-tour="meta">
                         <span class="text-secondary small">item {{ item.index + 1 }} of {{ item.total }} · {{ item.id }} · {{ item.application }}</span>
                         <span v-if="item.review" class="badge" :class="decisionClass(item.review.decision)">{{ item.review.decision }}</span>
                     </div>
-                    <div class="mt-2"><b>{{ item.requirement.title }}</b></div>
-                    <div class="small text-secondary">{{ item.requirement.principle.replace('_', ' ') }} · {{ item.requirement.provisions.join(', ') }}</div>
-                    <div class="question my-3">{{ item.question }}</div>
+                    <div data-tour="requirement" class="mt-2">
+                        <div><b>{{ item.requirement.title }}</b></div>
+                        <div class="small text-secondary">{{ item.requirement.principle.replace('_', ' ') }} · {{ item.requirement.provisions.join(', ') }}</div>
+                    </div>
+                    <div class="question my-3" data-tour="question">{{ item.question }}</div>
 
+                    <div data-tour="subject">
                     <template v-if="item.subject.kind === 'collection'">
-                        <p class="mb-0">The subject is the app's collection of documents (right): the privacy policy, the
+                        <p class="mb-0" data-tour="subject-part">The subject is the app's collection of documents (right): the privacy policy, the
                             Data safety section and the store listing, as acquired.</p>
                     </template>
                     <template v-else-if="item.subject.kind === 'statement'">
+                        <div data-tour="subject-part">
                         <div class="small text-secondary mb-1">Declared purpose ({{ item.subject.channels.join(', ') }})</div>
                         <div class="fs-5">“{{ item.subject.text }}”</div>
                         <div class="border-start border-3 ps-3 mt-2 small" v-if="item.subject.sentence">{{ item.subject.sentence }}</div>
+                        </div>
                     </template>
                     <template v-else>
-                        <dl class="facts row mb-0">
+                        <dl class="facts row mb-0" data-tour="subject-part">
                             <dt class="col-sm-4">Practice</dt><dd class="col-sm-8">{{ item.subject.type }} <code>{{ item.subject.data }}</code></dd>
                             <dt class="col-sm-4">Recipient</dt><dd class="col-sm-8">{{ item.subject.recipient || 'none (on the device)' }}</dd>
                             <dt class="col-sm-4">Actor</dt><dd class="col-sm-8">{{ item.subject.actor === '?' ? 'unknown' : item.subject.actor }}</dd>
                             <dt class="col-sm-4">Episodes</dt><dd class="col-sm-8">{{ item.subject.episodes.join(', ') }}</dd>
                         </dl>
-                        <div v-if="item.purpose" class="border-start border-3 ps-3 mt-2">
+                        <div v-if="item.purpose" class="border-start border-3 ps-3 mt-2" data-tour="purpose">
                             <div class="small text-secondary mb-1">Purpose it serves</div>
                             <div><b>{{ item.purpose.action }}</b> {{ item.purpose.object }} · for {{ beneficiaries[item.purpose.beneficiary] || item.purpose.beneficiary }}
                                 <span v-if="item.purpose.context"> · in {{ item.purpose.context }}</span></div>
                             <div v-if="item.purpose.outcome"><span class="text-secondary">Outcome:</span> {{ item.purpose.outcome }}</div>
                             <div class="small text-secondary"><code>{{ item.purpose.node }}</code></div>
                         </div>
-                        <div v-if="item.context" class="mt-3">
+                        <div v-if="item.context" class="mt-3" data-tour="context">
                             <button class="btn btn-sm btn-outline-secondary" @click="toggleContext()">
                                 <i class="bi" :class="contextShown ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
                                 What the expectation stage read: {{ item.context.screens.length }} screens, {{ item.context.passages.length }} passages <kbd>C</kbd>
@@ -101,16 +114,17 @@
                             </div>
                         </div>
                     </template>
+                    </div>
 
                     <div class="decide">
-                    <textarea class="form-control form-control-sm" rows="2" placeholder="Note (optional; say why if unsure)" v-model="note" @keydown.stop></textarea>
-                    <div class="d-flex flex-wrap gap-2 mt-3">
+                    <textarea data-tour="note" class="form-control form-control-sm" rows="2" placeholder="Note (optional; say why if unsure)" v-model="note" @keydown.stop></textarea>
+                    <div class="d-flex flex-wrap gap-2 mt-3" data-tour="decisions">
                         <button class="btn btn-danger" @click="save('fails')"><i class="bi bi-exclamation-triangle"></i> Fails <kbd>F</kbd></button>
                         <button class="btn btn-success" @click="save('holds')"><i class="bi bi-check-lg"></i> Holds <kbd>H</kbd></button>
                         <button class="btn btn-outline-secondary" @click="save('unsure')"><i class="bi bi-question"></i> Unsure <kbd>U</kbd></button>
                         <button class="btn btn-outline-secondary ms-auto" v-if="item.review" @click="reset()" title="Remove the decision"><i class="bi bi-arrow-counterclockwise"></i></button>
                     </div>
-                    <div class="d-flex gap-2 mt-3">
+                    <div class="d-flex gap-2 mt-3" data-tour="navigation">
                         <button class="btn btn-sm btn-outline-dark" @click="go(item.index - 1)" :disabled="item.index === 0"><i class="bi bi-arrow-left"></i></button>
                         <button class="btn btn-sm btn-outline-dark" @click="go(item.index + 1)" :disabled="item.index + 1 >= item.total"><i class="bi bi-arrow-right"></i></button>
                         <button class="btn btn-sm btn-outline-dark" @click="nextOpen()">Next open <kbd>O</kbd></button>
@@ -124,7 +138,7 @@
                 <div class="card-body">
                     <div v-if="!item.documents.length" class="text-secondary">No documents were acquired for this application.</div>
                     <template v-else>
-                        <ul class="nav nav-tabs mb-2">
+                        <ul class="nav nav-tabs mb-2" data-tour="documents">
                             <li class="nav-item" v-for="d in item.documents" :key="d.file">
                                 <a class="nav-link" :class="{active: d.file === shown}" href="#" @click.prevent="show(d.file)">
                                     {{ titles[d.channel] || d.channel }}
@@ -132,7 +146,7 @@
                                 </a>
                             </li>
                         </ul>
-                        <input ref="search" class="form-control form-control-sm mb-2" placeholder="Search the document (/)" v-model="query" @keydown.esc="$event.target.blur()">
+                        <input ref="search" data-tour="search" class="form-control form-control-sm mb-2" placeholder="Search the document (/)" v-model="query" @keydown.esc="$event.target.blur()">
                         <div class="document" ref="document">
                             <template v-if="kind === 'passages'">
                                 <div v-for="(p, i) in document.passages" class="passage" :class="{headline: p.type === 'headline'}">
@@ -162,6 +176,25 @@
         </div>
     </div>
     <div v-else-if="progress" class="text-secondary">Loading…</div>
+
+    <template v-if="tour">
+        <div class="tour-shade" @click="endTour()"></div>
+        <div class="tour-spot" :style="tour.spot"></div>
+        <div class="tour-card card shadow" :style="tour.card" ref="tourCard">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                    <b>{{ tour.step.title }}</b>
+                    <span class="text-secondary small">{{ tour.index + 1 }} / {{ tour.steps.length }}</span>
+                </div>
+                <div class="small" v-html="tour.step.text"></div>
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn btn-sm btn-link text-secondary px-0" @click="endTour()">Skip</button>
+                    <button class="btn btn-sm btn-outline-secondary ms-auto" @click="tourStep(-1)" :disabled="tour.index === 0">Back</button>
+                    <button class="btn btn-sm btn-primary" @click="tourStep(1)">{{ tour.index + 1 === tour.steps.length ? 'Done' : 'Next' }}</button>
+                </div>
+            </div>
+        </div>
+    </template>
 </div>
 <script type="module">
 import {createApp, nextTick} from '/vendor/vue.js';
@@ -170,10 +203,31 @@ const remembered = (name, fallback) => { try { const v = localStorage.getItem(na
 const remember = (name, value) => { try { localStorage.setItem(name, String(value)); } catch (e) { /* not kept */ } };
 const beneficiaries = {user: 'the user', provider: 'the provider', other: 'another party'};
 const titles = {policy: 'Privacy policy', data_safety: 'Data safety', listing: 'Store listing', in_app: 'In-app notices'};
+// the tour: each step points at an element (data-tour) and explains it; a step whose element is not on the page is left out
+const SUBJECT = {
+    collection: 'The subject is the app\'s whole <b>collection of documents</b>. Look for the information the requirement asks for in all of them, on the right.',
+    statement: 'The subject is a <b>purpose the provider declares</b>, in their words, with the sentence it comes from. It is also highlighted in the policy on the right.',
+    practice: 'The subject is a <b>practice observed in runs</b> of the app: which data it reads or sends, to whom, which component does it, and in which episodes of the exploration it occurred.',
+};
+const TOUR = [
+    {target: 'progress', title: 'Your progress', text: 'How many items of this sample you have decided, and how. The sample was drawn and fixed before the review; each decision is saved as you make it.'},
+    {target: 'meta', title: 'The item', text: 'Its number in the sample, its id, and the application it comes from. A badge appears here once you have decided it.'},
+    {target: 'requirement', title: 'The requirement', text: 'The requirement of the normative frame that is checked: its title, the principle it belongs to, and the provisions it rests on.'},
+    {target: 'question', title: 'The question', text: 'What to decide. Everything else on the page serves this question. Answer it against the frame, from what is shown. What the assessment concluded is <b>not</b> shown, so that it does not lead your answer.'},
+    {target: 'subject-part', title: 'The subject', text: item => SUBJECT[item.subject.kind]},
+    {target: 'purpose', title: 'The purpose', text: 'The one purpose this item asks about, as the expectation stage inferred it <b>without</b> the provider\'s documents: what is done, for whom, in what context, and to what end.'},
+    {target: 'context', title: 'What the expectation stage read', text: 'The screens of the episodes and the documentation of the components and data the stage was given when it inferred the purpose. Not its answer. Show or hide it here or with <kbd>C</kbd>; the choice is remembered.'},
+    {target: 'documents', title: 'The provider\'s documents', text: 'The privacy policy, the Data safety section and the store listing, as acquired. A yellow badge marks a document the declaration analysis could not analyse; it is shown anyway, since you judge what the provider gives.'},
+    {target: 'search', title: 'Search', text: 'Search the open document (or press <kbd>/</kbd>); matches are highlighted and the first is scrolled into view. For a declared purpose, the statement is searched for you.'},
+    {target: 'note', title: 'A note', text: 'Saved with your decision. Say why when you are unsure, or when a case is borderline; notes help to read the scores.'},
+    {target: 'decisions', title: 'Your decision', text: '<b>Fails</b> (<kbd>F</kbd>): the subject fails the requirement as the question asks, a concern. <b>Holds</b> (<kbd>H</kbd>): it does not. <b>Unsure</b> (<kbd>U</kbd>): you cannot tell from what is shown; left out of the scores. The next undecided item opens after each decision; the arrow on the right removes one.'},
+    {target: 'navigation', title: 'Moving around', text: 'Previous and next item (<kbd>←</kbd> <kbd>→</kbd>), or the next undecided one (<kbd>O</kbd>). You can stop at any time: the review resumes where you left it.'},
+    {target: 'help', title: 'Help and this tour', text: 'The help lists the decisions and the shortcuts. <b>Tour</b> starts this tour again.'},
+];
 const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 createApp({
     data: () => ({progress: null, item: null, note: '', help: false, shown: null, document: {}, query: '', titles, beneficiaries,
-                  contextShown: remembered('contextShown', true)}),
+                  contextShown: remembered('contextShown', true), tour: null}),
     computed: {
         kind() {
             if (this.document.passages) return 'passages';
@@ -235,8 +289,54 @@ createApp({
             this.contextShown = !this.contextShown;
             remember('contextShown', this.contextShown);
         },
+        startTour() {
+            this.help = false;
+            const steps = TOUR.filter(s => document.querySelector(`[data-tour="${s.target}"]`));
+            if (!steps.length) return;
+            this.tour = {steps, index: -1, step: steps[0], spot: {}, card: {}};
+            this.tourStep(1);
+        },
+        tourStep(delta) {
+            const index = this.tour.index + delta;
+            if (index >= this.tour.steps.length) return this.endTour();
+            if (index < 0) return;
+            const step = this.tour.steps[index];
+            this.tour.index = index;
+            this.tour.step = {...step, text: typeof step.text === 'function' ? step.text(this.item) : step.text};
+            const el = document.querySelector(`[data-tour="${step.target}"]`);
+            // the element about a third down the window, or as far as the page goes
+            const r = el.getBoundingClientRect();
+            window.scrollTo(0, Math.max(0, window.scrollY + r.top - Math.max(80, (window.innerHeight - r.height) / 3)));
+            nextTick(() => requestAnimationFrame(() => this.placeTour()));
+        },
+        placeTour() {
+            if (!this.tour) return;
+            const el = document.querySelector(`[data-tour="${this.tour.step.target}"]`);
+            if (!el) return;
+            const r = el.getBoundingClientRect(), pad = 6, width = 340, gap = 12;
+            this.tour.spot = {top: `${r.top - pad}px`, left: `${r.left - pad}px`, width: `${r.width + 2 * pad}px`, height: `${r.height + 2 * pad}px`};
+            const height = (this.$refs.tourCard && this.$refs.tourCard.offsetHeight) || 180;
+            // below the element where it fits, else above, else beside it; always inside the window
+            let top = r.bottom + pad + gap;
+            if (top + height > window.innerHeight) top = r.top - pad - gap - height;
+            if (top < 8) top = Math.min(Math.max(8, r.top), window.innerHeight - height - 8);
+            let left = Math.min(Math.max(8, r.left), window.innerWidth - width - 8);
+            if (top < r.bottom && top + height > r.top && r.right + gap + width < window.innerWidth) left = r.right + gap;
+            this.tour.card = {top: `${top}px`, left: `${left}px`};
+        },
+        endTour() {
+            this.tour = null;
+            remember('tourSeen', true);
+        },
         decisionClass: d => ({fails: 'text-bg-danger', holds: 'text-bg-success', unsure: 'text-bg-secondary'})[d],
         key(event) {
+            if (this.tour) {
+                const steps = {ArrowRight: 1, Enter: 1, ArrowLeft: -1};
+                if (event.key === 'Escape') this.endTour();
+                else if (event.key in steps) this.tourStep(steps[event.key]);
+                event.preventDefault();
+                return;
+            }
             if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
             const actions = {
                 c: () => this.item.context && this.toggleContext(),
@@ -255,6 +355,10 @@ createApp({
         const {index} = await this.api('/resume');
         await this.go(asked ? asked - 1 : index || 0);
         window.addEventListener('keydown', this.key);
+        window.addEventListener('resize', () => this.placeTour());
+        window.addEventListener('scroll', () => this.placeTour(), true);
+        // the first visit starts with the tour
+        if (!remembered('tourSeen', false)) nextTick(() => this.startTour());
     },
 }).mount('#app');
 </script>
