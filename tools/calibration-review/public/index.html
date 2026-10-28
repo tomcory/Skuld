@@ -15,6 +15,8 @@
         .document { max-height: 78vh; overflow-y: auto; }
         .passage { margin-bottom: .6rem; }
         .heading-line { color: #6c757d; font-size: .8rem; }
+        /* the decision stays in view however long the subject and the stage's context are */
+        .decide { position: sticky; bottom: 0; background: #fff; margin-top: 1rem; padding: .75rem 0 .25rem; border-top: 1px solid #dee2e6; }
         .headline { font-weight: 600; margin-top: .8rem; }
         .context { max-height: 40vh; overflow-y: auto; }
         .screen { background: #f1f3f5; border-radius: .25rem; padding: .2rem .4rem; margin-bottom: .25rem; }
@@ -100,7 +102,8 @@
                         </div>
                     </template>
 
-                    <textarea class="form-control form-control-sm mt-3" rows="2" placeholder="Note (optional; say why if unsure)" v-model="note" @keydown.stop></textarea>
+                    <div class="decide">
+                    <textarea class="form-control form-control-sm" rows="2" placeholder="Note (optional; say why if unsure)" v-model="note" @keydown.stop></textarea>
                     <div class="d-flex flex-wrap gap-2 mt-3">
                         <button class="btn btn-danger" @click="save('fails')"><i class="bi bi-exclamation-triangle"></i> Fails <kbd>F</kbd></button>
                         <button class="btn btn-success" @click="save('holds')"><i class="bi bi-check-lg"></i> Holds <kbd>H</kbd></button>
@@ -111,6 +114,7 @@
                         <button class="btn btn-sm btn-outline-dark" @click="go(item.index - 1)" :disabled="item.index === 0"><i class="bi bi-arrow-left"></i></button>
                         <button class="btn btn-sm btn-outline-dark" @click="go(item.index + 1)" :disabled="item.index + 1 >= item.total"><i class="bi bi-arrow-right"></i></button>
                         <button class="btn btn-sm btn-outline-dark" @click="nextOpen()">Next open <kbd>O</kbd></button>
+                    </div>
                     </div>
                 </div>
             </div>
@@ -131,8 +135,8 @@
                         <input ref="search" class="form-control form-control-sm mb-2" placeholder="Search the document (/)" v-model="query" @keydown.esc="$event.target.blur()">
                         <div class="document" ref="document">
                             <template v-if="kind === 'passages'">
-                                <div v-for="p in document.passages" class="passage" :class="{headline: p.type === 'headline'}">
-                                    <div class="heading-line" v-if="p.type !== 'headline' && p.context && p.context.length">{{ p.context.map(c => c.text).join(' › ') }}</div>
+                                <div v-for="(p, i) in document.passages" class="passage" :class="{headline: p.type === 'headline'}">
+                                    <div class="heading-line" v-if="p.type !== 'headline' && crumb(p) && crumb(p) !== crumb(document.passages[i - 1])">{{ crumb(p) }}</div>
                                     <div v-html="mark(p.passage)"></div>
                                 </div>
                             </template>
@@ -202,6 +206,8 @@ createApp({
                 else if (this.$refs.document) this.$refs.document.scrollTop = 0;
             });
         },
+        // a passage's headings, shown only where they change from the passage before
+        crumb: p => (p && p.context ? p.context.map(c => c.text).join(' › ') : ''),
         mark(text) {
             const html = escape(text);
             const q = this.query.trim();
