@@ -47,5 +47,9 @@
     "recall_established": [
       "data_safety"
     ]
+  },
+  "calibration": {
+    "per_stratum": 10,
+    "seed": 1
   }
 }

@@ -12,6 +12,7 @@ skuld judge <workspace>: the assessment stage's reasoning tier: specificity, com
 skuld describe <workspace> --package … --version … --observation …: write the assessment workspace's assessment.yaml.
 skuld assess <workspace>: the assessment of the version from what is kept (subjects, both stages), no model asked.
 skuld select <workspace>: the choice of experiments from the assessment, each choice and refusal with its reason.
+skuld calibrate draw <folder> <workspaces…> | score <folder> | check <folder> <workspaces…>: E's calibration (EV-E9).
 """
 
 import argparse
@@ -131,6 +132,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     check.add_argument("workspace")
     check.add_argument("--registry", type=Path, help="the recipient registry (default: Ratatoskr's built one)")
+
+    calibrate_ = commands.add_parser(
+        "calibrate", help="draw a calibration sample from assessments, score the expert's review, or check it holds"
+    )
+    calibrate_.add_argument("action", choices=["draw", "score", "check"])
+    calibrate_.add_argument("folder", type=Path, help="the calibration's folder (draw: a new one)")
+    calibrate_.add_argument("workspaces", nargs="*", type=Path, help="draw, check: assessment workspaces")
+    calibrate_.add_argument("--per-stratum", type=int, help="units drawn per stratum (default: config.json's)")
+    calibrate_.add_argument("--seed", type=int, help="the draw's seed (default: config.json's)")
+    calibrate_.add_argument("--registry", type=Path, help="the recipient registry (default: Ratatoskr's built one)")
 
     analyse_ = commands.add_parser("analyse", help="write report.json and report.md into the workspace")
     analyse_.add_argument("workspace")
@@ -343,6 +354,36 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"report.json: {len(problems)} problem(s); {len(report['evidence'])} items, {pointers} pointers")
                 found += len(problems)
             return 1 if found else 0
+        elif args.command == "calibrate":
+            from skuld import calibrate
+
+            if args.action == "draw":
+                if not args.workspaces:
+                    raise calibrate.CalibrationError("draw needs the assessment workspaces")
+                manifest = calibrate.draw(args.folder, args.workspaces, args.registry, args.per_stratum, args.seed)
+                for st in manifest["strata"]:
+                    name = f"{st['principle']} {st['tier']} {st['step']} {st['outcome']}"
+                    print(f"{name:<75} {st['drawn']:>3} of {st['population']:>4}")
+                print(f"{sum(st['drawn'] for st in manifest['strata'])} items -> {args.folder}")
+            elif args.action == "score":
+                scores = calibrate.score(args.folder)
+                for st in scores["strata"]:
+                    name = f"{st['principle']} {st['tier']} {st['step']} {st['outcome']}"
+                    rate = (
+                        "–"
+                        if st["rate"] is None
+                        else f"{st['rate']:.2f} [{st['interval'][0]:.2f}, {st['interval'][1]:.2f}]"
+                    )
+                    print(f"{name:<75} {st['measure']:<13} {rate:<20} {st['fails'] + st['holds']:>3} reviewed")
+                print(
+                    f"{scores['reviewed']} of {scores['items']} reviewed, {scores['unsure']} unsure -> {args.folder / calibrate.SCORES}"
+                )
+            else:
+                problems = calibrate.check(args.folder, args.workspaces)
+                for problem in problems:
+                    print(problem)
+                print(f"{len(problems)} component(s) the calibration does not hold for")
+                return 1 if problems else 0
         elif args.command == "change":
             inputs.change(args.workspace, args.input, args.reason)
             print(f"recorded the change of {args.input}")

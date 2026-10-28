@@ -16,6 +16,8 @@ concern carries the uncertainty of what it rests on (technical, semantic, normat
 tested: low by rule, moderate for a judgement of an open term such as what a purpose needs); the gaps and open
 conditions name what the Investigator could acquire or test next; `skuld check` verifies every digest and pointer of
 the report and that it rebuilds identically from the same inputs and kept samples. `skuld assess` asks no model.
+`skuld calibrate` draws a stratified sample of assessments' results for an expert's blind review and scores it (EV-E9,
+below).
 
 The experimental channel of E report 0.3 is kept as the assessment's experiments: a workspace of cases and the runs
 Loki made for them (`skuld run`, with a qualifying replay first), each intervention verified with Verðandi's report of
@@ -197,7 +199,26 @@ skuld check <workspace>                          # digests, pointers and replay 
 # propose, expect, judge, assess and check take --registry <file>; give all the same one, or none (Ratatoskr's built one)
 skuld corpus check                               # passages without source, date or a person's check
 skuld corpus coverage <reports or folders>       # recipients and data of O's reports no passage covers
+skuld calibrate draw <folder> <workspace>…       # draw and fix a calibration sample (--per-stratum, --seed)
+skuld calibrate score <folder>                   # error rates from the expert's decisions
+skuld calibrate check <folder> <workspace>…      # whether the calibration holds for these assessments' components
 ```
+
+**Calibration (EV-E9).** The reasoning tier's concerns, and the transparency concerns that read D's silence, have error
+rates only against an expert. `skuld calibrate draw` takes assessments (their `assessment.json`), forms their units (a
+requirement for one subject: the collection per transparency requirement, a declared purpose statement, a practice and
+one of its supported purposes per principle), each with E's outcome (its concern's status, `silent` where E assessed
+it and stated none, `not_applicable`), stratifies them by principle, tier, step and outcome, and draws up to
+`calibration.per_stratum` of each (config.json, 10) with a recorded seed into a new folder: `sample.json` (what the
+expert sees), `key.json` (E's outcomes), `documents/` (the collections, from Sága's), `manifest.json` (the assessments
+by digest, the components the calibration holds for, the strata). The review is blind: the tool in
+`tools/calibration-review/` (Node, after Urda's label review) serves the sample but never the key, and the expert
+decides per item whether the subject fails the requirement (`fails`, `holds`, `unsure`). `skuld calibrate score` gives
+per stratum the precision of the concerns, the misses among the silences and how many concerns E could not establish
+are concerns, with Wilson intervals, and per principle and step the rates weighted by the strata's populations.
+`skuld calibrate check` says whether the calibration holds for other assessments: a changed model, prompt, method,
+frame or D configuration needs a new one (EV-E9; E's report §9). Samples live in a folder of the pilot
+(`pilots/<pilot>/calibration/<id>/`); for the fixtures, `calibration/` (ignored by Git).
 
 `skuld propose` is the generator. Every episode of Loki's exploration (pseudo-saturation regime) that Loki's verifier
 judged carried out yields up to three features (a first run's onboarding and the main feature it ends at, say), each

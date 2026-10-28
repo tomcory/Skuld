@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Calibration review</title>
+    <link rel="stylesheet" href="/vendor/bootstrap.css">
+    <link rel="stylesheet" href="/vendor/icons/bootstrap-icons.min.css">
+    <style>
+        body { background: #f6f7f9; }
+        mark { background: #ffe58a; padding: 0 .1em; }
+        .question { font-size: 1.15rem; font-weight: 600; }
+        .facts dt { font-weight: 500; color: #6c757d; font-size: .85rem; }
+        .facts dd { margin-bottom: .4rem; }
+        .document { max-height: 78vh; overflow-y: auto; }
+        .passage { margin-bottom: .6rem; }
+        .heading-line { color: #6c757d; font-size: .8rem; }
+        .headline { font-weight: 600; margin-top: .8rem; }
+        kbd { font-size: .75rem; }
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body>
+<div id="app" class="container-fluid py-3" v-cloak>
+    <nav class="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <h1 class="h5 m-0">Calibration review</h1>
+        <span class="text-secondary small" v-if="progress">{{ progress.calibration }} · {{ progress.reviewed }}/{{ progress.total }} decided
+            ({{ progress.counts.fails }} fails, {{ progress.counts.holds }} holds, {{ progress.counts.unsure }} unsure)</span>
+        <div class="flex-grow-1" style="min-width: 160px">
+            <div class="progress" style="height: .5rem" v-if="progress">
+                <div class="progress-bar" :style="{width: (100 * progress.reviewed / progress.total) + '%'}"></div>
+            </div>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" @click="help = !help"><i class="bi bi-question-circle"></i> Help</button>
+    </nav>
+
+    <div class="alert alert-info small" v-if="help">
+        <p class="mb-1"><b>What to decide.</b> Each item is one requirement of the normative frame for one subject of an
+            application: its collection of documents, a purpose statement it declares, or a practice observed in a run with
+            one purpose it serves. Answer the question against the frame, from the subject and the provider's documents.
+            What the assessment concluded is not shown, so that it does not lead the answer.</p>
+        <ul class="mb-1">
+            <li><b>Fails</b> (<kbd>F</kbd>): the subject fails the requirement as the question asks; a concern.</li>
+            <li><b>Holds</b> (<kbd>H</kbd>): it does not; no concern.</li>
+            <li><b>Unsure</b> (<kbd>U</kbd>): you cannot tell from what is shown; left out of the scores. Say why in the note.</li>
+            <li><kbd>←</kbd> <kbd>→</kbd> previous and next item, <kbd>O</kbd> next open item, <kbd>/</kbd> search the
+                document. Notes are saved with the decision.</li>
+        </ul>
+    </div>
+
+    <div class="row g-3" v-if="item">
+        <div class="col-lg-5">
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="text-secondary small">item {{ item.index + 1 }} of {{ item.total }} · {{ item.id }} · {{ item.application }}</span>
+                        <span v-if="item.review" class="badge" :class="decisionClass(item.review.decision)">{{ item.review.decision }}</span>
+                    </div>
+                    <div class="mt-2"><b>{{ item.requirement.title }}</b></div>
+                    <div class="small text-secondary">{{ item.requirement.principle.replace('_', ' ') }} · {{ item.requirement.provisions.join(', ') }}</div>
+                    <div class="question my-3">{{ item.question }}</div>
+
+                    <template v-if="item.subject.kind === 'collection'">
+                        <p class="mb-0">The subject is the app's collection of documents (right): the privacy policy, the
+                            Data safety section and the store listing, as acquired.</p>
+                    </template>
+                    <template v-else-if="item.subject.kind === 'statement'">
+                        <div class="small text-secondary mb-1">Declared purpose ({{ item.subject.channels.join(', ') }})</div>
+                        <div class="fs-5">“{{ item.subject.text }}”</div>
+                        <div class="border-start border-3 ps-3 mt-2 small" v-if="item.subject.sentence">{{ item.subject.sentence }}</div>
+                    </template>
+                    <template v-else>
+                        <dl class="facts row mb-0">
+                            <dt class="col-sm-4">Practice</dt><dd class="col-sm-8">{{ item.subject.type }} <code>{{ item.subject.data }}</code></dd>
+                            <dt class="col-sm-4">Recipient</dt><dd class="col-sm-8">{{ item.subject.recipient || 'none (on the device)' }}</dd>
+                            <dt class="col-sm-4">Actor</dt><dd class="col-sm-8">{{ item.subject.actor === '?' ? 'unknown' : item.subject.actor }}</dd>
+                            <dt class="col-sm-4">Episodes</dt><dd class="col-sm-8">{{ item.subject.episodes.join(', ') }}</dd>
+                        </dl>
+                        <div v-if="item.purpose" class="border-start border-3 ps-3 mt-2">
+                            <div class="small text-secondary mb-1">Purpose it serves</div>
+                            <div><b>{{ item.purpose.action }}</b> {{ item.purpose.object }} · for {{ beneficiaries[item.purpose.beneficiary] || item.purpose.beneficiary }}
+                                <span v-if="item.purpose.context"> · in {{ item.purpose.context }}</span></div>
+                            <div v-if="item.purpose.outcome"><span class="text-secondary">Outcome:</span> {{ item.purpose.outcome }}</div>
+                            <div class="small text-secondary"><code>{{ item.purpose.node }}</code></div>
+                        </div>
+                    </template>
+
+                    <textarea class="form-control form-control-sm mt-3" rows="2" placeholder="Note (optional; say why if unsure)" v-model="note" @keydown.stop></textarea>
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        <button class="btn btn-danger" @click="save('fails')"><i class="bi bi-exclamation-triangle"></i> Fails <kbd>F</kbd></button>
+                        <button class="btn btn-success" @click="save('holds')"><i class="bi bi-check-lg"></i> Holds <kbd>H</kbd></button>
+                        <button class="btn btn-outline-secondary" @click="save('unsure')"><i class="bi bi-question"></i> Unsure <kbd>U</kbd></button>
+                        <button class="btn btn-outline-secondary ms-auto" v-if="item.review" @click="reset()" title="Remove the decision"><i class="bi bi-arrow-counterclockwise"></i></button>
+                    </div>
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="btn btn-sm btn-outline-dark" @click="go(item.index - 1)" :disabled="item.index === 0"><i class="bi bi-arrow-left"></i></button>
+                        <button class="btn btn-sm btn-outline-dark" @click="go(item.index + 1)" :disabled="item.index + 1 >= item.total"><i class="bi bi-arrow-right"></i></button>
+                        <button class="btn btn-sm btn-outline-dark" @click="nextOpen()">Next open <kbd>O</kbd></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div v-if="!item.documents.length" class="text-secondary">No documents were acquired for this application.</div>
+                    <template v-else>
+                        <ul class="nav nav-tabs mb-2">
+                            <li class="nav-item" v-for="d in item.documents" :key="d.file">
+                                <a class="nav-link" :class="{active: d.file === shown}" href="#" @click.prevent="show(d.file)">
+                                    {{ titles[d.channel] || d.channel }}
+                                    <span v-if="d.status !== 'analysed'" class="badge text-bg-warning ms-1" :title="'D: ' + d.status">{{ d.status.replace('_', ' ') }}</span>
+                                </a>
+                            </li>
+                        </ul>
+                        <input ref="search" class="form-control form-control-sm mb-2" placeholder="Search the document (/)" v-model="query" @keydown.esc="$event.target.blur()">
+                        <div class="document" ref="document">
+                            <template v-if="kind === 'passages'">
+                                <div v-for="p in document.passages" class="passage" :class="{headline: p.type === 'headline'}">
+                                    <div class="heading-line" v-if="p.type !== 'headline' && p.context && p.context.length">{{ p.context.map(c => c.text).join(' › ') }}</div>
+                                    <div v-html="mark(p.passage)"></div>
+                                </div>
+                            </template>
+                            <template v-else-if="kind === 'data_safety'">
+                                <p v-if="!document.provided">The developer provides no Data safety section.</p>
+                                <template v-for="part in ['collected', 'shared']">
+                                    <h2 class="h6 mt-2">Data {{ part }}</h2>
+                                    <p v-if="document[part] && document[part].none" class="small">No data {{ part }}.</p>
+                                    <table v-else-if="document[part]" class="table table-sm small">
+                                        <thead><tr><th>Category</th><th>Type</th><th>Purposes</th><th>Optional</th></tr></thead>
+                                        <tbody><tr v-for="x in document[part].items"><td>{{ x.category }}</td><td v-html="mark(x.type)"></td><td>{{ (x.purposes || []).join(', ') }}</td><td>{{ x.optional ? 'yes' : '' }}</td></tr></tbody>
+                                    </table>
+                                </template>
+                                <h2 class="h6 mt-2">Security</h2>
+                                <pre class="small">{{ JSON.stringify(document.security, null, 1) }}</pre>
+                                <div v-if="document.notes" class="small text-secondary">{{ document.notes }}</div>
+                            </template>
+                            <pre v-else class="small" v-html="mark(JSON.stringify(document, null, 1))"></pre>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div v-else-if="progress" class="text-secondary">Loading…</div>
+</div>
+<script type="module">
+import {createApp, nextTick} from '/vendor/vue.js';
+const beneficiaries = {user: 'the user', provider: 'the provider', other: 'another party'};
+const titles = {policy: 'Privacy policy', data_safety: 'Data safety', listing: 'Store listing', in_app: 'In-app notices'};
+const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
+createApp({
+    data: () => ({progress: null, item: null, note: '', help: false, shown: null, document: {}, query: '', titles, beneficiaries}),
+    computed: {
+        kind() {
+            if (this.document.passages) return 'passages';
+            if ('collected' in this.document || 'provided' in this.document) return 'data_safety';
+            return 'other';
+        },
+    },
+    methods: {
+        async api(path, options) {
+            const response = await fetch('/api' + path, options);
+            if (!response.ok) throw new Error(await response.text());
+            return response.json();
+        },
+        async go(index) {
+            if (!this.progress || index < 0 || index >= this.progress.total) return;
+            this.item = await this.api(`/items/${index}`);
+            this.note = this.item.review ? this.item.review.note : '';
+            // a statement is searched for in the policy; otherwise the search is the reviewer's
+            this.query = this.item.subject.kind === 'statement' ? this.item.subject.text : '';
+            const policy = this.item.documents.find(d => d.channel === 'policy') || this.item.documents[0];
+            if (policy) await this.show(policy.file);
+        },
+        async show(file) {
+            this.shown = file;
+            const response = await fetch('/' + file);
+            this.document = response.ok ? await response.json() : {};
+            nextTick(() => {
+                const first = this.$refs.document && this.$refs.document.querySelector('mark');
+                if (first) first.scrollIntoView({block: 'center'});
+                else if (this.$refs.document) this.$refs.document.scrollTop = 0;
+            });
+        },
+        mark(text) {
+            const html = escape(text);
+            const q = this.query.trim();
+            if (q.length < 3) return html;
+            const pattern = new RegExp(escape(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+            return html.replace(pattern, m => `<mark>${m}</mark>`);
+        },
+        async save(decision) {
+            this.progress = await this.api(`/reviews/${this.item.id}`, {
+                method: 'PUT', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({decision, note: this.note}),
+            });
+            await this.nextOpen();
+        },
+        async reset() {
+            this.progress = await this.api(`/reviews/${this.item.id}`, {method: 'DELETE'});
+            await this.go(this.item.index);
+        },
+        async nextOpen() {
+            const {index} = await this.api(`/next-open?after=${this.item ? this.item.index : -1}`);
+            if (index === null) { this.item && (this.item = await this.api(`/items/${this.item.index}`)); alert('Every item has a decision.'); return; }
+            await this.go(index);
+        },
+        decisionClass: d => ({fails: 'text-bg-danger', holds: 'text-bg-success', unsure: 'text-bg-secondary'})[d],
+        key(event) {
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+            const actions = {
+                f: () => this.save('fails'), h: () => this.save('holds'), u: () => this.save('unsure'), o: () => this.nextOpen(),
+                ArrowLeft: () => this.go(this.item.index - 1), ArrowRight: () => this.go(this.item.index + 1),
+                '/': () => this.$refs.search && this.$refs.search.focus(),
+            };
+            const action = actions[event.key];
+            if (action && this.item) { event.preventDefault(); action(); }
+        },
+    },
+    async mounted() {
+        this.progress = await this.api('/progress');
+        // ?item=<n> opens the n-th item; otherwise the review resumes where it was left
+        const asked = Number(new URLSearchParams(location.search).get('item'));
+        const {index} = await this.api('/resume');
+        await this.go(asked ? asked - 1 : index || 0);
+        window.addEventListener('keydown', this.key);
+    },
+}).mount('#app');
+</script>
+</body>
+</html>

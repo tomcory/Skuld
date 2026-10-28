@@ -24,3 +24,7 @@ cases/
 
 # the catalogue of feature families: local until it is deployed
 catalogue/
+
+# calibration samples and the expert's reviews: local data, as the workspaces
+calibration/
+tools/calibration-review/node_modules/
