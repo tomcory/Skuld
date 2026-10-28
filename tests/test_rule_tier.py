@@ -134,20 +134,18 @@ def test_o_and_d_of_different_versions_are_not_comparable(tmp_path):
     assert {r.outcome for r in rel} == {"not_comparable"}
 
 
-def test_transparency_reads_ds_annotations_on_accessible_documents_only(tmp_path):
+def test_transparency_reads_ds_annotations_on_analysed_documents_only(tmp_path):
     channels = [
         {
             "channel": "policy",
             "document": "p",
             "status": "analysed",
-            "accessible": True,
             "tilt": {"controller": {"name": "Example GmbH", "_provenance": []}},
         },
         {
             "channel": "in_app",
             "document": "n",
-            "status": "analysed",
-            "accessible": False,
+            "status": "not_analysable",
             "tilt": {"rightToRestriction": {"available": True, "_provenance": []}},
         },
     ]
@@ -160,7 +158,7 @@ def test_transparency_reads_ds_annotations_on_accessible_documents_only(tmp_path
         by["controller_name"].status == "addressed"
         and by["controller_name"].addressed_by[0]["claim"] == "policy:/controller/name"
     )
-    assert by["right_to_restrict"].status == "missing"  # only an inaccessible document says it
+    assert by["right_to_restrict"].status == "missing"  # only a document D could not analyse says it
     assert (by["dpo_contact"].status, by["dpo_contact"].conditions) == ("missing_if", ["dpo_designated"])
     stated, covered = concerns.information_not_given(f, list(by.values()), {})
     k = {c.requirement: c for c in stated}
@@ -174,6 +172,34 @@ def test_transparency_reads_ds_annotations_on_accessible_documents_only(tmp_path
     assert any("no established recall" in x for x in k["right_to_restrict"].silence)
     stated, _ = concerns.information_not_given(f, list(by.values()), {}, recall={"policy"})
     assert {c.requirement: c for c in stated}["right_to_restrict"].uncertainty["s"] == "low"
+
+
+def test_an_incomplete_documents_silence_is_missing_only_under_a_condition(tmp_path):
+    from skuld.assess import build
+
+    channels = [
+        {
+            "channel": "policy",
+            "document": "p",
+            "status": "analysed",
+            "complete": False,
+            "incomplete": "the policy's later chapters failed to load",
+            "tilt": {"controller": {"name": "Example GmbH", "_provenance": []}},
+        },
+    ]
+    a = workspace(tmp_path, [o_report([claim("c1", "personal-info.name", "adco")])], d_report([], channels))
+    report, _ = build(a.root, write=False)
+    validate("expectation_assessment", report)
+    status = {t["requirement"]: t for t in report["subjects"]["collection"]["transparency"]}
+    # as D's rules: the information may be in the part Sága did not acquire
+    assert status["right_to_restrict"]["status"] == "missing_if"
+    assert "complete:policy" in status["right_to_restrict"]["conditions"]
+    assert status["controller_name"]["status"] == "addressed"  # what the acquired part gives still counts
+    concern = next(c for c in report["concerns"] if c["requirement"] == "right_to_restrict")
+    assert "complete:policy" in concern["condition"] and concern["uncertainty"]["n"] == "moderate"
+    opened = next(o for o in report["open"] if o["text"].startswith("whether the part of the policy"))
+    assert concern["id"] in opened["qualifies"]
+    assert report["subjects"]["collection"]["documents"][0]["complete"] is False
 
 
 def test_every_claim_is_passed_on_with_its_relations_or_a_reason(tmp_path):

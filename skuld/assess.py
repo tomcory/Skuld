@@ -613,11 +613,12 @@ def _sources(a: inputs.Assessment) -> dict:
 
 
 def _collection(built, statuses) -> dict | None:
-    """The collection's documents and transparency statuses; what decided each condition is in subjects.json."""
+    """The collection's documents and transparency statuses; what decided each condition is in subjects.json. Every
+    analysed document is accessible; whether it was acquired complete is D's."""
     if built.collection is None:
         return None
     documents = [
-        {"channel": d["channel"], "document": d["document"], "accessible": d.get("accessible", False)}
+        {"channel": d["channel"], "document": d["document"], "accessible": True, "complete": d.get("complete", True)}
         for d in built.collection["documents"]
         if d["status"] == "analysed" and d.get("document")
     ]

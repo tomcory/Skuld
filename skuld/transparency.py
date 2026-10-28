@@ -6,9 +6,13 @@ The transparency status of the collection, per requirement of the frame that a d
     missing          otherwise, if it applies
     missing_if       otherwise: missing if its undecided conditions hold
 
-The annotations are views of D's derived documents (ratatoskr.tilt.annotations; D's report, schema 4), and a document
-is accessible where D's report does not say otherwise; the applicability is decided from O's and D's
-claims together (frame.py). The status is one of the collection, not of a document: information may be layered.
+The annotations are views of D's derived documents (ratatoskr.tilt.annotations; D's report, schema 4), and every
+analysed document is accessible; the applicability is decided from O's and D's claims together (frame.py). The status
+is one of the collection, not of a document: information may be layered.
+
+As D's rules do, E reads the silence of a complete document only: where a document Sága acquired incomplete is silent,
+the information may be in the part it did not acquire, so the status is missing_if, under the condition
+`complete:<channel>` that the missing part does not give it (INCOMPLETE).
 """
 
 from dataclasses import dataclass, field
@@ -19,6 +23,8 @@ from skuld.assessment import Subjects
 from skuld.frame import Decision
 
 ADDRESSED, NOT_APPLICABLE, MISSING, MISSING_IF = "addressed", "not_applicable", "missing", "missing_if"
+#: The prefix of the condition that an incomplete document's missing part does not give the information
+INCOMPLETE = "complete:"
 
 
 @dataclass
@@ -37,11 +43,13 @@ def statuses(frame: Frame, subjects: Subjects, decided: dict[str, Decision], d_s
     if subjects.collection is None:
         return []
     labelled: dict[str, list[dict]] = {}
-    read = []
+    read, incomplete = [], []
     for document in subjects.collection["documents"]:
-        if document["status"] != "analysed" or not document.get("accessible"):
+        if document["status"] != "analysed":
             continue
         read.append(document["channel"])
+        if not document.get("complete", True):
+            incomplete.append(INCOMPLETE + document["channel"])
         for a in document.get("annotations", []):
             value = f"{document['channel']}:{a['path']}"
             labelled.setdefault(a["requirement"], []).append({"dimension": "D", "report": d_sha256, "claim": value})
@@ -55,10 +63,11 @@ def statuses(frame: Frame, subjects: Subjects, decided: dict[str, Decision], d_s
             out.append(Status(r.id, app, ADDRESSED, addressed_by=labelled[r.label], decided_by=evidence))
         elif app == "does_not_apply":
             out.append(Status(r.id, app, NOT_APPLICABLE, decided_by=evidence))
-        elif app == "applies":
+        elif app == "applies" and not incomplete:
             out.append(Status(r.id, app, MISSING, decided_by=evidence, silent=sorted(set(read))))
         else:
+            conditions = undecided + sorted(set(incomplete))
             out.append(
-                Status(r.id, app, MISSING_IF, conditions=undecided, decided_by=evidence, silent=sorted(set(read)))
+                Status(r.id, app, MISSING_IF, conditions=conditions, decided_by=evidence, silent=sorted(set(read)))
             )
     return out

@@ -45,7 +45,7 @@ from skuld.assessment import Subjects
 from skuld.correspondence import Relation, covered
 from skuld.inputs import ReportRef
 from skuld.observe import claims as o_claims
-from skuld.transparency import MISSING_IF, Status
+from skuld.transparency import INCOMPLETE, MISSING_IF, Status
 
 VERSION = "2"
 COMPONENT = {"role": "method", "id": "skuld.relations", "version": VERSION}
@@ -362,7 +362,14 @@ def open_conditions(
         if s.status != MISSING_IF:
             continue
         for cid in s.conditions:
-            entry(f"frame:{cid}", frame.conditions[cid].text)["qualifies"].append(information[s.requirement])
+            if cid.startswith(INCOMPLETE):
+                channel = cid.removeprefix(INCOMPLETE)
+                text = (
+                    f"whether the part of the {channel.replace('_', ' ')} that was not acquired gives the information"
+                )
+                entry(cid, text)["qualifies"].append(information[s.requirement])
+            else:
+                entry(f"frame:{cid}", frame.conditions[cid].text)["qualifies"].append(information[s.requirement])
     shown = [
         x["id"]
         for x in tested

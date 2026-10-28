@@ -128,12 +128,12 @@ def test_parties_relate_recipients_to_the_controller():
     assert parties.relate("adco", REGISTRY, parties.controller(None, "com.example.app")).relation == parties.OTHER
 
 
-def test_declarations_are_referenced_by_pointer_and_the_collection_keeps_accessibility(tmp_path):
+def test_declarations_are_referenced_by_pointer_and_the_collection_keeps_completeness(tmp_path):
     d = d_report([declared("declares_collection"), declared("declares_purpose", kind="justification")], [{}])
     built = assessment.build(workspace(tmp_path, [o_report([])], d), None)
     assert [x.claim["claim"] for x in built.declarations] == ["policy:/dataDisclosed/0", "policy:/dataDisclosed/1"]
     assert built.declarations[1].kind == "justification"
-    assert built.collection["documents"][0]["accessible"] is True
+    assert built.collection["documents"][0]["complete"] is True  # D's report says nothing otherwise
     assert built.comparability["comparable"] is True
 
 
@@ -194,7 +194,7 @@ def test_the_fixtures_subjects(name, tmp_path):
         assert any(p["data"] == "device-or-other-ids.advertising-id" for p in out["practices"])
         assert any(p["recipient"] == "appsflyer" for p in out["practices"])
         assert out["collection"] and all(
-            "accessible" in d for d in out["collection"]["documents"] if d["status"] == "analysed"
+            "complete" in d for d in out["collection"]["documents"] if d["status"] == "analysed"
         )
     elif name.startswith("air.nn"):
         assert len({e for p in out["practices"] for e in p["episodes"] if e != "?"}) > 5  # practices per episode

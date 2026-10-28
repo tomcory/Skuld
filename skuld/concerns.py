@@ -30,10 +30,10 @@ from dataclasses import asdict, dataclass, field
 from ratatoskr.frames import Frame
 
 from skuld import combine
-from skuld.transparency import MISSING, MISSING_IF, NOT_APPLICABLE, Status
+from skuld.transparency import INCOMPLETE, MISSING, MISSING_IF, NOT_APPLICABLE, Status
 from skuld.uncertainty import highest
 
-VERSION = "7"
+VERSION = "8"
 COMPONENT = {"role": "method", "id": "skuld.concerns", "version": VERSION}
 
 #: Of a rule-tier concern of information not given: as certain as D's annotations and O's claims it reads
@@ -115,6 +115,11 @@ def information_not_given(
                     f"missing if {', '.join(s.conditions)}, which no dimension decides"
                     if conditional
                     else "applies, and no accessible document gives the information"
+                )
+                + (
+                    "; a silent document was acquired incomplete"
+                    if any(c.startswith(INCOMPLETE) for c in s.conditions)
+                    else ""
                 ),
             )
         )

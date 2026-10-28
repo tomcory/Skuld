@@ -164,15 +164,18 @@ def declarations(report: ReportRef | None) -> list[Declaration]:
 
 
 def collection(report: ReportRef | None) -> dict | None:
-    """D's documents with their accessibility and requirement annotations (by label and polarity): an analysed
-    document is accessible unless the report says otherwise, and its annotations are a view of it (tilt.annotations)."""
+    """D's documents with their requirement annotations (by label and polarity), a view of each analysed document
+    (tilt.annotations), and whether Sága acquired it complete (D's `complete`, with the reason where it is not); an
+    analysed document is accessible (D's report, schema 4)."""
     if report is None:
         return None
     documents = []
     for ch in report.load()["channels"]:
         entry = {"channel": ch["channel"], "document": ch.get("document"), "status": ch["status"]}
         if ch["status"] == "analysed":
-            entry["accessible"] = ch.get("accessible", True)
+            entry["complete"] = ch.get("complete") is not False
+            if not entry["complete"]:
+                entry["incomplete"] = ch.get("incomplete") or "incomplete as acquired"
             entry["annotations"] = [
                 {"requirement": a["requirement"], "path": a["path"], "polarity": a["polarity"]}
                 for a in tilt.annotations(ch.get("tilt") or {})
