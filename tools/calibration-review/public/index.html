@@ -7,184 +7,157 @@
     <link rel="stylesheet" href="/vendor/bootstrap.css">
     <link rel="stylesheet" href="/vendor/icons/bootstrap-icons.min.css">
     <style>
-        :root { --muted: #6b7280; --line: #e5e7eb; --soft: #f9fafb; }
-        html, body { height: 100%; }
-        body { background: #fff; color: #1f2937; font-size: .95rem; }
+        body { background: #f6f7f9; }
+        mark { background: #ffe58a; padding: 0 .1em; }
+        .question { font-size: 1.15rem; font-weight: 600; }
+        .facts dt { font-weight: 500; color: #6c757d; font-size: .85rem; }
+        .facts dd { margin-bottom: .4rem; }
+        .document { max-height: 78vh; overflow-y: auto; }
+        .passage { margin-bottom: .6rem; }
+        .heading-line { color: #6c757d; font-size: .8rem; }
+        .headline { font-weight: 600; margin-top: .8rem; }
+        .context { max-height: 40vh; overflow-y: auto; }
+        .screen { background: #f1f3f5; border-radius: .25rem; padding: .2rem .4rem; margin-bottom: .25rem; }
+        kbd { font-size: .75rem; }
         [v-cloak] { display: none; }
-        mark { background: #fde68a; padding: 0 .1em; border-radius: 2px; }
-        .muted { color: var(--muted); }
-        .small-caps { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
-
-        header { height: 52px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 1rem; padding: 0 1.25rem; }
-        header .bar { flex: 1; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; max-width: 320px; }
-        header .bar div { height: 100%; background: #2563eb; }
-        .icon-btn { border: 0; background: none; color: var(--muted); padding: .25rem .4rem; border-radius: .375rem; }
-        .icon-btn:hover:not(:disabled) { background: var(--soft); color: #111827; }
-        .icon-btn:disabled { opacity: .35; }
-
-        main { display: grid; grid-template-columns: minmax(360px, 5fr) 7fr; height: calc(100% - 52px); }
-        .pane { overflow-y: auto; padding: 1.5rem 1.75rem; }
-        .pane.left { display: flex; flex-direction: column; padding-bottom: 0; }
-        .pane.left .content { flex: 1; }
-        .pane + .pane { border-left: 1px solid var(--line); background: var(--soft); }
-
-        .question { font-size: 1.2rem; font-weight: 600; line-height: 1.4; margin: .35rem 0 1.5rem; }
-        .block { margin-bottom: 1.25rem; }
-        .facts { display: grid; grid-template-columns: 6.5rem 1fr; row-gap: .3rem; }
-        .facts dt { font-weight: 400; color: var(--muted); }
-        .facts dd { margin: 0; }
-        .statement { font-size: 1.1rem; }
-        .quote { border-left: 3px solid var(--line); padding-left: .75rem; color: #374151; }
-        .disclosure { border: 0; background: none; padding: 0; color: var(--muted); font-size: .85rem; }
-        .disclosure:hover { color: #111827; }
-        .context { margin-top: .6rem; max-height: 36vh; overflow-y: auto; }
-        .screen { font-size: .85rem; padding: .15rem 0; border-bottom: 1px dashed var(--line); }
-        .passage-note { font-size: .85rem; margin-top: .5rem; }
-
-        .decision { position: sticky; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 1rem 0 1.25rem; margin-top: 1.5rem; }
-        .decision .btn { min-width: 6.5rem; }
-        .note { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding-left: 0; font-size: .9rem; }
-        .note:focus { box-shadow: none; border-color: #2563eb; }
-
-        .tabs { display: flex; align-items: center; gap: 1.25rem; border-bottom: 1px solid var(--line); margin-bottom: 1rem; }
-        .tabs a { color: var(--muted); text-decoration: none; padding: .5rem 0; border-bottom: 2px solid transparent; margin-bottom: -1px; }
-        .tabs a.active { color: #111827; border-color: #111827; }
-        .tabs .search { margin-left: auto; border: 0; background: transparent; font-size: .85rem; width: 14rem; }
-        .tabs .search:focus { outline: none; }
-        .doc { max-width: 46rem; line-height: 1.55; }
-        .doc h3 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 .4rem; }
-        .doc p { margin-bottom: .6rem; }
-        .doc ul { margin-bottom: .6rem; padding-left: 1.2rem; }
-        .doc table { font-size: .9rem; }
-        .flag { font-size: .72rem; color: #92400e; background: #fef3c7; border-radius: .25rem; padding: 0 .3rem; margin-left: .3rem; }
     </style>
 </head>
 <body>
-<div id="app" v-cloak style="height: 100%">
-    <header>
-        <strong>Calibration review</strong>
-        <span class="muted small" v-if="progress">{{ progress.calibration }}</span>
-        <span class="ms-3" v-if="item">
-            <button class="icon-btn" @click="go(item.index - 1)" :disabled="item.index === 0" title="Previous (←)"><i class="bi bi-chevron-left"></i></button>
-            <span class="small">{{ item.index + 1 }} / {{ item.total }}</span>
-            <button class="icon-btn" @click="go(item.index + 1)" :disabled="item.index + 1 >= item.total" title="Next (→)"><i class="bi bi-chevron-right"></i></button>
-            <button class="icon-btn small" @click="nextOpen()" title="Next undecided (O)">next open</button>
-        </span>
-        <div class="bar ms-auto" v-if="progress"><div :style="{width: (100 * progress.reviewed / progress.total) + '%'}"></div></div>
-        <span class="muted small" v-if="progress">{{ progress.reviewed }} decided</span>
-        <button class="icon-btn" @click="help = !help" title="Help"><i class="bi bi-question-circle"></i></button>
-    </header>
-
-    <main v-if="item">
-        <section class="pane left">
-            <div class="content">
-            <div v-if="help" class="alert alert-light border small mb-4">
-                <p class="mb-2">Each item is one requirement of the normative frame for one subject of an application: its
-                    collection of documents, a purpose statement it declares, or a practice observed in a run with one
-                    purpose it serves. Answer the question from the subject and the provider's documents. The assessment's
-                    own conclusion is not shown.</p>
-                <p class="mb-2"><b>Fails</b> (F): a concern. <b>Holds</b> (H): none. <b>Unsure</b> (U): cannot tell; left
-                    out of the scores, say why in the note. Click a chosen decision again to remove it.</p>
-                <p class="mb-0">← → move, O next undecided, / search the document, C show or hide what the expectation
-                    stage read for a practice (its screens and documentation, not its answer).</p>
+<div id="app" class="container-fluid py-3" v-cloak>
+    <nav class="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <h1 class="h5 m-0">Calibration review</h1>
+        <span class="text-secondary small" v-if="progress">{{ progress.calibration }} · {{ progress.reviewed }}/{{ progress.total }} decided
+            ({{ progress.counts.fails }} fails, {{ progress.counts.holds }} holds, {{ progress.counts.unsure }} unsure)</span>
+        <div class="flex-grow-1" style="min-width: 160px">
+            <div class="progress" style="height: .5rem" v-if="progress">
+                <div class="progress-bar" :style="{width: (100 * progress.reviewed / progress.total) + '%'}"></div>
             </div>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" @click="help = !help"><i class="bi bi-question-circle"></i> Help</button>
+    </nav>
 
-            <div class="small-caps">{{ item.application }}</div>
-            <div class="muted small mt-1" :title="item.requirement.provisions.join(', ')">{{ item.requirement.title }}</div>
-            <div class="question">{{ item.question }}</div>
+    <div class="alert alert-info small" v-if="help">
+        <p class="mb-1"><b>What to decide.</b> Each item is one requirement of the normative frame for one subject of an
+            application: its collection of documents, a purpose statement it declares, or a practice observed in a run with
+            one purpose it serves. Answer the question against the frame, from the subject and the provider's documents.
+            What the assessment concluded is not shown, so that it does not lead the answer.</p>
+        <ul class="mb-1">
+            <li><b>Fails</b> (<kbd>F</kbd>): the subject fails the requirement as the question asks; a concern.</li>
+            <li><b>Holds</b> (<kbd>H</kbd>): it does not; no concern.</li>
+            <li><b>Unsure</b> (<kbd>U</kbd>): you cannot tell from what is shown; left out of the scores. Say why in the note.</li>
+            <li><kbd>←</kbd> <kbd>→</kbd> previous and next item, <kbd>O</kbd> next open item, <kbd>/</kbd> search the
+                document, <kbd>C</kbd> show or hide what the expectation stage read for a practice (the screens and the
+                documentation it was given; not its answer). Notes are saved with the decision.</li>
+        </ul>
+    </div>
 
-            <div class="block" v-if="item.subject.kind === 'collection'">
-                <div class="muted">The app's documents, on the right.</div>
-            </div>
+    <div class="row g-3" v-if="item">
+        <div class="col-lg-5">
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="text-secondary small">item {{ item.index + 1 }} of {{ item.total }} · {{ item.id }} · {{ item.application }}</span>
+                        <span v-if="item.review" class="badge" :class="decisionClass(item.review.decision)">{{ item.review.decision }}</span>
+                    </div>
+                    <div class="mt-2"><b>{{ item.requirement.title }}</b></div>
+                    <div class="small text-secondary">{{ item.requirement.principle.replace('_', ' ') }} · {{ item.requirement.provisions.join(', ') }}</div>
+                    <div class="question my-3">{{ item.question }}</div>
 
-            <div class="block" v-else-if="item.subject.kind === 'statement'">
-                <div class="small-caps mb-1">Declared purpose</div>
-                <div class="statement">“{{ item.subject.text }}”</div>
-                <div class="quote small mt-2" v-if="item.subject.sentence && item.subject.sentence !== item.subject.text">{{ item.subject.sentence }}</div>
-            </div>
+                    <template v-if="item.subject.kind === 'collection'">
+                        <p class="mb-0">The subject is the app's collection of documents (right): the privacy policy, the
+                            Data safety section and the store listing, as acquired.</p>
+                    </template>
+                    <template v-else-if="item.subject.kind === 'statement'">
+                        <div class="small text-secondary mb-1">Declared purpose ({{ item.subject.channels.join(', ') }})</div>
+                        <div class="fs-5">“{{ item.subject.text }}”</div>
+                        <div class="border-start border-3 ps-3 mt-2 small" v-if="item.subject.sentence">{{ item.subject.sentence }}</div>
+                    </template>
+                    <template v-else>
+                        <dl class="facts row mb-0">
+                            <dt class="col-sm-4">Practice</dt><dd class="col-sm-8">{{ item.subject.type }} <code>{{ item.subject.data }}</code></dd>
+                            <dt class="col-sm-4">Recipient</dt><dd class="col-sm-8">{{ item.subject.recipient || 'none (on the device)' }}</dd>
+                            <dt class="col-sm-4">Actor</dt><dd class="col-sm-8">{{ item.subject.actor === '?' ? 'unknown' : item.subject.actor }}</dd>
+                            <dt class="col-sm-4">Episodes</dt><dd class="col-sm-8">{{ item.subject.episodes.join(', ') }}</dd>
+                        </dl>
+                        <div v-if="item.purpose" class="border-start border-3 ps-3 mt-2">
+                            <div class="small text-secondary mb-1">Purpose it serves</div>
+                            <div><b>{{ item.purpose.action }}</b> {{ item.purpose.object }} · for {{ beneficiaries[item.purpose.beneficiary] || item.purpose.beneficiary }}
+                                <span v-if="item.purpose.context"> · in {{ item.purpose.context }}</span></div>
+                            <div v-if="item.purpose.outcome"><span class="text-secondary">Outcome:</span> {{ item.purpose.outcome }}</div>
+                            <div class="small text-secondary"><code>{{ item.purpose.node }}</code></div>
+                        </div>
+                        <div v-if="item.context" class="mt-3">
+                            <button class="btn btn-sm btn-outline-secondary" @click="toggleContext()">
+                                <i class="bi" :class="contextShown ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                                What the expectation stage read: {{ item.context.screens.length }} screens, {{ item.context.passages.length }} passages <kbd>C</kbd>
+                            </button>
+                            <div v-if="contextShown" class="context mt-2">
+                                <div class="small text-secondary mb-1" v-if="item.context.screens.length">Screens of the episodes it was observed in</div>
+                                <div v-for="t in item.context.screens" class="screen small">{{ t }}</div>
+                                <div class="small text-secondary mt-2 mb-1" v-if="item.context.passages.length">Documentation of the components and data</div>
+                                <div v-for="t in item.context.passages" class="border-start border-3 ps-2 mb-2 small">{{ t }}</div>
+                            </div>
+                        </div>
+                    </template>
 
-            <template v-else>
-                <div class="block">
-                    <div class="small-caps mb-1">Practice</div>
-                    <dl class="facts small mb-0">
-                        <dt>{{ item.subject.type }}</dt><dd><code>{{ item.subject.data }}</code></dd>
-                        <dt>recipient</dt><dd>{{ item.subject.recipient || 'none (on the device)' }}</dd>
-                        <dt v-if="item.subject.actor !== '?'">actor</dt><dd v-if="item.subject.actor !== '?'">{{ item.subject.actor }}</dd>
-                        <dt>episodes</dt><dd>{{ item.subject.episodes.join(', ') }}</dd>
-                    </dl>
-                </div>
-                <div class="block" v-if="item.purpose">
-                    <div class="small-caps mb-1">Purpose</div>
-                    <div>{{ purposeSentence }}</div>
-                    <div class="muted small" v-if="item.purpose.outcome">so that {{ item.purpose.outcome }}</div>
-                </div>
-                <div class="block" v-if="item.context">
-                    <button class="disclosure" @click="toggleContext()" title="Show or hide (C)">
-                        <i class="bi" :class="contextShown ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
-                        What the expectation stage read · {{ item.context.screens.length }} screens, {{ item.context.passages.length }} passages
-                    </button>
-                    <div v-if="contextShown" class="context">
-                        <div v-for="t in item.context.screens" class="screen">{{ t }}</div>
-                        <div v-for="t in item.context.passages" class="passage-note quote">{{ t }}</div>
+                    <textarea class="form-control form-control-sm mt-3" rows="2" placeholder="Note (optional; say why if unsure)" v-model="note" @keydown.stop></textarea>
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        <button class="btn btn-danger" @click="save('fails')"><i class="bi bi-exclamation-triangle"></i> Fails <kbd>F</kbd></button>
+                        <button class="btn btn-success" @click="save('holds')"><i class="bi bi-check-lg"></i> Holds <kbd>H</kbd></button>
+                        <button class="btn btn-outline-secondary" @click="save('unsure')"><i class="bi bi-question"></i> Unsure <kbd>U</kbd></button>
+                        <button class="btn btn-outline-secondary ms-auto" v-if="item.review" @click="reset()" title="Remove the decision"><i class="bi bi-arrow-counterclockwise"></i></button>
+                    </div>
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="btn btn-sm btn-outline-dark" @click="go(item.index - 1)" :disabled="item.index === 0"><i class="bi bi-arrow-left"></i></button>
+                        <button class="btn btn-sm btn-outline-dark" @click="go(item.index + 1)" :disabled="item.index + 1 >= item.total"><i class="bi bi-arrow-right"></i></button>
+                        <button class="btn btn-sm btn-outline-dark" @click="nextOpen()">Next open <kbd>O</kbd></button>
                     </div>
                 </div>
-            </template>
             </div>
-
-            <div class="decision">
-                <div class="d-flex gap-2">
-                    <button class="btn btn-sm" :class="chosen === 'fails' ? 'btn-danger' : 'btn-outline-danger'" @click="decide('fails')" title="F">Fails</button>
-                    <button class="btn btn-sm" :class="chosen === 'holds' ? 'btn-success' : 'btn-outline-success'" @click="decide('holds')" title="H">Holds</button>
-                    <button class="btn btn-sm" :class="chosen === 'unsure' ? 'btn-secondary' : 'btn-outline-secondary'" @click="decide('unsure')" title="U">Unsure</button>
+        </div>
+        <div class="col-lg-7">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div v-if="!item.documents.length" class="text-secondary">No documents were acquired for this application.</div>
+                    <template v-else>
+                        <ul class="nav nav-tabs mb-2">
+                            <li class="nav-item" v-for="d in item.documents" :key="d.file">
+                                <a class="nav-link" :class="{active: d.file === shown}" href="#" @click.prevent="show(d.file)">
+                                    {{ titles[d.channel] || d.channel }}
+                                    <span v-if="d.status !== 'analysed'" class="badge text-bg-warning ms-1" :title="'D: ' + d.status">{{ d.status.replace('_', ' ') }}</span>
+                                </a>
+                            </li>
+                        </ul>
+                        <input ref="search" class="form-control form-control-sm mb-2" placeholder="Search the document (/)" v-model="query" @keydown.esc="$event.target.blur()">
+                        <div class="document" ref="document">
+                            <template v-if="kind === 'passages'">
+                                <div v-for="p in document.passages" class="passage" :class="{headline: p.type === 'headline'}">
+                                    <div class="heading-line" v-if="p.type !== 'headline' && p.context && p.context.length">{{ p.context.map(c => c.text).join(' › ') }}</div>
+                                    <div v-html="mark(p.passage)"></div>
+                                </div>
+                            </template>
+                            <template v-else-if="kind === 'data_safety'">
+                                <p v-if="!document.provided">The developer provides no Data safety section.</p>
+                                <template v-for="part in ['collected', 'shared']">
+                                    <h2 class="h6 mt-2">Data {{ part }}</h2>
+                                    <p v-if="document[part] && document[part].none" class="small">No data {{ part }}.</p>
+                                    <table v-else-if="document[part]" class="table table-sm small">
+                                        <thead><tr><th>Category</th><th>Type</th><th>Purposes</th><th>Optional</th></tr></thead>
+                                        <tbody><tr v-for="x in document[part].items"><td>{{ x.category }}</td><td v-html="mark(x.type)"></td><td>{{ (x.purposes || []).join(', ') }}</td><td>{{ x.optional ? 'yes' : '' }}</td></tr></tbody>
+                                    </table>
+                                </template>
+                                <h2 class="h6 mt-2">Security</h2>
+                                <pre class="small">{{ JSON.stringify(document.security, null, 1) }}</pre>
+                                <div v-if="document.notes" class="small text-secondary">{{ document.notes }}</div>
+                            </template>
+                            <pre v-else class="small" v-html="mark(JSON.stringify(document, null, 1))"></pre>
+                        </div>
+                    </template>
                 </div>
-                <input class="form-control note mt-3" placeholder="Note" v-model="note" @keydown.stop @keydown.enter="note && chosen && decide(chosen, true)">
             </div>
-        </section>
-
-        <section class="pane">
-            <div v-if="!item.documents.length" class="muted">No documents were acquired for this application.</div>
-            <template v-else>
-                <nav class="tabs">
-                    <a v-for="d in item.documents" :key="d.file" href="#" :class="{active: d.file === shown}" @click.prevent="show(d.file)">
-                        {{ titles[d.channel] || d.channel }}<span v-if="d.status !== 'analysed'" class="flag" :title="'D: ' + d.status">{{ d.status.replace('_', ' ') }}</span>
-                    </a>
-                    <input ref="search" class="search" placeholder="Search…" v-model="query" @keydown.esc="$event.target.blur()">
-                </nav>
-                <div class="doc" ref="document">
-                    <template v-if="kind === 'passages'">
-                        <template v-for="block in blocks">
-                            <h3 v-if="block.type === 'headline'" v-html="mark(block.text)"></h3>
-                            <ul v-else-if="block.type === 'list'"><li v-for="t in block.items" v-html="mark(t)"></li></ul>
-                            <p v-else v-html="mark(block.text)"></p>
-                        </template>
-                    </template>
-                    <template v-else-if="kind === 'data_safety'">
-                        <p v-if="!document.provided" class="muted">The developer provides no Data safety section.</p>
-                        <template v-for="part in ['collected', 'shared']">
-                            <h3>Data {{ part }}</h3>
-                            <p v-if="!document[part] || document[part].none" class="muted">None declared.</p>
-                            <table v-else class="table table-sm">
-                                <thead><tr><th>Type</th><th>Category</th><th>Purposes</th><th></th></tr></thead>
-                                <tbody><tr v-for="x in document[part].items">
-                                    <td v-html="mark(x.type)"></td><td class="muted">{{ x.category }}</td><td>{{ (x.purposes || []).join(', ') }}</td><td class="muted small">{{ x.optional ? 'optional' : '' }}</td>
-                                </tr></tbody>
-                            </table>
-                        </template>
-                        <h3>Security</h3>
-                        <ul><li v-for="row in securityRows">{{ row }}</li></ul>
-                        <p v-for="n in document.notes || []" class="muted small">{{ n }}</p>
-                    </template>
-                    <template v-else-if="kind === 'listing'">
-                        <h3>{{ document.title }}</h3>
-                        <dl class="facts">
-                            <template v-for="row in listingRows"><dt>{{ row[0] }}</dt><dd v-html="mark(row[1])" style="white-space: pre-line"></dd></template>
-                        </dl>
-                    </template>
-                    <pre v-else class="small" v-html="mark(JSON.stringify(document, null, 1))"></pre>
-                </div>
-            </template>
-        </section>
-    </main>
+        </div>
+    </div>
+    <div v-else-if="progress" class="text-secondary">Loading…</div>
 </div>
 <script type="module">
 import {createApp, nextTick} from '/vendor/vue.js';
@@ -195,44 +168,13 @@ const beneficiaries = {user: 'the user', provider: 'the provider', other: 'anoth
 const titles = {policy: 'Privacy policy', data_safety: 'Data safety', listing: 'Store listing', in_app: 'In-app notices'};
 const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 createApp({
-    data: () => ({progress: null, item: null, note: '', help: false, shown: null, document: {}, query: '', titles,
+    data: () => ({progress: null, item: null, note: '', help: false, shown: null, document: {}, query: '', titles, beneficiaries,
                   contextShown: remembered('contextShown', true)}),
     computed: {
-        chosen() { return this.item && this.item.review ? this.item.review.decision : null; },
         kind() {
             if (this.document.passages) return 'passages';
             if ('collected' in this.document || 'provided' in this.document) return 'data_safety';
-            if ('developer' in this.document) return 'listing';
             return 'other';
-        },
-        purposeSentence() {
-            const p = this.item.purpose;
-            const who = beneficiaries[p.beneficiary] || p.beneficiary;
-            return [p.action, p.object].filter(Boolean).join(' ') + (who ? `, for ${who}` : '') + (p.context ? `, in ${p.context}` : '') + ` (${p.node})`;
-        },
-        blocks() {
-            // headlines as headings, consecutive list items as one list, everything else a paragraph
-            const out = [];
-            for (const p of this.document.passages || []) {
-                if (p.type === 'list_item') {
-                    const last = out[out.length - 1];
-                    if (last && last.type === 'list') last.items.push(p.passage);
-                    else out.push({type: 'list', items: [p.passage]});
-                } else out.push({type: p.type === 'headline' ? 'headline' : 'text', text: p.passage});
-            }
-            return out;
-        },
-        securityRows() {
-            return Object.entries(this.document.security || {})
-                .filter(([, v]) => v !== null)
-                .map(([k, v]) => `${k.replaceAll('_', ' ')}: ${v ? 'yes' : 'no'}`);
-        },
-        listingRows() {
-            const d = this.document, dev = d.developer || {};
-            return [['developer', dev.legal_name || dev.name], ['email', dev.email], ['website', dev.website], ['phone', dev.phone],
-                    ['address', dev.address], ['policy', d.privacy_policy_url], ['version', d.version], ['updated', d.updated],
-                    ['category', d.category], ['ads', d.contains_ads === undefined ? null : (d.contains_ads ? 'yes' : 'no')]]
-                .filter(r => r[1]);
         },
     },
     methods: {
@@ -255,10 +197,9 @@ createApp({
             const response = await fetch('/' + file);
             this.document = response.ok ? await response.json() : {};
             nextTick(() => {
-                const pane = this.$refs.document && this.$refs.document.closest('.pane');
                 const first = this.$refs.document && this.$refs.document.querySelector('mark');
                 if (first) first.scrollIntoView({block: 'center'});
-                else if (pane) pane.scrollTop = 0;
+                else if (this.$refs.document) this.$refs.document.scrollTop = 0;
             });
         },
         mark(text) {
@@ -268,31 +209,32 @@ createApp({
             const pattern = new RegExp(escape(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
             return html.replace(pattern, m => `<mark>${m}</mark>`);
         },
-        async decide(decision, keep) {
-            if (decision === this.chosen && !keep) {
-                this.progress = await this.api(`/reviews/${this.item.id}`, {method: 'DELETE'});
-                return this.go(this.item.index);
-            }
+        async save(decision) {
             this.progress = await this.api(`/reviews/${this.item.id}`, {
                 method: 'PUT', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({decision, note: this.note}),
             });
             await this.nextOpen();
         },
+        async reset() {
+            this.progress = await this.api(`/reviews/${this.item.id}`, {method: 'DELETE'});
+            await this.go(this.item.index);
+        },
         async nextOpen() {
             const {index} = await this.api(`/next-open?after=${this.item ? this.item.index : -1}`);
-            if (index === null) { await this.go(this.item.index); alert('Every item has a decision.'); return; }
+            if (index === null) { this.item && (this.item = await this.api(`/items/${this.item.index}`)); alert('Every item has a decision.'); return; }
             await this.go(index);
         },
         toggleContext() {
             this.contextShown = !this.contextShown;
             remember('contextShown', this.contextShown);
         },
+        decisionClass: d => ({fails: 'text-bg-danger', holds: 'text-bg-success', unsure: 'text-bg-secondary'})[d],
         key(event) {
             if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
             const actions = {
-                f: () => this.decide('fails'), h: () => this.decide('holds'), u: () => this.decide('unsure'),
-                o: () => this.nextOpen(), c: () => this.item.context && this.toggleContext(),
+                c: () => this.item.context && this.toggleContext(),
+                f: () => this.save('fails'), h: () => this.save('holds'), u: () => this.save('unsure'), o: () => this.nextOpen(),
                 ArrowLeft: () => this.go(this.item.index - 1), ArrowRight: () => this.go(this.item.index + 1),
                 '/': () => this.$refs.search && this.$refs.search.focus(),
             };

@@ -29,6 +29,4 @@ the section is shown or hidden with C, and the browser remembers the choice. A d
 | unsure | cannot be decided from what is shown; left out of the scores | U |
 
 ← → move between items, O jumps to the next item without a decision, / searches the document. A note is saved with the
-decision (Enter in the note saves it with the chosen decision); clicking the chosen decision again removes it. The
-shortcuts are in the page's help and the buttons' tooltips. The policy is shown as its headings, paragraphs and lists,
-the Data safety section and the listing as tables.
+decision.
