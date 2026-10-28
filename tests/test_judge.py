@@ -1,5 +1,5 @@
 """Tests of the assessment stage's reasoning tier: stage hypotheses, stage-2 contexts (gate 1), readings (gate 2),
-concerns (ii)–(v) and gate 3, end to end."""
+concerns (ii)–(iv) and gate 3, end to end."""
 
 import json
 import re
@@ -207,7 +207,7 @@ def test_a_refused_answer_names_what_is_missing(workspace):
     assert "Q2 is not answered" in refused and any("Z9" in r for r in refused)
 
 
-def test_the_assessment_states_concerns_ii_to_v_and_gate_3_holds(workspace):
+def test_the_assessment_states_concerns_ii_to_iv_and_gate_3_holds(workspace):
     a, built = workspace
     found, norms, hypotheses = tools(a, built)
     model = FakeJudge()

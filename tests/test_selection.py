@@ -1,5 +1,5 @@
 """Experiments in the assessment: the components a case varies, ≈ between case and hypothesis purposes, the
-combination deciding by strength, concern (v) from a comparison, and the choice of experiments."""
+combination deciding by strength, concern (iv) from a comparison, and the choice of experiments."""
 
 import json
 from types import SimpleNamespace

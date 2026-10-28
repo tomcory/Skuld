@@ -13,8 +13,8 @@ is asked here (`skuld expect` and `skuld judge` ask).
                     measurements, per practice whose component a case varies (experiments.premises), combined with
                     the hypotheses of aligned purposes (combine.experimental)
     reasoning tier  the judgements of its kept samples (judge.py), combined across samples: concerns (ii), (iii)
-                    and (v) (concerns.py), the reasoning tier's Alternative claims (combine.alternatives)
-    relations       O–E and D–E (relations.py), which concern (v) cites; pass-through and open conditions
+                    and (iv) (concerns.py), the reasoning tier's Alternative claims (combine.alternatives)
+    relations       O–E and D–E (relations.py), which concern (iv) cites; pass-through and open conditions
     report          the combined claims (the claims they combine stay in the samples and the case report), the
                     concerns, E's coverage, the gaps someone could act on, the provenance check (provenance.py)
 

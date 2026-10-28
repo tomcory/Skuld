@@ -10,7 +10,7 @@ E's concerns (E def:concern), by four rules:
     (iii) no specified purpose covers it, for a practice and a supported inferred purpose: stated where no purpose
           specified for the practice's data covers the inferred one; supported by rule if none is specified for its
           data, else by the reasoning tier if the combined judgement is that it is compatible with none of them
-    (v)   a less invasive alternative, for a practice and a supported inferred purpose (reasoning tier): supported if a
+    (iv)  a less invasive alternative, for a practice and a supported inferred purpose (reasoning tier): supported if a
           combined Alternative claim on one of its components is supported, technically supported by documents or
           demonstrated by an experiment for a case purpose ≈ it; not assessable if every premise is
 
@@ -278,7 +278,7 @@ def less_invasive_alternative(
     applicability: dict,
     experimental: list[dict] = (),
 ):
-    """Concerns (v) and coverage per practice and supported inferred purpose, from the assessment stage's combined
+    """Concerns (iv) and coverage per practice and supported inferred purpose, from the assessment stage's combined
     Alternative claims and the experiments' (`combine.experimental`) whose basis names the purpose; `judged` names
     the practices whose minimisation samples are kept."""
     r = frame.requirement("data_minimised")

@@ -2,7 +2,7 @@
 skuld select: the choice of experiments, each choice and each refusal a named input with its reason
 (`inputs/selection.json`), made from an assessment report before any run it asks for.
 
-A candidate is a practice and a supported inferred purpose whose minimisation reasoning cannot decide: no concern (v)
+A candidate is a practice and a supported inferred purpose whose minimisation reasoning cannot decide: no concern (iv)
 is supported for it, and no experiment already decides it (an experimental Alternative claim, ≈ the purpose, that is
 supported or refuted). It is refused where Skuld can impose nothing on the practice's components (`space.imposable`),
 or where an experiment already ran and could not assess it (no oracle observes the purpose). Of the others, those
@@ -123,7 +123,7 @@ def select(root: str | Path, replace: bool = False, now: datetime | None = None)
         cost = ((1 + alternatives) * s["repeats"] + 1) * s["run_seconds"]
         entry = {"id": f"selection:{c['practice']}:{c['purpose'].rsplit(':', 1)[1]}", **c, "cost_seconds": cost}
         marked = next((named[k] for k in (c["concern"], c["practice"]) if k in named), None)
-        undecided = f"reasoning does not decide it (concern (v) {c['concern_status'] or 'not stated'})"
+        undecided = f"reasoning does not decide it (concern (iv) {c['concern_status'] or 'not stated'})"
         if not c["components"]:
             entry.update(kind=REFUSAL, reason="Skuld can impose nothing on its components")
         elif c.get("tried"):
