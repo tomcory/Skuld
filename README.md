@@ -165,6 +165,7 @@ case workspace (`SKULD_DRY_RUN`, or the Pilates fixture). Earlier copies of the 
 | Document | Content |
 |---|---|
 | [`docs/architecture.md`](docs/architecture.md) | How Skuld works: the figures, its interfaces, how an assessment is made, the modules, the data model, the design rules, the limits |
+| [`docs/scientific-summary.md`](docs/scientific-summary.md) | The method for a scientific audience, in the notation of E's report |
 | [`tools/calibration-review/README.md`](tools/calibration-review/README.md) | The expert's blind review of a calibration sample |
 | [`ODE/expectation/expectation.tex`](../ODE/expectation/expectation.tex) | The model: E's technical report |
 | [`SKULD_REDESIGN_PLAN.md`](../SKULD_REDESIGN_PLAN.md) | The plan, its reviews and measurements, what is done and open |
