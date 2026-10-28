@@ -340,23 +340,28 @@ def _part_items(
 
 def _declaration_analysis(a: inputs.Assessment) -> list[dict]:
     """The D analysis whose report the assessment read: the transparency concerns' error rates depend on it, so a
-    calibration holds for it alone. Its modules where D's report names them, else its version."""
+    calibration holds for it alone. D's version and report, and the modules and mappings each channel's derived
+    document names (its `analysis` components), by channel and D's role."""
     if a.declaration is None:
         return []
-    header = a.declaration.load().get("report", {})
-    named = [
-        {"role": "declaration_analysis", **{k: m[k] for k in ("id", "version", "sha256") if k in m}}
-        for m in header.get("components") or ()
-        if "id" in m
-    ]
-    return named or [
+    report = a.declaration.load()
+    out = [
         {
             "role": "declaration_analysis",
             "id": "urda",
-            "version": header.get("urda", ""),
+            "version": report.get("report", {}).get("urda", ""),
             "sha256": a.declaration.sha256,
         }
     ]
+    for ch in report.get("channels", []):
+        for m in ((ch.get("tilt") or {}).get("_asgard") or {}).get("analysis") or ():
+            if "id" not in m:
+                continue
+            entry = {"role": "declaration_analysis", "id": f"{ch['channel']}:{m.get('role', '?')}:{m['id']}"}
+            if isinstance(m.get("version"), str):
+                entry["version"] = m["version"]
+            out.append(entry)
+    return out
 
 
 def _record_components(components: dict, record: dict, stage: str) -> None:

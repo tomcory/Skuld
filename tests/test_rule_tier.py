@@ -199,6 +199,53 @@ def test_every_claim_is_passed_on_with_its_relations_or_a_reason(tmp_path):
     assert out["policy:/dataDisclosed/1"]["reason"] == "E's expectation stage has no claims"
 
 
+def test_ds_findings_and_open_conditions_are_passed_on_and_checked(tmp_path):
+    from skuld.assess import build
+    from skuld.provenance import check_assessment
+
+    d = d_report([d_claim("declares_recipient", "personal-info.name", value={"entity": "adco"})])
+    d["report"] = {"urda": "2.0.0"}
+    d["channels"][0]["tilt"] = {"_asgard": {"analysis": [{"role": "module:units", "id": "model", "version": "abc"}]}}
+    cid = d["claims"][0]["id"]
+    d["findings"] = [
+        {
+            "id": "f1",
+            "rule": "label.shared_not_in_label",
+            "template": "omission",
+            "channels": ["policy"],
+            "declarations": [cid],
+            "explanation": "",
+            "uncertainty": {},
+        }
+    ]
+    d["open"] = [{"id": "o1", "text": "adco receives data as a third party", "qualifies": [cid], "predicate": "share"}]
+    a = workspace(tmp_path, [o_report([claim("c1", "personal-info.name", "adco")])], d)
+    report, members = build(a.root, write=False)
+    validate("expectation_assessment", report)
+    assert {"finding": {"report": a.declaration.sha256, "finding": "f1"}} in report["passed_on"]
+    passed = [o for o in report["open"] if o.get("from") == "D"]
+    assert passed == [
+        {
+            "id": "open:D:o1",
+            "text": "adco receives data as a third party",
+            "qualifies": [cid],
+            "from": "D",
+            "of": {"report": a.declaration.sha256, "open": "o1"},
+        }
+    ]
+    analysis = {c["id"]: c.get("version") for c in report["report"]["components"] if c["role"] == "declaration_analysis"}
+    assert analysis == {"urda": "2.0.0", "policy:module:units:model": "abc"}
+    assert check_assessment(a, report, report, members) == []
+    # what D's report does not state is a problem
+    passed[0]["qualifies"] = ["policy:/nowhere"]
+    passed[0]["of"]["open"] = "o2"
+    next(x for x in report["passed_on"] if "finding" in x)["finding"]["finding"] = "f2"
+    problems = check_assessment(a, report, None, members)
+    assert "passed on: D finding f2 is unknown" in problems
+    assert "open:D:o1: qualifies policy:/nowhere, which is unknown" in problems
+    assert "open:D:o1: continues o2, which D's report does not state" in problems
+
+
 FIXTURES = [
     "pilatesworkout.yogaworkout.loseweight.workoutapps@1.6.4",
     "air.nn.mobile.app.main@3.8.96",
