@@ -233,7 +233,9 @@ def test_ds_findings_and_open_conditions_are_passed_on_and_checked(tmp_path):
             "of": {"report": a.declaration.sha256, "open": "o1"},
         }
     ]
-    analysis = {c["id"]: c.get("version") for c in report["report"]["components"] if c["role"] == "declaration_analysis"}
+    analysis = {
+        c["id"]: c.get("version") for c in report["report"]["components"] if c["role"] == "declaration_analysis"
+    }
     assert analysis == {"urda": "2.0.0", "policy:module:units:model": "abc"}
     assert check_assessment(a, report, report, members) == []
     # what D's report does not state is a problem
