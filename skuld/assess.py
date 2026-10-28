@@ -35,7 +35,6 @@ from skuld import (
     assessment,
     combine,
     concerns,
-    config,
     correspondence,
     expectation,
     experiments,
@@ -149,8 +148,7 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
         ]
         for s in statuses
     }
-    recall = set(config.load()["assessment"].get("recall_established") or ())
-    stated, covered = concerns.information_not_given(a.frame, statuses, evidence_of, recall)
+    stated, covered = concerns.information_not_given(a.frame, statuses, evidence_of)
     number = combine.Numbers()
     stage1, components = _expectation(a, built, item, registry)
     hypotheses = combine.hypotheses(stage1, number)
@@ -196,7 +194,7 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
                 *built.components,
                 correspondence.COMPONENT,
                 relations.COMPONENT,
-                {**concerns.COMPONENT, "recall_established": sorted(recall)},
+                concerns.COMPONENT,
                 *_declaration_analysis(a),
                 {"role": "frame", "id": a.frame.id, "version": a.frame.version, "sha256": a.frame.digest()},
                 {"role": "vocabulary", "id": DATA, "version": data.version},
@@ -422,7 +420,12 @@ def _reasoning_tier(
     stated, covered = concerns.not_specific(a.frame, said, specific, items, applicability)
     if a.declaration is not None and built.comparability.get("comparable") is not False:
         more, cover = concerns.purpose_limitation(
-            a.frame, judge.limitation(built, said, hypotheses), compatible, items, applicability
+            a.frame,
+            judge.limitation(built, said, hypotheses),
+            compatible,
+            items,
+            applicability,
+            {d.id: d.uncertainty for d in built.declarations},
         )
         stated += more
         covered += cover

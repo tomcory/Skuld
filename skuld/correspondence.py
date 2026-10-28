@@ -30,9 +30,10 @@ from ratatoskr import claims as claim_views
 from ratatoskr.registry import Registry
 from ratatoskr.vocabularies import Vocabulary
 
-from skuld.assessment import Declaration, Practice, Subjects
+from skuld.assessment import Declaration, Practice, Subjects, exhaustive
+from skuld.uncertainty import highest, joined
 
-VERSION = "2"
+VERSION = "3"
 COMPONENT = {"role": "method", "id": "skuld.correspondence", "version": VERSION}
 
 EXACTLY, HIERARCHICALLY, PARTIALLY = "corresponds_exactly", "corresponds_hierarchically", "corresponds_partially"
@@ -73,6 +74,7 @@ class Relation:
     condition: str | None = None
     silence: list[str] = field(default_factory=list)
     reason: str | None = None  # where no claim it relates explains its outcome
+    uncertainty: dict | None = None  # t, s, n: of the claims it relates, or of the claim and the silence it reads
 
 
 def _data_outcome(kind: str) -> str | None:
@@ -256,12 +258,44 @@ def relate(
             aspect="data" if d.type == "declares_collection" else "recipient",
             silence=silence or ["O: unknown"],
         )
+    _uncertainty(relations, subjects)
     return relations
 
 
 def covered(purpose: str, specified: list[str], vocabulary: Vocabulary) -> list[str]:
     """The specified purposes that cover a purpose: the same node, or one above it (purpose limitation, by rule)."""
     return [s for s in specified if align.purposes(purpose, s, vocabulary).kind in (align.EQUAL, align.NARROWER)]
+
+
+#: The predicate a relation's aspect reads of D: whether the data is collected, whether it goes to the recipient
+PREDICATE = {"data": "collection", "recipient": "sharing"}
+
+
+def _uncertainty(relations: list[Relation], subjects) -> None:
+    """The uncertainty of each O–D relation that relates claims: per factor the highest of the practice's and the D
+    claims' it names (D's read leniently); where it reads D's silence, U_s at least moderate unless every silent channel
+    is exhaustive for the aspect's predicate (assessment.EXHAUSTIVE). A relation that relates nothing (not comparable,
+    insufficient evidence) has none."""
+    practices = {p.id: p for p in subjects.practices}
+    declared = {d.claim["claim"]: d for d in subjects.declarations}
+    by_id = {d.id: d for d in subjects.declarations}
+    for r in relations:
+        if r.outcome == DECLARED_ONLY and r.subject in by_id:
+            # O's silence about a declared practice holds relative to what the exploration reached
+            u = by_id[r.subject].uncertainty
+            r.uncertainty = {**u, "s": highest(u["s"], "moderate")}
+            continue
+        p = practices.get(r.subject)
+        if p is None or not p.uncertainty:
+            continue
+        if r.to:
+            r.uncertainty = joined(
+                p.uncertainty, *(declared[t["claim"]].uncertainty for t in r.to if t["claim"] in declared)
+            )
+        elif r.outcome == OBSERVED_ONLY:
+            silent = [c for line in r.silence for c in line.removeprefix("D: ").split(", ")]
+            closed = silent and all(exhaustive(c, PREDICATE[r.aspect]) for c in silent)
+            r.uncertainty = {**p.uncertainty, "s": highest(p.uncertainty["s"], "low" if closed else "moderate")}
 
 
 def number(relations: list[Relation]) -> None:

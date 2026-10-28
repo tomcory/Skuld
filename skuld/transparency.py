@@ -10,9 +10,11 @@ The annotations are views of D's derived documents (ratatoskr.tilt.annotations; 
 analysed document is accessible; the applicability is decided from O's and D's claims together (frame.py). The status
 is one of the collection, not of a document: information may be layered.
 
-As D's rules do, E reads the silence of a complete document only: where a document Sága acquired incomplete is silent,
-the information may be in the part it did not acquire, so the status is missing_if, under the condition
-`complete:<channel>` that the missing part does not give it (INCOMPLETE).
+As D's rules do, E reads the silence of a complete, analysed document only: where a document Sága acquired incomplete
+is silent, the information may be in the part it did not acquire, and where a document was acquired but D could not
+analyse it, or its acquisition failed, the information may be in it; the status is then missing_if, under the condition
+`complete:<channel>` or `analysed:<channel>` that it does not give it (INCOMPLETE, UNREAD). A channel without a
+document (absent) is no such condition: the provider gives none.
 """
 
 from dataclasses import dataclass, field
@@ -25,6 +27,10 @@ from skuld.frame import Decision
 ADDRESSED, NOT_APPLICABLE, MISSING, MISSING_IF = "addressed", "not_applicable", "missing", "missing_if"
 #: The prefix of the condition that an incomplete document's missing part does not give the information
 INCOMPLETE = "complete:"
+#: The prefix of the condition that a document D could not analyse, or failed to acquire, does not give the information
+UNREAD = "analysed:"
+#: The channel statuses of a document that exists but was not read
+NOT_READ = ("not_analysable", "failed")
 
 
 @dataclass
@@ -45,6 +51,8 @@ def statuses(frame: Frame, subjects: Subjects, decided: dict[str, Decision], d_s
     labelled: dict[str, list[dict]] = {}
     read, incomplete = [], []
     for document in subjects.collection["documents"]:
+        if document["status"] in NOT_READ:
+            incomplete.append(UNREAD + document["channel"])
         if document["status"] != "analysed":
             continue
         read.append(document["channel"])

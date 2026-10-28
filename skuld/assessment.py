@@ -6,10 +6,15 @@ The assessment of one application version: its subjects, built from O's and D's 
                   episodes and contexts it occurred in, the claims it rests on by reference (report digest and claim
                   id), the recipient's party relation (parties.py) and its configuration u0 (configuration.py).
                   Frequency and granularity are qualifiers of a practice, not practices of their own.
-    declarations  D's claims of practice and of justification, by reference (report digest and JSON pointer, since
-                  D's claims carry no id), with what the alignment reads of them. Claims of justification are named
-                  inputs of the assessment stage only; the expectation stage reads no declaration.
-    collection    D's documents with their accessibility and requirement annotations; None without D.
+    declarations  D's claims of practice and of justification, by reference (report digest and claim id), with what
+                  the alignment reads of them. Claims of justification are named inputs of the assessment stage only;
+                  the expectation stage reads no declaration.
+    collection    D's documents with their requirement annotations and completeness; None without D.
+
+A practice's uncertainty is the least of its O claims' per factor (they corroborate one another); a declaration's is
+its D claim's, its semantic part read leniently (D_SEMANTIC_AT_MOST): D rates a value its model placed high while its
+analysis is unmeasured (EV-D1), and E reads that as moderate until it is measured. Which of D's channels is exhaustive
+for a predicate, so that its silence is closed, is D's (EXHAUSTIVE).
 
 The assessment records whether O's and D's scopes are comparable (Q8): O's installed version and D's store version
 equal, or a pair the assessment states compatible. The relations read it: where they are not, D's claims are passed
@@ -28,6 +33,7 @@ from skuld import parties
 from skuld.configuration import baseline, recipient
 from skuld.inputs import Assessment, ReportRef
 from skuld.observe import claims as o_claims
+from skuld.uncertainty import FACTORS, ORDER, highest
 
 VERSION = "1"
 COMPONENT = {"role": "method", "id": "skuld.assessment", "version": VERSION}
@@ -48,6 +54,7 @@ class Practice:
     recipient_categories: list[str] = field(default_factory=list)
     jurisdictions: list[str] = field(default_factory=list)  # the recipient's, where O states one
     u0: dict = field(default_factory=dict)
+    uncertainty: dict = field(default_factory=dict)  # t, s, n: the least of its O claims' per factor
 
 
 @dataclass
@@ -60,6 +67,7 @@ class Declaration:
     value: object
     polarity: str
     claim: dict
+    uncertainty: dict = field(default_factory=dict)  # t, s, n of the D claim, U_s read leniently
 
 
 @dataclass
@@ -97,6 +105,40 @@ def _key(claim: dict) -> tuple[str, str, str | None, str]:
     return claim["type"], claim["datum"]["node"], target, actor(claim)
 
 
+#: D's channel types exhaustive for a predicate (D's report, tab:channels): only the Data safety section, for the
+#: collection and the sharing of each of its data types. No channel is exhaustive for a transparency requirement.
+EXHAUSTIVE = {"data_safety": frozenset({"collection", "sharing"})}
+#: The highest semantic uncertainty E reads of a D claim (the lenient reading of an unmeasured model's placement)
+D_SEMANTIC_AT_MOST = "moderate"
+
+
+def exhaustive(channel: str, predicate: str) -> bool:
+    """Whether D's channel is exhaustive for the predicate, so that the silence of its complete document is closed."""
+    return predicate in EXHAUSTIVE.get(channel, ())
+
+
+def _tsn(claim: dict) -> dict:
+    u = claim.get("uncertainty") or {}
+    return {f: u.get(f, "not_applicable") for f in FACTORS}
+
+
+def _least(uncertainties: list[dict]) -> dict:
+    """Per factor, the least level among corroborating claims where the factor applies to any (framework)."""
+    out = {}
+    for f in FACTORS:
+        applying = [u[f] for u in uncertainties if u[f] != "not_applicable"]
+        out[f] = min(applying, key=ORDER.index) if applying else "not_applicable"
+    return out
+
+
+def declared_uncertainty(claim: dict) -> dict:
+    """A D claim's uncertainty as E reads it: its semantic part at most D_SEMANTIC_AT_MOST."""
+    u = _tsn(claim)
+    if u["s"] != "not_applicable" and highest(u["s"], D_SEMANTIC_AT_MOST) == u["s"]:
+        u["s"] = D_SEMANTIC_AT_MOST
+    return u
+
+
 def _practice_id(key: tuple) -> str:
     return "P-" + hashlib.sha256(json.dumps(key).encode()).hexdigest()[:10]
 
@@ -131,6 +173,7 @@ def practices(reports: list[ReportRef], registry: Registry | None, provider: par
             claims_of.setdefault(p.id, []).append(claim)
     for p in grouped.values():
         p.u0 = baseline([{"claims": claims_of[p.id]}])
+        p.uncertainty = _least([_tsn(c) for c in claims_of[p.id]])
         if p.recipient and p.recipient != "?":
             p.party = asdict(parties.relate(p.recipient, registry, provider))
     return sorted(grouped.values(), key=lambda p: (p.claim_type, p.data, p.recipient or "", p.actor))
@@ -158,6 +201,7 @@ def declarations(report: ReportRef | None) -> list[Declaration]:
                 value,
                 claim.get("polarity", "+"),
                 _ref("D", report, claim["id"]),
+                declared_uncertainty(claim),
             )
         )
     return out
@@ -172,6 +216,8 @@ def collection(report: ReportRef | None) -> dict | None:
     documents = []
     for ch in report.load()["channels"]:
         entry = {"channel": ch["channel"], "document": ch.get("document"), "status": ch["status"]}
+        if ch.get("reason"):
+            entry["reason"] = ch["reason"]
         if ch["status"] == "analysed":
             entry["complete"] = ch.get("complete") is not False
             if not entry["complete"]:

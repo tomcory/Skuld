@@ -43,10 +43,7 @@
       2,
       3
     ],
-    "think": null,
-    "recall_established": [
-      "data_safety"
-    ]
+    "think": null
   },
   "calibration": {
     "per_stratum": 10,

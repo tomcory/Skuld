@@ -79,6 +79,23 @@ def test_an_observation_corresponds_to_a_declaration_above_it(tmp_path):
     assert (recipient.outcome, recipient.alignment) == ("corresponds_hierarchically", "by category (analytics)")
 
 
+def test_an_o_d_relation_takes_the_uncertainty_of_its_claims_and_ds_leniently(tmp_path):
+    o = claim("c1", "personal-info.name", "adco")
+    o["uncertainty"] = {"f": "low", "t": "moderate", "s": "low", "n": "not_applicable"}
+    d = d_claim("declares_collection", "personal-info.name")
+    d["uncertainty"] = {"f": "low", "t": "not_applicable", "s": "high", "n": "not_applicable"}  # a model's placement
+    built, rel = relate(tmp_path, [o], [d])
+    data = [r for r in by_aspect(rel, "data") if r.outcome == correspondence.EXACTLY]
+    # the highest of both per factor, D's semantic uncertainty read as at most moderate until D's model is measured
+    assert data and data[0].uncertainty == {"t": "moderate", "s": "moderate", "n": "not_applicable"}
+
+
+def test_a_silence_is_closed_only_on_a_channel_exhaustive_for_the_predicate():
+    assert assessment.exhaustive("data_safety", "collection") and assessment.exhaustive("data_safety", "sharing")
+    assert not assessment.exhaustive("policy", "collection")
+    assert not assessment.exhaustive("data_safety", "information:right_to_restrict")
+
+
 def test_a_named_entity_corresponds_exactly_and_a_root_category_only_partially(tmp_path):
     named = d_claim(
         "declares_recipient", "personal-info.name", value={"name": "AdCo", "category": "advertising", "entity": "adco"}
@@ -158,20 +175,26 @@ def test_transparency_reads_ds_annotations_on_analysed_documents_only(tmp_path):
         by["controller_name"].status == "addressed"
         and by["controller_name"].addressed_by[0]["claim"] == "policy:/controller/name"
     )
-    assert by["right_to_restrict"].status == "missing"  # only a document D could not analyse says it
-    assert (by["dpo_contact"].status, by["dpo_contact"].conditions) == ("missing_if", ["dpo_designated"])
+    # only a document D could not analyse says it, so the information may be there: missing only under that condition
+    assert (by["right_to_restrict"].status, by["right_to_restrict"].conditions) == ("missing_if", ["analysed:in_app"])
+    assert by["dpo_contact"].conditions == ["dpo_designated", "analysed:in_app"]
     stated, covered = concerns.information_not_given(f, list(by.values()), {})
     k = {c.requirement: c for c in stated}
-    assert k["right_to_restrict"].status == "supported" and not k["right_to_restrict"].condition
-    assert k["dpo_contact"].condition == ["dpo_designated"]
+    assert k["right_to_restrict"].status == "supported" and k["right_to_restrict"].condition == ["analysed:in_app"]
     assert ("controller_name", "collection", True) in {(c.requirement, c.subject, c.applies) for c in covered}
     assert not any(c.requirement == "controller_name" for c in stated)
-    # D's silence: the policy's analysis has no established recall, so "not found" is not certain
+    # D's silence: no channel is exhaustive for a transparency requirement, so "not found" is never certain
     assert by["right_to_restrict"].silent == ["policy"]
     assert k["right_to_restrict"].uncertainty["s"] == "moderate"
-    assert any("no established recall" in x for x in k["right_to_restrict"].silence)
-    stated, _ = concerns.information_not_given(f, list(by.values()), {}, recall={"policy"})
-    assert {c.requirement: c for c in stated}["right_to_restrict"].uncertainty["s"] == "low"
+    assert any("not exhaustive" in x for x in k["right_to_restrict"].silence)
+    # without the notice at all (absent), the provider gives none: missing, under no condition
+    channels[1] = {"channel": "in_app", "status": "absent"}
+    (tmp_path / "absent").mkdir()
+    a = workspace(tmp_path / "absent", [o_report([claim("c1", "personal-info.name", "adco")])], d_report([], channels))
+    built = assessment.build(a, REGISTRY)
+    decided = frame.decisions(f, frame.evidence(built, [r.load() for r in a.observations], a.declaration.load()))
+    by = {s.requirement: s for s in transparency.statuses(f, built, decided, a.declaration.sha256)}
+    assert (by["right_to_restrict"].status, by["right_to_restrict"].conditions) == ("missing", [])
 
 
 def test_an_incomplete_documents_silence_is_missing_only_under_a_condition(tmp_path):

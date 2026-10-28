@@ -3,8 +3,8 @@ E's concerns (E def:concern), by four rules:
 
     (i)   information not given, for the collection and a transparency requirement (rule tier): supported if its
           status is missing, citing what decides that it applies and D's silence on its label; supported under an
-          open condition if missing_if. That no document bears the label is D's analysis not finding it: where a
-          document of a channel whose analysis has no established recall is silent, U_s is moderate
+          open condition if missing_if. That no document bears the label is D's analysis not finding it, and no
+          channel of D is exhaustive for a transparency requirement (assessment.EXHAUSTIVE), so U_s is moderate
     (ii)  not specific, for a declared purpose (reasoning tier): stated where a sample judges it not specific;
           supported if the samples' combined judgement is
     (iii) no specified purpose covers it, for a practice and a supported inferred purpose: stated where no purpose
@@ -30,10 +30,11 @@ from dataclasses import asdict, dataclass, field
 from ratatoskr.frames import Frame
 
 from skuld import combine
-from skuld.transparency import INCOMPLETE, MISSING, MISSING_IF, NOT_APPLICABLE, Status
+from skuld.assessment import exhaustive
+from skuld.transparency import INCOMPLETE, MISSING, MISSING_IF, NOT_APPLICABLE, UNREAD, Status
 from skuld.uncertainty import highest
 
-VERSION = "8"
+VERSION = "9"
 COMPONENT = {"role": "method", "id": "skuld.concerns", "version": VERSION}
 
 #: Of a rule-tier concern of information not given: as certain as D's annotations and O's claims it reads
@@ -80,12 +81,9 @@ def _concern(frame: Frame, requirement: str, **fields) -> Concern:
     return Concern(requirement=r.id, principle=r.principle, provisions=list(r.provisions), **fields)
 
 
-def information_not_given(
-    frame: Frame, statuses: list[Status], evidence_of: dict[str, list[str]], recall: set[str] = frozenset()
-):
+def information_not_given(frame: Frame, statuses: list[Status], evidence_of: dict[str, list[str]]):
     """Concerns (i) and coverage for the collection, from its transparency statuses. `evidence_of` gives, per
-    requirement, the evidence items that decide its applicability; `recall`, the channels of D whose analysis has
-    an established recall."""
+    requirement, the evidence items that decide its applicability."""
     concerns, covered = [], []
     for s in statuses:
         r = frame.requirement(s.requirement)
@@ -93,9 +91,11 @@ def information_not_given(
         if s.status not in (MISSING, MISSING_IF):
             continue
         conditional = s.status == MISSING_IF
-        unproven = [ch for ch in s.silent if ch not in recall]
+        # the silence is closed only on a channel exhaustive for the requirement; D has none for one (D's channel types)
+        open_silence = [ch for ch in s.silent if not exhaustive(ch, f"information:{r.id}")]
+        unread = any(c.startswith((INCOMPLETE, UNREAD)) for c in s.conditions)
         uncertainty = {**BY_RULE, "n": "moderate"} if conditional else dict(BY_RULE)
-        if unproven:
+        if open_silence or unread:
             uncertainty["s"] = "moderate"
         concerns.append(
             _concern(
@@ -110,7 +110,7 @@ def information_not_given(
                 condition=list(s.conditions),
                 supporting=evidence_of.get(r.id, []),
                 silence=[f"D: no accessible document bears the label {r.label}"]
-                + ([f"D: no established recall for {', '.join(unproven)}"] if unproven else []),
+                + ([f"D: not exhaustive for it: {', '.join(open_silence)}"] if open_silence else []),
                 reason=(
                     f"missing if {', '.join(s.conditions)}, which no dimension decides"
                     if conditional
@@ -120,7 +120,8 @@ def information_not_given(
                     "; a silent document was acquired incomplete"
                     if any(c.startswith(INCOMPLETE) for c in s.conditions)
                     else ""
-                ),
+                )
+                + ("; a document could not be analysed" if any(c.startswith(UNREAD) for c in s.conditions) else ""),
             )
         )
     return concerns, covered
@@ -183,9 +184,20 @@ def not_specific(frame: Frame, statements, judgements: list[dict], items, applic
     return concerns, covered
 
 
-def purpose_limitation(frame: Frame, cases, judgements: list[dict], items, applicability: dict):
+def purpose_limitation(
+    frame: Frame, cases, judgements: list[dict], items, applicability: dict, declared: dict[str, dict] | None = None
+):
     """Concerns (iii) and coverage per practice and supported inferred purpose (judge.Limitation), from the
-    compatibility samples' judgements."""
+    compatibility samples' judgements. Both steps rest on D's classification of the specified purposes and their data,
+    so a concern takes the semantic uncertainty `declared` gives each of them (D's, read leniently); one that rests on
+    there being no specified purpose for the data reads the silence of channels exhaustive for no purpose, so U_s is at
+    least moderate."""
+    declared = declared or {}
+
+    def of_d(specified) -> str:
+        levels = [declared[d]["s"] for s in specified for d in s.declarations if d in declared]
+        return highest(*levels) if levels else "not_applicable"
+
     specified_r, compatible_r = frame.requirement("purpose_specified"), frame.requirement("purpose_compatible")
     concerns, covered = [], []
     for case in cases:
@@ -213,7 +225,7 @@ def purpose_limitation(frame: Frame, cases, judgements: list[dict], items, appli
                     **common,
                     tier="rule",
                     status="supported",
-                    uncertainty={**BY_RULE, "s": h["uncertainty"]["s"]},
+                    uncertainty={**BY_RULE, "s": highest(h["uncertainty"]["s"], "moderate")},
                     observability="E2",
                     reason=f"no purpose is specified for {node}'s data",
                 )
@@ -244,7 +256,7 @@ def purpose_limitation(frame: Frame, cases, judgements: list[dict], items, appli
                 status=status,
                 uncertainty={
                     "t": "not_applicable",
-                    "s": highest(h["uncertainty"]["s"], "moderate" if agreed else "high"),
+                    "s": highest(h["uncertainty"]["s"], "moderate" if agreed else "high", of_d(case.relevant)),
                     "n": "moderate",
                 },
                 observability="E2",

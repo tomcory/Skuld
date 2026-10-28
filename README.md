@@ -94,9 +94,12 @@ generator at temperature 0.2 from seed 1, both stages at 0.4 with a seed per sam
 tokens; the stages' seeds), and the
 client (Ollama, a 30-minute timeout, no response cache, since the samples are Skuld's record of every answer). The
 server's address is read from `OLLAMA_BASE_URL`. The generator and both stages ask through `ask.py`. The assessment's
-`recall_established` names D's channels whose analysis has an established recall (the Data safety section): where a
-document of any other channel is silent on a requirement, the concern that its information is not given has moderate
-semantic uncertainty, since its silence may be the analysis missing it.
+D's silence is read as D defines it: a silence is closed only on a channel exhaustive for the predicate (its rules
+oblige every case, its analysis has established recall), which for D is the Data safety section, for the collection and
+sharing of each data type (`assessment.EXHAUSTIVE`). So a concern that information is not given has moderate semantic
+uncertainty, and a document D could not analyse, or acquired incomplete, makes it hold under an open condition. D's
+semantic uncertainty enters the purpose-limitation concerns and the O–D relations, read leniently: a model's placement,
+which D rates high while unmeasured, counts as moderate (`assessment.D_SEMANTIC_AT_MOST`).
 
 An assessment workspace (`assessment.yaml`, written by `skuld describe`) names everything an assessment of the version
 reads by digest, the exploration by the records its screens are read from (run.json, events.jsonl, graph.json);
