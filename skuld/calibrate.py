@@ -132,6 +132,7 @@ def units(root: Path, report: dict, registry=None) -> list[dict]:
         for c in report["claims"]
         if c["type"] == "purpose" and c["stage"] == "expectation" and c["status"] == "supported"
     ]
+    read = _stage_one(root)
     for principle, step in PRACTICE_STEPS.items():
         requirements = [
             r.id for r in frame.requirements.values() if r.principle == principle and r.subject == "practice"
@@ -155,8 +156,25 @@ def units(root: Path, report: dict, registry=None) -> list[dict]:
                     k: _uncited(h["purpose"].get(k)) for k in ("action", "object", "beneficiary", "context", "outcome")
                 }
                 | {"node": h["purpose"].get("node")},
+                "context": read.get(h["subject"], {"screens": [], "passages": []}),
             }
             unit(principle, step, h["subject"], h["id"], requirements, "+".join(channels), shown)
+    return out
+
+
+def _stage_one(root: Path) -> dict[str, dict]:
+    """Per practice, what the expectation stage read with it: the screens and corpus passages of every stage-1 context
+    that held the practice, each once, in the order first read."""
+    out: dict[str, dict] = {}
+    for path in sorted(root.glob("expectation/*/s*/context.json")):
+        parts = json.loads(path.read_text(encoding="utf-8"))["parts"]
+        shown = [p for p in parts if p["kind"] in ("screen", "passage")]
+        for practice in (p["id"] for p in parts if p["kind"] == "practice"):
+            entry = out.setdefault(practice, {"screens": [], "passages": []})
+            for part in shown:
+                texts = entry["screens" if part["kind"] == "screen" else "passages"]
+                if part["text"] not in texts:
+                    texts.append(part["text"])
     return out
 
 
@@ -233,6 +251,7 @@ def draw(folder: str | Path, workspaces: list[str | Path], registry_path=None, p
                 "question": u["question"],
                 "subject": u["subject"],
                 **({"purpose": u["purpose"]} if "purpose" in u else {}),
+                **({"context": u["context"]} if "context" in u else {}),
                 "documents": documents[u["assessment"]],
                 "assessment": u["assessment"],
             }

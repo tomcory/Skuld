@@ -46,6 +46,10 @@ def test_a_sample_is_stratified_fixed_and_blind(drawn):
     # every unit of the three kinds, with the collection's documents where D has a report
     assert {i["subject"]["kind"] for i in items} == {"collection", "statement", "practice"}
     assert all((folder / d["file"]).is_file() for i in items for d in i["documents"])
+    # a practice item carries what the expectation stage read with it (screens, passages), never its answer
+    practices = [i for i in items if i["subject"]["kind"] == "practice"]
+    assert practices and all(set(i["context"]) == {"screens", "passages"} for i in practices)
+    assert any(i["context"]["screens"] for i in practices) and any(i["context"]["passages"] for i in practices)
     # a drawn sample is never overwritten
     with pytest.raises(calibrate.CalibrationError):
         calibrate.draw(folder, FIXTURES)

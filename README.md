@@ -213,7 +213,8 @@ it and stated none, `not_applicable`), stratifies them by principle, tier, step 
 expert sees), `key.json` (E's outcomes), `documents/` (the collections, from Sága's), `manifest.json` (the assessments
 by digest, the components the calibration holds for, the strata). The review is blind: the tool in
 `tools/calibration-review/` (Node, after Urda's label review) serves the sample but never the key, and the expert
-decides per item whether the subject fails the requirement (`fails`, `holds`, `unsure`). `skuld calibrate score` gives
+decides per item whether the subject fails the requirement (`fails`, `holds`, `unsure`); for a practice it can show or hide what the expectation stage read with it (the screens
+of its episodes and the documentation passages, not the stage's answer). `skuld calibrate score` gives
 per stratum the precision of the concerns, the misses among the silences and how many concerns E could not establish
 are concerns, with Wilson intervals, and per principle and step the rates weighted by the strata's populations.
 `skuld calibrate check` says whether the calibration holds for other assessments: a changed model, prompt, method,

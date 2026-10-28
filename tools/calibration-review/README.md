@@ -18,7 +18,9 @@ position is kept in `review-position.json`, and `?item=<n>` opens the n-th item.
 Each item is one requirement of the frame for one subject of an application: its collection of documents, a purpose
 statement it declares (highlighted in the policy), or a practice observed in a run with one purpose it serves. The page
 shows the requirement, the question for its step, the subject, and the collection's documents (a document D could not
-analyse is marked). A decision is one of:
+analyse is marked). For a practice it also shows what the expectation stage read with it: the screens of the episodes
+it was observed in and the documentation passages of its components and data, each once, but not the stage's answer;
+the section is shown or hidden with C, and the browser remembers the choice. A decision is one of:
 
 | Decision | Meaning | Key |
 |---|---|---|
