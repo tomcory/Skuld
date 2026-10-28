@@ -285,8 +285,8 @@ there. Earlier copies of the Pilates workspace are in `cases/archive/`.
 | Document | Content |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | What Skuld is after the rewiring, how it uses Loki, how it reads a run folder |
-| [`plan/6_skuld_plan.md`](../plan/6_skuld_plan.md) | Implementation plan of the whole component |
-| [`LOKI_SKULD_REWIRE.md`](../LOKI_SKULD_REWIRE.md) | Why the capture and the instrumentation moved to Loki, and what Skuld is then |
+| [`plan/legacy/6_skuld_plan.md`](../plan/legacy/6_skuld_plan.md) | Implementation plan of the whole component |
+| [`LOKI_SKULD_REWIRE.md`](../plan/archive/LOKI_SKULD_REWIRE.md) | Why the capture and the instrumentation moved to Loki, and what Skuld is then |
 | [`Loki/docs/capture.md`](../Loki/docs/capture.md) | The capture of a run, which Skuld reads |
 | [`Loki/docs/instrumentation.md`](../Loki/docs/instrumentation.md) | The instrumentation of a run, its record and verification, which Skuld reads |
 
