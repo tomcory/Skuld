@@ -17,6 +17,8 @@ is asked here (`skuld expect` and `skuld judge` ask).
     relations       O–E and D–E (relations.py), which concern (iv) cites; pass-through and open conditions
     report          the combined claims (the claims they combine stay in the samples and the case report), the
                     concerns, E's coverage, the gaps someone could act on, the provenance check (provenance.py)
+    qualification   the last stage (skuld.qualify, S-25): cases with their attributes, patterns and qualified
+                    results, next steps, review triggers and the result profile
 
 Ids are `<kind>:<subject>:<n>`: claim, concern, relation, gap; evidence items `item:<n>`, open conditions `open:<n>`.
 """
@@ -41,6 +43,7 @@ from skuld import (
     frame,
     inputs,
     judge,
+    qualify,
     relations,
     select,
     transparency,
@@ -71,7 +74,9 @@ def subjects(root: str | Path, registry_path: str | Path | None = None, write: b
         "applicability": frame.applicability(a.frame, decided),
     }
     if write:
-        (Path(root) / SUBJECTS).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+        (Path(root) / SUBJECTS).write_text(
+            json.dumps(out, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+        )
     return out
 
 
@@ -161,6 +166,12 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
     )
     stated += tier["concerns"] + more
     covered += tier["covered"] + cover
+    # purpose specificity is a requirement of declared purposes: a legal basis is no subject of it (8.6)
+    covered += [
+        concerns.Covered("purpose_specific", d.id, "rule", False)
+        for d in built.declarations
+        if d.kind == "justification" and d.type != "declares_purpose"
+    ]
     concerns.number(stated)
     components += [c for c in tier["components"] if c not in components]
 
@@ -226,7 +237,7 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
             ),
             "exploration": str(a.exploration) if a.exploration else None,
             **({"comparability": built.comparability} if a.declaration else {}),
-            "named": select.named(root),
+            "named": select.named(root) + inputs.version_compatibility(a),
         },
         "sources": _sources(a),
         "subjects": {
@@ -237,13 +248,14 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
                     "data": p.data,
                     "recipient": p.recipient,
                     "actor": p.actor,
+                    "party": p.party,
                     "episodes": p.episodes,
                     "u0": p.u0,
                     "claims": p.claims,
                 }
                 for p in built.practices
             ],
-            "declarations": [{"id": d.id, "claim": d.claim, "kind": d.kind} for d in built.declarations],
+            "declarations": [_declaration(d, tier["statement_of"]) for d in built.declarations],
             "collection": _collection(built, statuses),
         },
         "features": _features(built, o_reports),
@@ -256,15 +268,21 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
         "cases": _cases(a),
         "open": open_,
         "decided": settled,
-        "gaps": _gaps(stated, claims, tested, a, tier["absent"], item),
+        "gaps": _gaps(stated, claims, tested, a, tier["absent"], item, built, hypotheses),
     }
+    report["qualification"] = qualify.qualify(
+        report, {r.id: r.subject for r in a.frame.requirements.values()}, data, registry
+    )
+    report["report"]["components"] += qualify.COMPONENTS
     validate("expectation_assessment", report)
     problems = expectation.independent(root, report) + judge.independent(root, report)
     if problems:
         raise expectation.IndependenceError("; ".join(problems))
     if write:
-        (root / REPORT).write_text(json.dumps(report, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-        (root / MARKDOWN).write_text(markdown(report, built), encoding="utf-8")
+        (root / REPORT).write_text(
+            json.dumps(report, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+        )
+        (root / MARKDOWN).write_text(markdown(report, built), encoding="utf-8", newline="\n")
     return report, stage1 + tier["members"] + premises
 
 
@@ -437,6 +455,7 @@ def _reasoning_tier(
         "members": members,
         "judged": judged,
         "vague": {s.declarations[0]: s.declarations for s in said},
+        "statement_of": {d: s.id for s in said for d in s.declarations},
         "concerns": stated,
         "covered": covered,
         "components": list(components.values()),
@@ -462,11 +481,34 @@ NEXT = {
 }
 
 
+def _declaration(d, statement_of: dict[str, str]) -> dict:
+    """A declaration as the report states it: by reference, with what qualification's case attributes read (S-24), and
+    for a declared purpose the statement it is said in (8.8)."""
+    out = {"id": d.id, "claim": d.claim, "kind": d.kind, "type": d.type, "channel": d.channel, "polarity": d.polarity}
+    if d.id in statement_of:
+        out["statement"] = statement_of[d.id]
+    if d.data:
+        out["data"] = d.data
+    if d.type == "declares_recipient" and d.value is not None:
+        out["recipient"] = d.value
+    elif d.kind == "justification" and isinstance(d.value, str | int | float):
+        out["value"] = d.value
+    return out
+
+
 def _gaps(
-    stated: list, claims: list[dict], tested: list[dict], a: inputs.Assessment, absent: list[str], item: Evidence
+    stated: list,
+    claims: list[dict],
+    tested: list[dict],
+    a: inputs.Assessment,
+    absent: list[str],
+    item: Evidence,
+    built=None,
+    hypotheses: list[dict] = (),
 ) -> list[dict]:
     """The gaps someone could act on: the conditions of concerns whose applicability is unknown; the premises of
-    concerns not established; what the experiments could not settle; questions not asked; D's report absent."""
+    concerns not established; what the experiments could not settle; questions not asked; D's report absent; and
+    every practice E established no purpose for, which is therefore assessed for no requirement of practices (S-23)."""
     out: list[dict] = []
     by_id = {c["id"]: c for c in claims}
     n: dict[str, int] = {}
@@ -544,6 +586,7 @@ def _gaps(
                         "requirements_not_reached",
                         f"whether {purpose.id} of case {case.id} achieves {', '.join(unreached)}",
                         f"an oracle that reaches {', '.join(unreached)}, on a path that exercises them",
+                        feature=case.feature.id,  # what a goal-directed exploration would reach (L-10)
                     )
         for c in measured["cases"]:
             for alt in c["scope"]["search_space"]:
@@ -563,6 +606,19 @@ def _gaps(
             f"kept samples of the {question} question",
             of=judge.REQUIREMENT[question],
         )
+    if built is not None and hypotheses:
+        purposeful = {h["subject"] for h in hypotheses if h["type"] == "purpose" and h["status"] == "supported"}
+        for p in built.practices:
+            if p.id in purposeful:
+                continue
+            what = p.recipient or p.actor
+            gap(
+                p.id,
+                "own_knowledge",
+                f"the purposes of {p.claim_type} {p.data}" + (f" to {p.recipient}" if p.recipient else ""),
+                f"documentation of {what} in the corpus, so that the expectation stage can establish a purpose",
+                of=p.id,
+            )
     if a.declaration is None:
         requirements = [r.id for r in a.frame.requirements.values() if r.subject in ("collection", "declaration")]
         out.append(
@@ -618,12 +674,12 @@ def _sources(a: inputs.Assessment) -> dict:
 
 
 def _collection(built, statuses) -> dict | None:
-    """The collection's documents and transparency statuses; what decided each condition is in subjects.json. Every
-    analysed document is accessible; whether it was acquired complete is D's."""
+    """The collection's documents and transparency statuses; what decided each condition is in subjects.json. Whether
+    a document was acquired complete is D's."""
     if built.collection is None:
         return None
     documents = [
-        {"channel": d["channel"], "document": d["document"], "accessible": True, "complete": d.get("complete", True)}
+        {"channel": d["channel"], "document": d["document"], "complete": d.get("complete", True)}
         for d in built.collection["documents"]
         if d["status"] == "analysed" and d.get("document")
     ]
@@ -756,6 +812,57 @@ def markdown(report: dict, built) -> str:
                 f"| {c['subject']} | {c['purpose']['id']} ({c['purpose']['node']}) of {c['case']} | {claim} | {status} | {spoke} |"
             )
     if report["open"]:
-        lines += ["", "## Open conditions, for the Investigator", ""]
+        lines += ["", "## Open conditions", ""]
         lines += [f"- {o['text']} (qualifies {', '.join(o['qualifies'])})" for o in report["open"]]
+    if report.get("qualification"):
+        lines += _qualification_markdown(report["qualification"], what)
     return "\n".join(lines) + "\n"
+
+
+RESULT_NAMES = {
+    "externally_established_discrepancy": "externally established discrepancy",
+    "externally_supported_concern": "externally supported concern",
+    "insufficient_or_conflicting_evidence": "insufficient or conflicting evidence",
+    "not_externally_assessable": "not externally assessable",
+    "no_concern_detected": "no concern detected within the tested scope",
+    "not_applicable": "not applicable (no requirement applies)",
+}
+
+
+def _qualification_markdown(q: dict, what) -> list[str]:
+    """The qualification for a reader: the profile, the cases, the sections and the next steps."""
+    from skuld.qualify.symbols import SIGN
+
+    p = q["profile"]
+    lines = ["", "## Qualification", "", "Result profile: cases per qualified result, a fact about this application, not a rank.", ""]
+    lines += ["| Result | Practices | Declaration-only | Declared purposes | Collection |", "|---|---|---|---|---|"]
+    for key, name in RESULT_NAMES.items():
+        counts = [p[g].get(key, 0) for g in ("practice", "declaration", "declared_purposes", "collection")]
+        lines.append(f"| {name} | " + " | ".join(str(c) for c in counts) + " |")
+    lines += ["", "### Cases", "", "| Case | O–D, O–E, D–E | Result | Reason | Triggers that weigh |"]
+    lines.append("|---|---|---|---|---|")
+    for c in q["cases"]:
+        pattern = ", ".join(SIGN[c["pattern"][k]["symbol"]] for k in ("O-D", "O-E", "D-E"))
+        weighs = [t["trigger"].replace("_", " ") for t in c["triggers"] if t["weighs"]]
+        subject = what(c["subject"]) if c["kind"] == "practice" else f"{c['subject']} (declared only)"
+        reason = c["reason"].replace("|", "/")
+        lines.append(f"| {subject} | {pattern} | {RESULT_NAMES[c['result']]} | {reason} | {', '.join(weighs) or '–'} |")
+    for name, section in (("Declared purposes", q["declared_purposes"]), ("Collection", q["collection"])):
+        lines += ["", f"### {name}", ""]
+        if not section["assessed"]:
+            lines.append(section.get("reason", "not assessed"))
+            continue
+        counts: dict[str, int] = {}
+        for r in section["rows"]:
+            counts[r["result"]] = counts.get(r["result"], 0) + 1
+        lines.append("; ".join(f"{RESULT_NAMES[k]}: {v}" for k, v in counts.items()) or "none")
+    lines += ["", "### Next steps", "", "| Step | Kind | By | Could change a result | Cases | Decides |"]
+    lines.append("|---|---|---|---|---|---|")
+    for s in q["next_steps"]:
+        kind = s["kind"] + (f" ({s['level'].replace('_', ' ')})" if s.get("level") else "")
+        change = "yes" if s["could_change"] else "no"
+        lines.append(f"| {s['id']} | {kind} | {s['by']} | {change} | {len(s['cases'])} | {s['decides'].replace('|', '/')} |")
+    if q["unplaced"]:
+        lines += ["", "### Unplaced", ""] + [f"- {u['id']}: {u['reason']}" for u in q["unplaced"]]
+    lines += ["", "### Limitations", ""] + [f"- {x}" for x in q["limitations"]]
+    return lines

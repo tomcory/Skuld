@@ -123,7 +123,7 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
     claims of the samples, of the case report's experiments (`members`, from the rebuild) or of the report, every O–E
     outcome is the one its claims give, the independence gates hold, and, given the rebuilt report, it is identical.
     """
-    from skuld import corpus, expectation, judge, relations, select
+    from skuld import corpus, expectation, inputs, judge, relations, select
     from skuld.assess import identity
 
     root = a.root
@@ -149,7 +149,7 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
             case_report = json.loads(path.read_text(encoding="utf-8"))
     if corpus.load(a.corpus).sha256 != a.corpus_sha256:
         problems.append("the corpus does not verify")
-    named = {n["id"]: n["sha256"] for n in select.named(root)}
+    named = {n["id"]: n["sha256"] for n in select.named(root) + inputs.version_compatibility(a)}
     for n in report["inputs"]["named"]:
         if named.get(n["id"]) != n["sha256"]:
             problems.append(f"named input {n['id']}: does not verify")
@@ -272,7 +272,9 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
             f"{x['id']}: relation {i} is unknown" for i in x["by"].get("relations", []) if i not in relation_ids
         ]
     for g in report["gaps"]:
-        if g.get("of") and g["of"] not in known | {"collection"} | requirements:
+        # a gap may concern a result, the collection, a requirement, or a practice E established no purpose for
+        practices = {x["id"] for x in report["subjects"]["practices"]}
+        if g.get("of") and g["of"] not in known | {"collection"} | requirements | practices:
             problems.append(f"{g['id']}: of {g['of']}, which is unknown")
     problems += expectation.independent(root, report) + judge.independent(root, report)
     if rebuilt is not None and identity(rebuilt) != identity(report):

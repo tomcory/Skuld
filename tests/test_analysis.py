@@ -101,7 +101,7 @@ def test_the_verification_is_derived_from_the_items_it_rests_on(tmp_path):
 def test_a_run_of_another_version_is_outside_the_scope(tmp_path):
     root = ws.build(tmp_path, freeze=False)
     record = root / "runs" / "run-01" / "run.json"
-    meta = json.loads(record.read_text())
+    meta = json.loads(record.read_text(encoding="utf-8"))
     meta["app"] = {"version_name": "2.0"}
     record.write_text(json.dumps(meta))
     inputs.freeze(root, ws.AUTHOR, now=datetime.fromisoformat(ws.FIXED))
@@ -112,7 +112,10 @@ def test_a_run_of_another_version_is_outside_the_scope(tmp_path):
 def test_an_alternative_whose_intervention_imposes_nothing_is_not_tested(tmp_path):
     root = ws.build(tmp_path, freeze=False)
     case = root / "cases" / "start.yaml"
-    case.write_text(case.read_text().replace("block_hosts:\n      - tracker.example", "block_hosts: []"))
+    case.write_text(
+        case.read_text(encoding="utf-8").replace("block_hosts:\n      - tracker.example", "block_hosts: []"),
+        encoding="utf-8",
+    )
     inputs.freeze(root, ws.AUTHOR, now=datetime.fromisoformat(ws.FIXED))
     report, made = analysed(root)
     a2 = next(a for a in report["cases"][0]["scope"]["search_space"] if a["id"] == "A2")
@@ -133,11 +136,11 @@ def test_runs_that_do_not_alternate_are_compared_at_a_raised_technical_uncertain
 
 def test_a_hooked_source_the_application_did_not_read_holds_its_effect(tmp_path):
     root = ws.build(tmp_path, freeze=False)
-    for line in (root / "runs.jsonl").read_text().splitlines():
+    for line in (root / "runs.jsonl").read_text(encoding="utf-8").splitlines():
         entry = json.loads(line)
         if entry["condition"] == "A1":
             path = root / "observation" / entry["run"] / "observation_report.json"
-            report = json.loads(path.read_text())
+            report = json.loads(path.read_text(encoding="utf-8"))
             report["evidence"] = []
             report["claims"] = [c for c in report["claims"] if c["type"] != "accesses"]
             for c in report["claims"]:
@@ -173,11 +176,11 @@ def test_a_difference_within_the_tolerance_is_no_difference(tmp_path):
 
 def test_an_unverified_intervention_is_no_evidence(tmp_path):
     root = ws.build(tmp_path, freeze=False)
-    for line in (root / "runs.jsonl").read_text().splitlines():
+    for line in (root / "runs.jsonl").read_text(encoding="utf-8").splitlines():
         entry = json.loads(line)
         if entry["condition"] == "A1":  # the app was handed the device's identifier after all
             path = root / "observation" / entry["run"] / "observation_report.json"
-            report = json.loads(path.read_text())
+            report = json.loads(path.read_text(encoding="utf-8"))
             report["evidence"][0]["proposition"]["value"] = ws.DEVICE_ID
             path.write_text(json.dumps(report))
     inputs.freeze(root, ws.AUTHOR, now=datetime.fromisoformat(ws.FIXED))
@@ -190,7 +193,7 @@ def test_an_unverified_intervention_is_no_evidence(tmp_path):
 def test_a_run_whose_instrumentation_failed_is_no_evidence(tmp_path):
     root = ws.build(tmp_path / "ws", freeze=False)
     record = root / "runs" / "run-02" / "run.json"  # the first run under A1
-    meta = json.loads(record.read_text())
+    meta = json.loads(record.read_text(encoding="utf-8"))
     meta["instrumentation"].update(error="app_start_held", detail="held 1745 ms, over the limit of 1000 ms")
     record.write_text(json.dumps(meta))
     ws.rescope(root)  # O's scope gives the instrumentation's record
@@ -203,7 +206,7 @@ def test_a_run_whose_instrumentation_failed_is_no_evidence(tmp_path):
 
 def test_a_run_the_assessor_excluded_is_listed_with_the_reason_and_judges_nothing(tmp_path):
     root = ws.build(tmp_path / "ws", freeze=False)
-    lines = [json.loads(line) for line in (root / "runs.jsonl").read_text().splitlines()]
+    lines = [json.loads(line) for line in (root / "runs.jsonl").read_text(encoding="utf-8").splitlines()]
     lines[0]["excluded"] = "the app was closed by hand during the run"
     (root / "runs.jsonl").write_text("".join(json.dumps(e) + "\n" for e in lines))
     inputs.freeze(root, ws.AUTHOR, now=datetime.fromisoformat(ws.FIXED))
@@ -226,7 +229,7 @@ def test_runs_made_before_the_inputs_were_fixed_judge_nothing(tmp_path):
 def test_an_input_changed_without_a_record_is_refused_and_a_recorded_change_is_reported(tmp_path):
     root = ws.build(tmp_path)
     oracle = root / "oracles" / "O@1.yaml"
-    oracle.write_text(oracle.read_text() + "# a later note\n")
+    oracle.write_text(oracle.read_text(encoding="utf-8") + "# a later note\n", encoding="utf-8")
     with pytest.raises(AnalysisError, match="changed without a record"):
         analyse(inputs.load(root), make_observations=False)
     with pytest.raises(inputs.InputError):
@@ -240,8 +243,8 @@ def test_an_input_changed_without_a_record_is_refused_and_a_recorded_change_is_r
 def test_the_report_is_written_valid_with_a_rendering(tmp_path):
     root = ws.build(tmp_path)
     json_path, md_path = write(analyse(inputs.load(root), make_observations=False), root)
-    validate("expectation_report", json.loads(json_path.read_text()))
-    assert "| start | P1 | A1 | 3 + 3 | preserves |" in md_path.read_text()
+    validate("expectation_report", json.loads(json_path.read_text(encoding="utf-8")))
+    assert "| start | P1 | A1 | 3 + 3 | preserves |" in md_path.read_text(encoding="utf-8")
 
 
 def _dry_run() -> Path | None:
@@ -272,7 +275,9 @@ def test_the_dry_run_gives_the_worked_examples_experimental_claims():
 def test_a_replay_that_departs_within_the_features_path_is_no_run_of_it(tmp_path):
     root = ws.build(tmp_path / "ws", freeze=False)
     case = root / "cases" / "start.yaml"
-    case.write_text(case.read_text().replace("  path: null", "  path: {run: rec-1, actions: 1}"))
+    case.write_text(
+        case.read_text(encoding="utf-8").replace("  path: null", "  path: {run: rec-1, actions: 1}"), encoding="utf-8"
+    )
     (root / "runs" / "rec-1").mkdir()
     (root / "runs" / "rec-1" / "events.jsonl").write_text(
         json.dumps({"seq": 3, "type": "screen"}) + "\n" + json.dumps({"seq": 5, "type": "action"}) + "\n"
@@ -281,7 +286,9 @@ def test_a_replay_that_departs_within_the_features_path_is_no_run_of_it(tmp_path
     def depart(run_id, source_seq):
         events = root / "runs" / run_id / "events.jsonl"
         events.write_text(
-            events.read_text() + json.dumps({"seq": 99, "type": "divergence", "source_seq": source_seq}) + "\n"
+            events.read_text(encoding="utf-8")
+            + json.dumps({"seq": 99, "type": "divergence", "source_seq": source_seq})
+            + "\n"
         )
 
     depart("run-02", 5)  # within the path

@@ -134,7 +134,7 @@ class Catalogue:
         folder.mkdir(parents=True, exist_ok=True)
         path = folder / f"{data['id']}@{data['version']}.yaml"
         text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True, width=120)
-        path.write_text(text, encoding="utf-8")
+        path.write_text(text, encoding="utf-8", newline="\n")
         family = Family(data["id"], data["version"], data, _digest(text), path)
         self.families.append(family)
         return family

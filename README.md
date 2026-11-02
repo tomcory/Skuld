@@ -4,8 +4,9 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.5.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
-expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), experiments chosen by the assessment
+**State: 0.6.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
+qualified results and next steps; [`QUALIFICATION_PLAN.md`](../QUALIFICATION_PLAN.md)), experiments chosen by the assessment
 (`skuld select`, `propose`, `run`, `analyse`), the provenance check (`skuld check`) and the calibration against an
 expert (`skuld calibrate`). Not built: the reasoning tier's argument form (P10). The model is E's technical report
 ([`ODE/expectation/expectation.tex`](../ODE/expectation/expectation.tex), version 0.6); the plan and its history,
@@ -59,12 +60,12 @@ skuld check cases/app@1.0        # every digest and pointer resolves, the assess
 | Command | Does | Reads | Writes | Model |
 |---|---|---|---|---|
 | `skuld describe <ws>` | describes an assessment workspace | O's and D's reports, the exploration, the frame, the corpus | `assessment.yaml` | no |
-| `skuld expect <ws>` | the expectation stage's samples, without D | O's practices, the exploration's screens, the corpus | `expectation/` | yes |
-| `skuld judge <ws>` | the reasoning tier's samples: specificity, compatibility, minimisation | stage-1 samples, D's declarations, the norms | `assessment/` | yes |
-| `skuld assess <ws>` | the assessment | everything above, kept samples, the case report | `subjects.json`, `assessment.json`, `assessment.md` | no |
+| `skuld expect <ws>` | the expectation stage's samples, without D | O's practices, the exploration's screens, the corpus | `expectation/`, `manifests/expect_<time>.json` | yes |
+| `skuld judge <ws>` | the reasoning tier's samples: specificity, compatibility, minimisation | stage-1 samples, D's declarations, the norms | `assessment/`, `manifests/judge_<time>.json` | yes |
+| `skuld assess <ws>` | the assessment, ending with its qualification | everything above, kept samples, the case report | `subjects.json`, `assessment.json`, `assessment.md` | no |
 | `skuld check <ws>` | the provenance check and the rebuild | the workspace | – (exit status) | no |
-| `skuld select <ws>` | chooses experiments, within the budget | `assessment.json`, `inputs/chosen.yaml` | `inputs/selection.json` | no |
-| `skuld propose <exploration>` | generates cases from Loki's exploration and the catalogue | the exploration, `catalogue/` | a case workspace's inputs, `proposals/` | yes |
+| `skuld select <ws>` | chooses experiments, within the budget, in the order `inputs/chosen.yaml` gives; or lists the candidates | `assessment.json`, `inputs/chosen.yaml` | `inputs/selection.json`; with `--list` JSON lines on stdout | no |
+| `skuld propose <exploration>` | generates cases from Loki's exploration and the catalogue | the exploration, `catalogue/` | a case workspace's inputs, `proposals/`, `manifests/propose_<time>.json` | yes |
 | `skuld freeze <ws>` | fixes inputs written by hand, by digest | `cases/`, `oracles/` | `frozen.json` | no |
 | `skuld change <ws> <input>` | records a change of a fixed input | the input | `frozen.json` | no |
 | `skuld run <ws>` | the replays of each condition, through Loki, in rotated order | the cases, Loki's base configuration | `configs/`, `runs.jsonl`, Loki's run folders | no |
@@ -84,11 +85,11 @@ Options (from `--help`):
 | `expect` | `--model` (default: config.json's), `--api`, `--seeds …`, `--offline` (only the samples kept), `--corpus`, `--registry` |
 | `judge` | `--model` (default: the assessment's, else config.json's), `--api`, `--seeds …`, `--question specificity\|compatibility\|minimisation …`, `--offline`, `--corpus`, `--registry` |
 | `assess`, `check` | `--registry` |
-| `select` | `--replace` (replace a fixed selection, keeping it) |
+| `select` | `--replace` (replace a fixed selection, keeping it), `--extend` (add to a fixed selection, keeping its choices), `--budget-seconds` (over config.json's), `--list` (the candidates as JSON lines: device time, eligible, could change; writes nothing) |
 | `propose` | `--pilot <pilot>` or `--workspace <folder>`, `--catalogue`, `--model`, `--api`, `--offline`, `--selection <selection.json>`, `--registry` |
 | `freeze` | `--author` (required), `--model` (the author is a model), `--prompt` |
 | `change` | `--reason` (required) |
-| `run` | `--recorded <Loki run>`, `--config <Loki configuration>`, `--device <adb serial>` (all required), `--conditions …`, `--repeat` (3), `--loki` (the sibling Loki), `--qualify` (one baseline replay first) |
+| `run` | `--recorded <Loki run>`, `--config <Loki configuration>`, `--device <adb serial>` (all required), `--conditions …` (default `all`: baseline and every alternative of the workspace's cases), `--repeat` (3), `--loki` (the sibling Loki), `--qualify` (one baseline replay first), `--json` (one JSON line per run) |
 | `analyse` | `--offline` (existing observation reports only) |
 | `calibrate` | `--per-stratum`, `--seed` (default: config.json's), `--registry` |
 | `corpus` | `--corpus` (default: Skuld's) |
@@ -123,7 +124,8 @@ the case study's are in `cases/` (local data, ignored by Git):
 
 ```text
 <workspace>/
-  assessment.yaml                  O's reports, D's report, the exploration, the frame, the corpus, each by digest
+  assessment.yaml                  O's reports, D's report, the exploration, the frame, the corpus, each by digest;
+                                   optionally compatible_versions (written by hand, see below)
   subjects.json                    practices, declarations, the collection, comparability, parties, the frame's conditions
   expectation/<batch>/s<seed>/     a stage-1 sample: record, context, prompt, answer (a2/: asked again with the refusal)
   assessment/<question>/<subject>/s<seed>/   a stage-2 sample: specificity, compatibility, minimisation
@@ -140,6 +142,18 @@ the case study's are in `cases/` (local data, ignored by Git):
   observation/<run>/               Verðandi's report of each run
   report.json, report.md           the case report (expectation_report)
   superseded/<date>/               samples a re-ask replaced
+```
+
+O's and D's claims are related only where O's installed version equals D's store version. Where they differ and the
+author judges them comparable, `assessment.yaml` states it, and the statement is a named input of the assessment
+(`version_compatibility`), checked by `skuld check`:
+
+```yaml
+compatible_versions:
+- versions: ['3.8.96', '3.8.100']
+  reason: why D of the one version speaks for the other
+  author: {kind: person, id: <who>}
+  fixed: '2026-10-31T21:15:00+00:00'
 ```
 
 Beside the workspaces: `corpus/` (passages of documentation, `corpus/norms/` the norms, each verified by a person),
@@ -169,7 +183,7 @@ case workspace (`SKULD_DRY_RUN`, or the Pilates fixture). Earlier copies of the 
 | [`tools/calibration-review/README.md`](tools/calibration-review/README.md) | The expert's blind review of a calibration sample |
 | [`ODE/expectation/expectation.tex`](../ODE/expectation/expectation.tex) | The model: E's technical report |
 | [`SKULD_REDESIGN_PLAN.md`](../SKULD_REDESIGN_PLAN.md) | The plan, its reviews and measurements, what is done and open |
-| [`Loki/docs/capture.md`](../Loki/docs/capture.md), [`Loki/docs/instrumentation.md`](../Loki/docs/instrumentation.md) | The capture and instrumentation of a run, which Skuld reads |
+| [`Loki/docs/architecture.md`](../Loki/docs/architecture.md#capture) (Capture, Instrumentation) | The capture and instrumentation of a run, which Skuld reads |
 | [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) | The standard these documents follow |
 
 ## License

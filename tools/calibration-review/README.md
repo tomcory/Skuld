@@ -20,7 +20,17 @@ statement it declares (highlighted in the policy), or a practice observed in a r
 shows the requirement, the question for its step, the subject, and the collection's documents (a document D could not
 analyse is marked). For a practice it also shows what the expectation stage read with it: the screens of the episodes
 it was observed in and the documentation passages of its components and data, each once, but not the stage's answer;
-the section is shown or hidden with C, and the browser remembers the choice. A decision is one of:
+the section is shown or hidden with C, and the browser remembers the choice.
+
+Where the sample folder has a `prior-review.json`, each item also shows its **prior review**: another reviewer's
+decision and note, with who made it and when; it is never E's outcome, which stays in `key.json`. P shows or hides
+it, remembered like C. The scores read `reviews.json` only. The file's form:
+
+```json
+{"reviewer": "…", "reviewed": "2026-10-29", "items": {"u001": {"decision": "holds", "note": "…"}}}
+```
+
+A decision is one of:
 
 | Decision | Meaning | Key |
 |---|---|---|

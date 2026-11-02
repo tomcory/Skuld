@@ -33,7 +33,7 @@ from ratatoskr.vocabularies import Vocabulary
 from skuld.assessment import Declaration, Practice, Subjects, exhaustive
 from skuld.uncertainty import highest, joined
 
-VERSION = "3"
+VERSION = "4"
 COMPONENT = {"role": "method", "id": "skuld.correspondence", "version": VERSION}
 
 EXACTLY, HIERARCHICALLY, PARTIALLY = "corresponds_exactly", "corresponds_hierarchically", "corresponds_partially"
@@ -71,7 +71,11 @@ class Relation:
     subject: str | None = None  # the practice or declaration it is about
     aspect: str | None = None  # data or recipient
     alignment: str | None = None
+    partial: str | None = None  # for corresponds_partially: broader, related or root_category (S-17)
     condition: str | None = None
+    condition_kind: str | None = None  # fact or source (S-21): source where a mismatch reads D's silence and a
+    # channel of D's that declares practices was not analysed (`analysed:<channel>, ...`, 8.9)
+    condition_open: str | None = None  # the open condition that states it
     silence: list[str] = field(default_factory=list)
     reason: str | None = None  # where no claim it relates explains its outcome
     uncertainty: dict | None = None  # t, s, n: of the claims it relates, or of the claim and the silence it reads
@@ -84,6 +88,24 @@ def _data_outcome(kind: str) -> str | None:
         align.BROADER: PARTIALLY,
         align.RELATED: PARTIALLY,
     }.get(kind)
+
+
+def _partial(outcome: str, how: str | None) -> str | None:
+    """Which partial alignment a corresponds_partially is: O's node above the declared ones, beside them, or a
+    recipient declared only by the root category; qualification reads them as ?, ≠ and ≈."""
+    if outcome != PARTIALLY:
+        return None
+    if how == align.BROADER:
+        return "broader"
+    if how == align.RELATED:
+        return "related"
+    if how == ROOT_CATEGORY:
+        return "root_category"
+    raise ValueError(f"a partial correspondence aligned by {how!r}")
+
+
+#: How a recipient declared only by the root category of the recipient types aligns
+ROOT_CATEGORY = "by the root category only"
 
 
 def _recipient_outcome(practice: Practice, value: dict, registry: Registry | None, types: Vocabulary) -> tuple | None:
@@ -102,7 +124,7 @@ def _recipient_outcome(practice: Practice, value: dict, registry: Registry | Non
     category = value.get("category") or next(iter(value.get("categories") or ()), None)
     if category:
         if category == types.root:
-            return PARTIALLY, "by the root category only"  # 'recipients' says only that someone receives
+            return PARTIALLY, ROOT_CATEGORY  # 'recipients' says only that someone receives
         r = align.recipient_category(entity, category, registry, types)
         if r.kind in (align.EQUAL, align.NARROWER):
             return HIERARCHICALLY, f"by category ({category})"
@@ -146,7 +168,15 @@ def relate(
     analysed = {d["channel"] for d in subjects.collection["documents"] if d["status"] == "analysed"} & set(
         PRACTICE_CHANNELS
     )
+    # a mismatch that reads D's silence holds only if D's unread channels say no more (8.9): a source condition
+    unread = sorted(
+        {d["channel"] for d in subjects.collection["documents"] if d["status"] != "analysed"} & set(PRACTICE_CHANNELS)
+    )
+    silent_if = {"condition": ", ".join(f"analysed:{c}" for c in unread), "condition_kind": "source"} if unread else {}
     comparable = subjects.comparability.get("comparable") is not False
+    why_not = "O's and D's scopes are not comparable" + (
+        ": " + "; ".join(subjects.comparability.get("reasons") or []) if subjects.comparability.get("reasons") else ""
+    )
     practice_declarations = [d for d in subjects.declarations if d.kind == "practice"]
     collection = [d for d in practice_declarations if d.type == "declares_collection"]
     recipients = [d for d in practice_declarations if d.type == "declares_recipient"]
@@ -165,7 +195,7 @@ def relate(
             aspects.append(("recipient", recipients))
         for aspect, declarations in aspects:
             if not comparable:
-                add(outcome=NOT_COMPARABLE, of=of, subject=p.id, aspect=aspect)
+                add(outcome=NOT_COMPARABLE, of=of, subject=p.id, aspect=aspect, reason=why_not)
                 continue
             if aspect == "recipient" and (p.recipient in (None, "?") or (p.party or {}).get("relation") == "?"):
                 add(
@@ -201,13 +231,15 @@ def relate(
                     found.append((ORDER.index(outcome), outcome, how, d))
             for d in contradicting:
                 matched.add(d.id)
+                condition = _condition(d, qualifiers[d.claim["claim"]], aspect, definitions)
                 add(
                     outcome=CONTRADICTS,
                     of=of,
                     to=[d.claim],
                     subject=p.id,
                     aspect=aspect,
-                    condition=_condition(d, qualifiers[d.claim["claim"]], aspect, definitions),
+                    condition=condition,
+                    condition_kind="fact" if condition else None,
                 )
             if found:
                 found.sort(key=lambda f: f[0])
@@ -221,6 +253,8 @@ def relate(
                     subject=p.id,
                     aspect=aspect,
                     alignment=chosen[0][2],
+                    partial=_partial(chosen[0][1], chosen[0][2]),
+                    **(silent_if if _partial(chosen[0][1], chosen[0][2]) == "related" else {}),
                 )
             elif not contradicting:
                 if analysed:
@@ -230,6 +264,7 @@ def relate(
                         subject=p.id,
                         aspect=aspect,
                         silence=[f"D: {', '.join(sorted(analysed))}"],
+                        **silent_if,
                     )
                 else:
                     add(
@@ -244,7 +279,7 @@ def relate(
         if d.id in matched or d.polarity != "+" or d.type not in ("declares_collection", "declares_recipient"):
             continue
         if not comparable:
-            add(outcome=NOT_COMPARABLE, of=d.claim, subject=d.id)
+            add(outcome=NOT_COMPARABLE, of=d.claim, subject=d.id, reason=why_not)
             continue
         silence = [
             f"O {s['claim_type']} {s['node']}: {s['status']}"
@@ -274,7 +309,7 @@ PREDICATE = {"data": "collection", "recipient": "sharing"}
 def _uncertainty(relations: list[Relation], subjects) -> None:
     """The uncertainty of each O–D relation that relates claims: per factor the highest of the practice's and the D
     claims' it names (D's read leniently); where it reads D's silence, U_s at least moderate unless every silent channel
-    is exhaustive for the aspect's predicate (assessment.EXHAUSTIVE). A relation that relates nothing (not comparable,
+    is exhaustive for the aspect's predicate (ratatoskr.channels). A relation that relates nothing (not comparable,
     insufficient evidence) has none."""
     practices = {p.id: p for p in subjects.practices}
     declared = {d.claim["claim"]: d for d in subjects.declarations}

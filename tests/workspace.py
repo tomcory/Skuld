@@ -201,9 +201,11 @@ def run_folder(
 
 def scope(folder: Path) -> dict:
     """O's scope of a run as Verðandi gives it: Loki's instrumentation and the capture's connections."""
-    meta = json.loads((folder / "run.json").read_text())
+    meta = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     export = folder / meta["capture"]["export"]
-    connections = [json.loads(line) for line in (export / "connections.jsonl").read_text().splitlines() if line]
+    connections = [
+        json.loads(line) for line in (export / "connections.jsonl").read_text(encoding="utf-8").splitlines() if line
+    ]
     hosts: dict = {}
     for c in connections:
         if host := c.get("host") or c.get("sni"):
@@ -248,7 +250,7 @@ def rescope(root: Path) -> None:
     for folder in sorted((root / "runs").iterdir()):
         path = root / "observation" / folder.name / "observation_report.json"
         if path.is_file():
-            report = json.loads(path.read_text())
+            report = json.loads(path.read_text(encoding="utf-8"))
             report["scopes"] = [scope(folder)]
             path.write_text(json.dumps(report))
 

@@ -33,8 +33,8 @@ def drawn(tmp_path):
 
 def test_a_sample_is_stratified_fixed_and_blind(drawn):
     folder, manifest = drawn
-    items = json.loads((folder / calibrate.SAMPLE).read_text())["items"]
-    key = json.loads((folder / calibrate.KEY).read_text())
+    items = json.loads((folder / calibrate.SAMPLE).read_text(encoding="utf-8"))["items"]
+    key = json.loads((folder / calibrate.KEY).read_text(encoding="utf-8"))
     assert {i["id"] for i in items} == set(key)
     for s in manifest["strata"]:
         assert s["drawn"] == min(4, s["population"])
@@ -57,7 +57,7 @@ def test_a_sample_is_stratified_fixed_and_blind(drawn):
 
 def test_scores_compare_the_decisions_with_es_outcomes(drawn):
     folder, _ = drawn
-    key = json.loads((folder / calibrate.KEY).read_text())
+    key = json.loads((folder / calibrate.KEY).read_text(encoding="utf-8"))
     # an expert who agrees with every concern and finds every silence a miss
     reviews = {
         iid: {"decision": "fails" if e["stratum"]["outcome"] in ("supported",) + calibrate.SILENT else "holds"}
@@ -80,7 +80,7 @@ def test_a_calibration_holds_only_for_the_components_it_was_drawn_with(drawn, tm
     assert calibrate.check(folder, FIXTURES) == []
     changed = tmp_path / "changed"
     changed.mkdir()
-    report = json.loads((FIXTURES[0] / REPORT).read_text())
+    report = json.loads((FIXTURES[0] / REPORT).read_text(encoding="utf-8"))
     for c in report["report"]["components"]:
         if c["role"] == "model":
             c["sha256"] = "0" * 64  # another build of the model

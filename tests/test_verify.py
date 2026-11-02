@@ -47,11 +47,11 @@ def test_closed_sim_ids_are_skipped_unless_hooked():
 
 def test_a_removed_recipient_needs_closed_sources(tmp_path):
     root = ws.build(tmp_path / "ws", freeze=False)
-    for line in (root / "runs.jsonl").read_text().splitlines():
+    for line in (root / "runs.jsonl").read_text(encoding="utf-8").splitlines():
         entry = json.loads(line)
         if entry["condition"] == "A2":
             path = root / "observation" / entry["run"] / "observation_report.json"
-            report = json.loads(path.read_text())
+            report = json.loads(path.read_text(encoding="utf-8"))
             report["statuses"] = [
                 {
                     "claim_type": "transmits",

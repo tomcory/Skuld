@@ -15,14 +15,18 @@ record of every answer, which a report is rebuilt from (EV-E-REPLAY).
 
 `ask_with_feedback` asks again where the caller refuses an answer, with the refusal appended to the prompt, a sample of
 its own per attempt and the next seed.
+
+Every request is counted in the process's tally (`usage()`): asked, kept (`cached`), missing offline, failed, with the
+tokens and seconds of those asked and each model's digest. A command reads it into its run manifest (`manifest.py`).
 """
 
 import hashlib
 import json
 import shutil
+import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -37,6 +41,49 @@ MAX_TOKENS = 8192
 
 class AskError(Exception):
     """A model could not be asked (offline without a kept sample is not an error: the answer is then None)."""
+
+
+@dataclass
+class Usage:
+    """The model use of a run, with the keys of Ratatoskr's client statistics; `cached` counts kept samples."""
+
+    calls: int = 0
+    cached: int = 0
+    missing: int = 0  # offline, and no sample kept
+    failed: int = 0
+    retries: int = 0
+    prompt_tokens: int = 0
+    output_tokens: int = 0
+    thinking_chars: int = 0
+    seconds: float = 0.0
+    models: dict = field(default_factory=dict)  # name -> digest of the models asked
+
+    def as_dict(self) -> dict:
+        return {k: (round(v, 3) if isinstance(v, float) else v) for k, v in self.__dict__.items() if k != "models"}
+
+
+_usage = Usage()
+_lock = threading.Lock()
+
+
+def usage() -> Usage:
+    """The tally since the last reset."""
+    return _usage
+
+
+def reset_usage() -> None:
+    global _usage
+    with _lock:
+        _usage = Usage()
+
+
+def _count(**added) -> None:
+    with _lock:
+        for k, v in added.items():
+            if k == "models":
+                _usage.models.update(v)
+            else:
+                setattr(_usage, k, getattr(_usage, k) + v)
 
 
 @dataclass
@@ -90,8 +137,10 @@ def ask(
     record = {**record, "model": {"api": api, "name": model}, "options": _options(options, think)}
     text = _kept(folder, record, (*identity, "options"))
     if text is not None:
+        _count(cached=1)
         return Sample(folder, json.loads((folder / "record.json").read_text(encoding="utf-8")), text, True)
     if offline:
+        _count(missing=1)
         return Sample(folder, record, None, False)
     asking = client(api, provider)
     call = Call(
@@ -106,6 +155,7 @@ def ask(
         result = asking.sync.chat(call)
         digest = asking.sync.digests().get(model)
     except Exception as e:
+        _count(failed=1, retries=asking.stats.retries)
         raise AskError(f"{model}: {type(e).__name__}: {e}") from e
     record["model"]["digest"] = digest
     record["answer"] = {"sha256": sha256(result.content)}
@@ -115,13 +165,21 @@ def ask(
         "output_tokens": result.output_tokens,
         "thinking_chars": len(result.thinking or ""),
     }
+    _count(
+        calls=1,
+        retries=asking.stats.retries,
+        models={model: digest},
+        **{k: record["cost"][k] or 0 for k in ("seconds", "prompt_tokens", "output_tokens", "thinking_chars")},
+    )
     record["created"] = datetime.now(UTC).isoformat(timespec="seconds")
     folder.mkdir(parents=True, exist_ok=True)
     for name, content in (files or {}).items():
-        (folder / name).write_text(content, encoding="utf-8")
-    (folder / "prompt.txt").write_text(prompt, encoding="utf-8")
-    (folder / "answer.json").write_text(result.content, encoding="utf-8")
-    (folder / "record.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        (folder / name).write_text(content, encoding="utf-8", newline="\n")
+    (folder / "prompt.txt").write_text(prompt, encoding="utf-8", newline="\n")
+    (folder / "answer.json").write_text(result.content, encoding="utf-8", newline="\n")
+    (folder / "record.json").write_text(
+        json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+    )
     return Sample(folder, record, result.content, False)
 
 

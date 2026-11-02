@@ -231,7 +231,7 @@ def test_a_pursued_practice_is_chosen_and_the_budget_takes_the_rest_in_order(wor
 
 
 def test_what_an_experiment_decided_or_could_not_assess_is_not_asked_again(workspace):
-    claims = json.loads((workspace / "assessment.json").read_text())["claims"]
+    claims = json.loads((workspace / "assessment.json").read_text(encoding="utf-8"))["claims"]
     decided = {**premise(1, "alternative", "supported"), "id": "claim:P-loc:2", "basis": ["claim:P-loc:1"]}
     tried = {
         **premise(2, "alternative", "not_assessable", subject="P-ads"),
@@ -283,3 +283,64 @@ def test_the_chosen_entries_name_their_reason(workspace, monkeypatch):
     (workspace / select.CHOSEN).write_text("chosen:\n  - {id: P-loc, reason: because}\n")
     with pytest.raises(select.SelectionError, match="the reason is one of"):
         select.select(workspace, replace=True)
+
+
+# -- the Investigator's budget and order (S-26) ------------------------------------------------------------------------
+
+
+def test_the_investigators_order_is_taken_by_rank_within_its_budget(workspace):
+    costs = {c["practice"]: c["cost_seconds"] for c in select.listing(workspace)}
+    (workspace / "inputs").mkdir()
+    (workspace / select.CHOSEN).write_text(
+        "chosen:\n  - {id: P-ads, reason: investigate, rank: 1}\n  - {id: P-loc, reason: investigate, rank: 2}\n"
+    )
+    selection = select.select(workspace, budget_seconds=costs["P-ads"])
+    by = {e["practice"]: e for e in selection["entries"]}
+    assert by["P-ads"]["kind"] == select.CHOICE and "rank 1" in by["P-ads"]["reason"]
+    assert by["P-loc"]["kind"] == select.REFUSAL and "over the budget" in by["P-loc"]["reason"]
+    assert selection["settings"]["budget_seconds"] == costs["P-ads"]
+    (workspace / select.CHOSEN).write_text("chosen:\n  - {id: P-ads, reason: investigate}\n")
+    with pytest.raises(select.SelectionError, match="rank"):
+        select.select(workspace, replace=True)
+
+
+def test_a_selection_is_extended_within_an_investigation_and_keeps_what_it_held(workspace):
+    first = select.select(workspace, budget_seconds=0)
+    report_ = json.loads((workspace / "assessment.json").read_text(encoding="utf-8"))
+    report_["claims"].append(hypothesis("claim:P-loc:7", "P-loc", "ServiceProvision"))
+    (workspace / "assessment.json").write_text(json.dumps(report_))
+    extended = select.select(workspace, budget_seconds=10**6, extend=True)
+    assert extended["entries"][: len(first["entries"])] == first["entries"]
+    new = extended["entries"][len(first["entries"]) :]
+    assert [e["purpose"] for e in new] == ["claim:P-loc:7"] and new[0]["kind"] == select.CHOICE
+    assert len(list((workspace / "inputs").glob("selection-*.json"))) == 1  # the earlier one is kept
+
+
+def test_the_listing_says_whether_an_experiment_could_change_a_result(workspace):
+    assert all(c["could_change"] for c in select.listing(workspace))
+    report_ = json.loads((workspace / "assessment.json").read_text(encoding="utf-8"))
+    report_["qualification"] = {
+        "cases": [{"kind": "practice", "subject": "P-ads", "result": "externally_supported_concern"}]
+    }
+    (workspace / "assessment.json").write_text(json.dumps(report_))
+    by = {c["practice"]: c for c in select.listing(workspace)}
+    assert not by["P-ads"]["could_change"] and by["P-loc"]["could_change"]
+    assert by["P-own"]["eligible"] is False and by["P-own"]["refusal"]
+    assert not (workspace / select.FILE).exists()  # listing writes nothing
+
+
+def test_skuld_run_takes_every_condition_by_default_and_prints_json_lines(tmp_path, monkeypatch, capsys):
+    from skuld import cli, execute, inputs
+
+    seen = {}
+    monkeypatch.setattr(inputs, "load", lambda root: "ws")
+    monkeypatch.setattr(execute, "interventions", lambda ws: {"G-round1": {}, "R-block": {}})
+
+    def run(workspace, recorded, base, device, conditions, *rest, **kw):
+        seen["conditions"] = conditions
+        return [{"order": 1, "condition": "baseline", "exit": 0, "dir": "runs/x"}]
+
+    monkeypatch.setattr(execute, "run", run)
+    cli.main(["run", str(tmp_path), "--recorded", "r", "--config", "c", "--device", "d", "--json"])
+    assert seen["conditions"] == ["baseline", "G-round1", "R-block"]
+    assert json.loads(capsys.readouterr().out.strip()) == {"order": 1, "condition": "baseline", "exit": 0, "folder": "runs/x"}

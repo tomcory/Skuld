@@ -142,6 +142,54 @@ def test_o_and_d_of_different_versions_are_not_comparable(tmp_path):
     assert assessment.build(a, None).comparability["comparable"] is False
 
 
+COMPATIBLE = {
+    "versions": ["1.0", "2.0"],
+    "reason": "the policy is a web page that did not change between the two",
+    "author": {"kind": "person", "id": "tester"},
+    "fixed": "2026-10-31T21:00:00+00:00",
+}
+
+
+def state_compatible(a, *statements):
+    """Adds statements of compatible versions to a workspace's assessment.yaml and loads it again."""
+    import yaml
+
+    path = a.root / inputs.ASSESSMENT
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data["compatible_versions"] = list(statements)
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    return inputs.load_assessment(a.root)
+
+
+def test_versions_stated_compatible_are_comparable_and_named(tmp_path):
+    a = workspace(tmp_path, [o_report([], version="2.0")], d_report([], version="1.0"))
+    a = state_compatible(a, COMPATIBLE)
+    assert assessment.build(a, None).comparability["comparable"] is True
+    (named,) = inputs.version_compatibility(a)
+    assert (named["kind"], named["id"], named["reason"]) == ("version_compatibility", "1.0~2.0", COMPATIBLE["reason"])
+
+
+def test_a_statement_of_other_versions_leaves_them_not_comparable(tmp_path):
+    a = workspace(tmp_path, [o_report([], version="2.0")], d_report([], version="1.0"))
+    a = state_compatible(a, {**COMPATIBLE, "versions": ["1.0", "3.0"]})
+    assert assessment.build(a, None).comparability["comparable"] is False
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        {k: v for k, v in COMPATIBLE.items() if k != "reason"},
+        {**COMPATIBLE, "reason": " "},
+        {**COMPATIBLE, "versions": ["1.0", "1.0"]},
+        {**COMPATIBLE, "author": "tester"},
+    ],
+)
+def test_a_statement_of_compatibility_needs_two_versions_a_reason_and_an_author(tmp_path, statement):
+    a = workspace(tmp_path, [o_report([], version="2.0")], d_report([], version="1.0"))
+    with pytest.raises(inputs.InputError):
+        state_compatible(a, statement)
+
+
 def decide(tmp_path, o_claims=(), statuses=(), d_claims=(), documents=({},)):
     d = d_report(list(d_claims), list(documents)) if d_claims or documents else None
     a = workspace(tmp_path, [o_report(list(o_claims), statuses)], d)
@@ -182,12 +230,12 @@ def test_the_fixtures_subjects(name, tmp_path):
     root = ROOT / "cases" / name
     if not (root / "assessment.yaml").is_file():
         pytest.skip("the case study's workspaces are not in this checkout")
-    before = (root / SUBJECTS).read_text() if (root / SUBJECTS).is_file() else None
+    before = (root / SUBJECTS).read_text(encoding="utf-8") if (root / SUBJECTS).is_file() else None
     try:
         out = subjects(root)
     finally:
         if before is not None:
-            (root / SUBJECTS).write_text(before)
+            (root / SUBJECTS).write_text(before, encoding="utf-8", newline="")
     assert out["practices"] and out["frame"]["id"] == "gdpr-art5"
     if name.startswith("pilates"):
         # the dry run's two components: the advertising ID, and AppsFlyer as a recipient
@@ -199,5 +247,7 @@ def test_the_fixtures_subjects(name, tmp_path):
     elif name.startswith("air.nn"):
         assert len({e for p in out["practices"] for e in p["episodes"] if e != "?"}) > 5  # practices per episode
     else:
-        assert out["collection"] is None and out["declarations"] == []
-        assert out["applicability"]["purpose_specific"]["applicability"] == "?"
+        # D since 2026-10-31, without the policy, which did not render (G-5)
+        assert out["collection"] and out["declarations"]
+        policy = [d for d in out["collection"]["documents"] if d["channel"] == "policy"]
+        assert all(d["status"] != "analysed" for d in policy)

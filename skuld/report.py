@@ -11,8 +11,8 @@ def write(report: dict, root: Path) -> tuple[Path, Path]:
     """Validates the report and writes report.json and report.md into the workspace."""
     validate("expectation_report", report)
     json_path, md_path = root / "report.json", root / "report.md"
-    json_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    md_path.write_text(markdown(report), encoding="utf-8")
+    json_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    md_path.write_text(markdown(report), encoding="utf-8", newline="\n")
     return json_path, md_path
 
 

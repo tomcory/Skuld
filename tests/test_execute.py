@@ -20,7 +20,7 @@ if "frida-server" in sys.argv:
 config = sys.argv[sys.argv.index("-c") + 1]
 out = pathlib.Path(sys.argv[0]).parent / "made" / pathlib.Path(config).stem
 out.mkdir(parents=True)
-(out / "config.yaml").write_text(pathlib.Path(config).read_text())
+(out / "config.yaml").write_text(pathlib.Path(config).read_text(encoding="utf-8"), encoding="utf-8")
 print("replaying")
 print(json.dumps({"run_dir": str(out), "stop_reason": "max_flows"}))
 """
@@ -46,7 +46,7 @@ def test_a_condition_hooks_every_source_and_changes_only_its_own():
 
 def test_the_runs_are_made_recorded_and_appended(tmp_path):
     root = ws.build(tmp_path / "ws")
-    before = len((root / "runs.jsonl").read_text().splitlines())
+    before = len((root / "runs.jsonl").read_text(encoding="utf-8").splitlines())
     base = tmp_path / "loki.yaml"
     base.write_text(yaml.safe_dump({"capture": {"backend": "heimdall"}}))
     made = execute.run(
@@ -55,9 +55,11 @@ def test_the_runs_are_made_recorded_and_appended(tmp_path):
     assert not (tmp_path / "frida.log").exists()  # no instrumentation in the base: frida-server is left alone
     assert [e["condition"] for e in made] == ["baseline", "A2", "A2", "baseline"]
     assert [e["order"] for e in made] == [10, 11, 12, 13]
-    lines = (root / "runs.jsonl").read_text().splitlines()
+    lines = (root / "runs.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(lines) == before + 4 and json.loads(lines[-1])["condition"] == "baseline"
-    blocked = yaml.safe_load((Path(made[1]["dir"]) / "config.yaml").read_text())["capture"]["block_hosts"]
+    blocked = yaml.safe_load((Path(made[1]["dir"]) / "config.yaml").read_text(encoding="utf-8"))["capture"][
+        "block_hosts"
+    ]
     assert blocked == ["tracker.example"]
 
 
@@ -87,7 +89,7 @@ def test_frida_server_runs_for_the_series_of_an_instrumented_configuration(tmp_p
     base = tmp_path / "loki.yaml"
     base.write_text(yaml.safe_dump({"instrumentation": {"backend": "frida", "required": True}}))
     execute.run(inputs.load(root), tmp_path / "recorded", base, "d", ["baseline"], 1, fake(tmp_path))
-    assert (tmp_path / "frida.log").read_text().split() == ["start", "stop"]
+    assert (tmp_path / "frida.log").read_text(encoding="utf-8").split() == ["start", "stop"]
 
 
 def test_a_series_stops_when_its_qualifying_replay_qualifies_no_case(tmp_path):
@@ -96,9 +98,9 @@ def test_a_series_stops_when_its_qualifying_replay_qualifies_no_case(tmp_path):
     base.write_text("{}")
     with pytest.raises(execute.ExecutionError, match="qualified no case"):
         execute.run(inputs.load(root), tmp_path / "rec", base, "d", ["baseline", "A1"], 1, fake(tmp_path), qualify=True)
-    lines = (root / "runs.jsonl").read_text().splitlines()
+    lines = (root / "runs.jsonl").read_text(encoding="utf-8").splitlines()
     assert json.loads(lines[-1])["condition"] == "baseline" and len(lines) == 10  # kept; the series not made
-    record = json.loads((root / execute.QUALIFICATION).read_text())
+    record = json.loads((root / execute.QUALIFICATION).read_text(encoding="utf-8"))
     assert record["run"] == json.loads(lines[-1])["run"] and all(record["cases"].values())
 
 

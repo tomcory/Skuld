@@ -249,7 +249,7 @@ def test_the_assessment_states_concerns_ii_to_iv_and_gate_3_holds(workspace):
 
     # a tampered stage-2 context that gives D's report other than as a declaration fails the report
     path = next((a.root / "assessment" / "minimisation").glob("*/s1/context.json"))
-    parts = json.loads(path.read_text())["parts"]
+    parts = json.loads(path.read_text(encoding="utf-8"))["parts"]
     parts.append(
         {"id": "X1", "kind": "passage", "text": "t", "provenance": [{"origin": "d_report", "record": "/claims/1"}]}
     )
@@ -302,7 +302,7 @@ def test_the_assessments_provenance_is_complete_its_rebuild_identical_and_tamper
     assert any("rebuilt" in p for p in problems)
 
     answer = next(a.root.glob("assessment/*/*/s1/answer.json"))
-    answer.write_text(answer.read_text() + " ")
+    answer.write_text(answer.read_text(encoding="utf-8") + " ", encoding="utf-8")
     assert any("its answer does not verify" in p for p in check_assessment(a, report))
 
 

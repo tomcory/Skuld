@@ -18,6 +18,7 @@ judge; a later change is recorded with its reason, never made silently (`check_f
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -175,9 +176,21 @@ class Workspace:
     oracles: dict[str, Oracle]
     runs: list[RunEntry]
     verdandi: list[str] = field(default_factory=lambda: ["verdandi"])
+    runs_base: Path | None = None  # what a relative run folder in runs.jsonl is relative to; the root if None
 
     def file(self, path: Path) -> str:
         return path.relative_to(self.root).as_posix()
+
+
+def portable(path: str | Path, start: str | Path) -> str:
+    """
+    `path` relative to `start`, with forward slashes, so that a workspace reads the same on every machine and system;
+    absolute (with forward slashes too) where there is no relative path, as between two Windows drives.
+    """
+    try:
+        return Path(os.path.relpath(Path(path).resolve(), Path(start).resolve())).as_posix()
+    except ValueError:
+        return Path(path).resolve().as_posix()
 
 
 def load(root: str | Path) -> Workspace:
@@ -200,6 +213,7 @@ def load(root: str | Path) -> Workspace:
         oracles=oracles,
         runs=_runs(root, settings),
         verdandi=list(settings.get("verdandi") or ["verdandi"]),
+        runs_base=_runs_base(root, settings),
     )
 
 
@@ -291,7 +305,7 @@ def _time(now: datetime | None) -> str:
 
 
 def _write(root: Path, record: dict) -> None:
-    (root / FROZEN).write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / FROZEN).write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
 
 def _yaml(path: Path) -> dict:
@@ -401,12 +415,16 @@ def _oracle(path: Path) -> Oracle:
     )
 
 
+def _runs_base(root: Path, settings: dict) -> Path:
+    base = Path(settings.get("runs") or root)
+    return base if base.is_absolute() else root / base
+
+
 def _runs(root: Path, settings: dict) -> list[RunEntry]:
     path = root / "runs.jsonl"
     if not path.is_file():
         return []
-    base = Path(settings.get("runs") or root)
-    base = base if base.is_absolute() else root / base
+    base = _runs_base(root, settings)
     entries = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip():
@@ -415,7 +433,8 @@ def _runs(root: Path, settings: dict) -> list[RunEntry]:
             entries.append(
                 RunEntry(
                     e["run"],
-                    directory if directory.is_absolute() else base / directory,
+                    # resolved: an unresolved `..` can take the path past Windows' 260 characters
+                    (directory if directory.is_absolute() else base / directory).resolve(),
                     e["condition"],
                     e["order"],
                     e.get("excluded"),
@@ -472,6 +491,42 @@ class Assessment:
     corpus_sha256: str
     models: dict[str, str]
     cases: Workspace | None = None
+    #: Pairs of versions the author states compatible, so that O's and D's claims of them may be related: each with
+    #: `versions` (two), `reason`, `author` and `fixed` (when it was stated). Named inputs of the assessment.
+    compatible_versions: list[dict] = field(default_factory=list)
+
+    def compatible_pairs(self) -> set[frozenset[str]]:
+        return {frozenset(str(v) for v in s["versions"]) for s in self.compatible_versions}
+
+
+def version_compatibility(a: Assessment) -> list[dict]:
+    """The stated version compatibilities as the report's named inputs, each by the digest of its statement."""
+    return [
+        {
+            "kind": "version_compatibility",
+            "id": "~".join(str(v) for v in s["versions"]),
+            "sha256": hashlib.sha256(json.dumps(s, sort_keys=True, ensure_ascii=False).encode()).hexdigest(),
+            "fixed": str(s["fixed"]),
+            "author": s["author"],
+            "reason": s["reason"],
+        }
+        for s in a.compatible_versions
+    ]
+
+
+def _compatible_versions(data: dict) -> list[dict]:
+    statements = data.get("compatible_versions") or []
+    where = f"{ASSESSMENT}: compatible_versions"
+    for s in statements:
+        _require(s, ("versions", "reason", "author", "fixed"), where)
+        versions = [str(v) for v in s["versions"]]
+        if len(versions) != 2 or versions[0] == versions[1]:
+            raise InputError(f"{where}: a statement names two different versions, not {versions}")
+        if not isinstance(s["author"], dict):
+            raise InputError(f"{where}: the author is an object (kind, id)")
+        if not str(s["reason"]).strip():
+            raise InputError(f"{where}: a statement gives its reason")
+    return statements
 
 
 def _ref(root: Path, entry: dict, where: str, check: bool) -> ReportRef:
@@ -542,6 +597,7 @@ def load_assessment(root: str | Path, check: bool = True) -> Assessment:
         corpus_sha256,
         models,
         cases,
+        _compatible_versions(data),
     )
 
 
@@ -561,8 +617,6 @@ def describe_assessment(
     named by their current digests, with paths relative to the workspace. `observations` are (report path, run id)
     pairs.
     """
-    import os
-
     from ratatoskr.frames import Frame
 
     from skuld.corpus import load as load_corpus
@@ -571,7 +625,7 @@ def describe_assessment(
     root.mkdir(parents=True, exist_ok=True)
 
     def rel(path: Path) -> str:
-        return os.path.relpath(Path(path).resolve(), root.resolve())
+        return portable(path, root)
 
     loaded = Frame.load(frame)
     data = {
@@ -588,5 +642,5 @@ def describe_assessment(
     }
     text = (f"# {comment}\n" if comment else "") + yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
     path = root / ASSESSMENT
-    path.write_text(text, encoding="utf-8")
+    path.write_text(text, encoding="utf-8", newline="\n")
     return path

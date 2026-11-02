@@ -92,6 +92,32 @@ def test_an_o_d_relation_takes_the_uncertainty_of_its_claims_and_ds_leniently(tm
     assert data and data[0].uncertainty == {"t": "moderate", "s": "moderate", "n": "not_applicable"}
 
 
+def test_a_mismatch_that_reads_ds_silence_holds_only_under_its_unread_channels(tmp_path):
+    o = [claim("c1", "location.coordinates", "adco"), claim("c2", "personal-info.name", "adco")]
+    d = [d_claim("declares_collection", "location.approximate-location", channel="data_safety")]
+
+    def relations_with(policy_status):
+        channels = d_report([])["channels"]
+        channels[0]["status"] = policy_status
+        (tmp_path / policy_status).mkdir()
+        a = workspace(tmp_path / policy_status, [o_report(o)], d_report(d, channels=channels))
+        built = assessment.build(a, REGISTRY)
+        return built, correspondence.relate(built, a.declaration.load(), [], REGISTRY, DATA, TYPES)
+
+    built, rel = relations_with("not_analysable")
+    related = [r for r in by_aspect(rel, "data") if r.partial == "related"]
+    observed_only = [r for r in by_aspect(rel, "data") if r.outcome == correspondence.OBSERVED_ONLY]
+    assert related and observed_only
+    for r in related + observed_only:
+        assert (r.condition, r.condition_kind) == ("analysed:policy", "source")
+    open_ = relations.open_conditions(built, rel, [], None, [], [], [])
+    (source,) = [x for x in open_ if x["kind"] == "source"]
+    assert source["text"] == "whether the policy, which no stage analysed, declares the practice"
+
+    _, rel = relations_with("analysed")
+    assert all(r.condition is None for r in by_aspect(rel, "data"))
+
+
 def test_a_silence_is_closed_only_on_a_channel_exhaustive_for_the_predicate():
     assert assessment.exhaustive("data_safety", "collection") and assessment.exhaustive("data_safety", "sharing")
     assert not assessment.exhaustive("policy", "collection")
@@ -280,6 +306,7 @@ def test_ds_findings_and_open_conditions_are_passed_on_and_checked(tmp_path):
             "id": "open:D:o1",
             "text": "adco receives data as a third party",
             "qualifies": [cid],
+            "kind": "fact",
             "from": "D",
             "of": {"report": a.declaration.sha256, "open": "o1"},
         }
@@ -409,12 +436,16 @@ def test_the_fixtures_reports_are_valid_and_pilates_reproduces_the_worked_exampl
     root = ROOT / "cases" / name
     if not (root / "assessment.yaml").is_file():
         pytest.skip("the case study's workspaces are not in this checkout")
-    kept = {n: (root / n).read_text() for n in ("subjects.json", REPORT, "assessment.md") if (root / n).is_file()}
+    kept = {
+        n: (root / n).read_text(encoding="utf-8")
+        for n in ("subjects.json", REPORT, "assessment.md")
+        if (root / n).is_file()
+    }
     try:
         report = assess(root)
     finally:
         for n, text in kept.items():
-            (root / n).write_text(text)
+            (root / n).write_text(text, encoding="utf-8", newline="")
     validate("expectation_assessment", report)
     assert report["report"]["cost"]["model_calls"] == 0
     from skuld.assess import build

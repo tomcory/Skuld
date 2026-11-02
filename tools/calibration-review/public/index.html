@@ -19,6 +19,7 @@
         .decide { position: sticky; bottom: 0; background: #fff; margin-top: 1rem; padding: .75rem 0 .25rem; border-top: 1px solid #dee2e6; }
         .headline { font-weight: 600; margin-top: .8rem; }
         .context { max-height: 40vh; overflow-y: auto; }
+        .prior { background: #f8f9fa; border-radius: .25rem; }
         .screen { background: #f1f3f5; border-radius: .25rem; padding: .2rem .4rem; margin-bottom: .25rem; }
         kbd { font-size: .75rem; }
         [v-cloak] { display: none; }
@@ -57,7 +58,8 @@
             <li><b>Unsure</b> (<kbd>U</kbd>): you cannot tell from what is shown; left out of the scores. Say why in the note.</li>
             <li><kbd>←</kbd> <kbd>→</kbd> previous and next item, <kbd>O</kbd> next open item, <kbd>/</kbd> search the
                 document, <kbd>C</kbd> show or hide what the expectation stage read for a practice (the screens and the
-                documentation it was given; not its answer). Notes are saved with the decision.</li>
+                documentation it was given; not its answer), <kbd>P</kbd> show or hide the prior review, where the sample
+                has one: another reviewer's decision and note, not the assessment's. Notes are saved with the decision.</li>
         </ul>
     </div>
 
@@ -114,6 +116,18 @@
                             </div>
                         </div>
                     </template>
+                    </div>
+
+                    <div v-if="item.prior_review" class="mt-3" data-tour="prior">
+                        <button class="btn btn-sm btn-outline-secondary" @click="togglePrior()">
+                            <i class="bi" :class="priorShown ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                            Prior review <kbd>P</kbd>
+                        </button>
+                        <div v-if="priorShown" class="prior mt-2 p-2 small">
+                            <span class="badge me-1" :class="decisionClass(item.prior_review.decision)">{{ item.prior_review.decision }}</span>
+                            <span class="text-secondary" v-if="item.prior_review.reviewer">by {{ item.prior_review.reviewer }}<span v-if="item.prior_review.reviewed">, {{ item.prior_review.reviewed }}</span></span>
+                            <div class="mt-1" v-if="item.prior_review.note">{{ item.prior_review.note }}</div>
+                        </div>
                     </div>
 
                     <div class="decide">
@@ -217,6 +231,7 @@ const TOUR = [
     {target: 'subject-part', title: 'The subject', text: item => SUBJECT[item.subject.kind]},
     {target: 'purpose', title: 'The purpose', text: 'The one purpose this item asks about, as the expectation stage inferred it <b>without</b> the provider\'s documents: what is done, for whom, in what context, and to what end.'},
     {target: 'context', title: 'What the expectation stage read', text: 'The screens of the episodes and the documentation of the components and data the stage was given when it inferred the purpose. Not its answer. Show or hide it here or with <kbd>C</kbd>; the choice is remembered.'},
+    {target: 'prior', title: 'The prior review', text: 'Another reviewer\'s decision on this item, with their note and who made it. It is <b>not</b> what the assessment concluded, which stays hidden. Your decision is your own; show or hide the prior review here or with <kbd>P</kbd>, and the choice is remembered.'},
     {target: 'documents', title: 'The provider\'s documents', text: 'The privacy policy, the Data safety section and the store listing, as acquired. A yellow badge marks a document the declaration analysis could not analyse; it is shown anyway, since you judge what the provider gives.'},
     {target: 'search', title: 'Search', text: 'Search the open document (or press <kbd>/</kbd>); matches are highlighted and the first is scrolled into view. For a declared purpose, the statement is searched for you.'},
     {target: 'note', title: 'A note', text: 'Saved with your decision. Say why when you are unsure, or when a case is borderline; notes help to read the scores.'},
@@ -227,7 +242,7 @@ const TOUR = [
 const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 createApp({
     data: () => ({progress: null, item: null, note: '', help: false, shown: null, document: {}, query: '', titles, beneficiaries,
-                  contextShown: remembered('contextShown', true), tour: null}),
+                  contextShown: remembered('contextShown', true), priorShown: remembered('priorShown', true), tour: null}),
     computed: {
         kind() {
             if (this.document.passages) return 'passages';
@@ -289,6 +304,10 @@ createApp({
             this.contextShown = !this.contextShown;
             remember('contextShown', this.contextShown);
         },
+        togglePrior() {
+            this.priorShown = !this.priorShown;
+            remember('priorShown', this.priorShown);
+        },
         startTour() {
             this.help = false;
             const steps = TOUR.filter(s => document.querySelector(`[data-tour="${s.target}"]`));
@@ -340,6 +359,7 @@ createApp({
             if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
             const actions = {
                 c: () => this.item.context && this.toggleContext(),
+                p: () => this.item.prior_review && this.togglePrior(),
                 f: () => this.save('fails'), h: () => this.save('holds'), u: () => this.save('unsure'), o: () => this.nextOpen(),
                 ArrowLeft: () => this.go(this.item.index - 1), ArrowRight: () => this.go(this.item.index + 1),
                 '/': () => this.$refs.search && this.$refs.search.focus(),

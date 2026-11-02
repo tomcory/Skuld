@@ -16,7 +16,7 @@ from pathlib import Path
 import yaml
 
 from skuld.experiments import BASELINE
-from skuld.inputs import InputError, Workspace, check_frozen
+from skuld.inputs import InputError, Workspace, check_frozen, portable
 from skuld.verify import SOURCE_NODES
 
 QUALIFICATION = "qualification.json"
@@ -104,7 +104,9 @@ def run(
             order += 1
             problems = qualification(workspace, Path(written[0]["dir"]))
             record = {"run": written[0]["run"], "cases": {c.id: problems.get(c.id, []) for c in workspace.cases}}
-            (workspace.root / QUALIFICATION).write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n")
+            (workspace.root / QUALIFICATION).write_text(
+                json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+            )
             if all(problems.get(c.id) for c in workspace.cases):
                 raise ExecutionError(
                     "the recording qualified no case: " + "; ".join(f"{c}: {'; '.join(p)}" for c, p in problems.items())
@@ -126,16 +128,18 @@ def _series(
         order += 1
         config_path = folder / f"{order:03d}-{condition}.yaml"
         config = configuration(base_config, {} if condition == BASELINE else known[condition])
-        config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+        config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8", newline="\n")
         command = [*loki, "-c", str(config_path.resolve()), "replay", str(recorded.resolve()), "-d", device, "--force"]
         result = subprocess.run(command, capture_output=True, text=True, cwd=cwd)
         run_dir = _run_dir(result.stdout, cwd)
         if run_dir is None:
             raise ExecutionError(f"run {order} ({condition}): Loki named no run folder; exit {result.returncode}")
-        entry = {"run": run_dir.name, "dir": str(run_dir), "condition": condition, "order": order}
-        with (workspace.root / "runs.jsonl").open("a", encoding="utf-8") as runs:
+        base = workspace.runs_base or workspace.root
+        entry = {"run": run_dir.name, "dir": portable(run_dir, base), "condition": condition, "order": order}
+        with (workspace.root / "runs.jsonl").open("a", encoding="utf-8", newline="\n") as runs:
             runs.write(json.dumps(entry) + "\n")
-        written.append({**entry, "exit": result.returncode})
+        # runs.jsonl names the folder relative to the runs base; the caller gets a path it can open
+        written.append({**entry, "dir": str(run_dir), "exit": result.returncode})
     return written
 
 

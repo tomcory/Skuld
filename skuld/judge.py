@@ -600,7 +600,7 @@ def kept(
             answer = json.loads(sample.text)
         except ValueError:
             answer = {}
-        name = str(sample.folder.relative_to(a.root))
+        name = sample.folder.relative_to(a.root).as_posix()
         out.append((name, q, answer if isinstance(answer, dict) else {}))
     return out
 

@@ -16,6 +16,8 @@ PACKAGE = "com.example.app"
 #: A consent dialog that states the purpose verbatim: stage 1 must not see it
 CONSENT = ["We use your advertising ID to attribute installs to our campaigns.", "Accept all", "Manage options"]
 PURPOSE_TEXT = "attribute installs to our campaigns"
+#: A sign-up form whose one line accepting the policy is a privacy notice: stage 1 sees the form without that line
+SIGN_UP = ["Create account", "Email address", "The Terms of Use and the Privacy Policy have been read and accepted."]
 
 
 def run_folder(tmp_path: Path) -> Path:
@@ -25,6 +27,7 @@ def run_folder(tmp_path: Path) -> Path:
     screens = [
         ("s-consent", None, CONSENT),
         ("s-home", None, ["Welcome", "Start your first workout"]),
+        ("s-signup", None, SIGN_UP),
         ("s-plan", "1", ["Your plan", "Week 1: three sessions"]),
     ]
     events = [
@@ -146,8 +149,11 @@ def test_a_batch_per_episode_and_notice_screens_are_left_out(workspace):
     assert set(batches) == {"e1", "launch"}
     launch = batches["launch"]
     assert [p.data for p in launch.practices] == ["device-or-other-ids.advertising-id"]
-    assert [s for s, _ in launch.screens] == ["s-home", "s-plan"]
+    assert [s for s, _ in launch.screens] == ["s-home", "s-signup", "s-plan"]
     assert launch.left_out[0]["screen"] == "s-consent" and launch.left_out[0]["kind"] == "consent_dialog"
+    assert launch.left_out[0]["whole"]
+    assert dict(launch.screens)["s-signup"] == "Create account | Email address"
+    assert launch.left_out[1] == {"screen": "s-signup", "kind": "privacy_notice", "terms": ["privacy"], "whole": False}
 
 
 def test_the_stage_1_context_refuses_d_and_notices(workspace, tmp_path):
@@ -184,7 +190,7 @@ def test_samples_are_kept_and_the_consent_screen_never_reaches_the_model(workspa
     samples = expectation.expect(a, built, load_corpus(a.corpus), seeds=[1, 2], provider=model)
     assert len(samples) == 4 and len(model.prompts) == 4
     assert all(PURPOSE_TEXT not in p for p in model.prompts)
-    record = json.loads((samples[0].folder / "record.json").read_text())
+    record = json.loads((samples[0].folder / "record.json").read_text(encoding="utf-8"))
     assert record["model"]["name"] == "fake" and record["options"]["temperature"] == 0.4
     expectation.expect(a, built, load_corpus(a.corpus), seeds=[1, 2], provider=model)
     assert len(model.prompts) == 4  # kept, not asked again
@@ -196,9 +202,9 @@ def test_a_sample_records_the_thinking_switch_only_where_it_is_set(workspace, tm
     a, built = workspace
     model = FakeModel()
     expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=model)
-    record = json.loads((a.root / "expectation" / "launch" / "s1" / "record.json").read_text())
+    record = json.loads((a.root / "expectation" / "launch" / "s1" / "record.json").read_text(encoding="utf-8"))
     assert "think" not in record["options"] and "thinking_chars" in record["cost"]
-    switched = json.loads(config.CONFIG.read_text())
+    switched = json.loads(config.CONFIG.read_text(encoding="utf-8"))
     switched["expectation"]["think"] = False
     (tmp_path / "config.json").write_text(json.dumps(switched))
     monkeypatch.setenv("SKULD_CONFIG", str(tmp_path / "config.json"))
@@ -208,7 +214,7 @@ def test_a_sample_records_the_thinking_switch_only_where_it_is_set(workspace, tm
         expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=model)
         # switched off, the reasoning makes another request: asked again, not kept
         assert len(model.prompts) == 2 * asked
-        record = json.loads((a.root / "expectation" / "launch" / "s1" / "record.json").read_text())
+        record = json.loads((a.root / "expectation" / "launch" / "s1" / "record.json").read_text(encoding="utf-8"))
         assert record["options"]["think"] is False
     finally:
         monkeypatch.delenv("SKULD_CONFIG")
@@ -272,7 +278,7 @@ def test_the_assessment_reads_kept_samples_and_gate_3_holds(workspace):
 
     # a tampered sample whose context reaches D fails the report
     path = next((a.root / "expectation").glob("launch/s1/context.json"))
-    parts = json.loads(path.read_text())["parts"]
+    parts = json.loads(path.read_text(encoding="utf-8"))["parts"]
     parts.append(
         {
             "id": "X1",
@@ -293,7 +299,7 @@ def test_samples_made_with_the_registers_names_are_found_again(workspace):
     register = Registry({"entities": [{"id": "adco", "name": "AdCo", "domains": ["adco.example"]}]})
     names = expectation.names(register)
     made = expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=FakeModel(), names=names)
-    assert "AdCo (register entity adco" in (made[0].folder / "prompt.txt").read_text()
+    assert "AdCo (register entity adco" in (made[0].folder / "prompt.txt").read_text(encoding="utf-8")
     # the assessment reads them with the same names; without them the contexts differ and nothing is found
     assert len(expectation.kept(a, built, load_corpus(a.corpus), register)) == len(made)
     assert expectation.kept(a, built, load_corpus(a.corpus)) == []

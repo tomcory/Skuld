@@ -1,5 +1,6 @@
 // Blind review of a calibration sample (skuld calibrate draw): serves the sample's items and the collections'
-// documents, never E's outcomes (key.json), and stores each decision in the sample's reviews.json.
+// documents, never E's outcomes (key.json), and stores each decision in the sample's reviews.json. A prior review
+// (prior-review.json: another reviewer's decision and note per item) is shown with its item where there is one.
 // Run with `npm start -- <calibration folder>` (or CALIBRATION=<folder>), then open http://localhost:3001.
 
 const express = require('express');
@@ -10,6 +11,7 @@ const FOLDER = path.resolve(process.argv[2] || process.env.CALIBRATION || '.');
 const SAMPLE = path.join(FOLDER, 'sample.json');
 const REVIEWS = path.join(FOLDER, 'reviews.json');
 const POSITION = path.join(FOLDER, 'review-position.json');
+const PRIOR = path.join(FOLDER, 'prior-review.json');
 const PORT = Number(process.env.PORT || 3001);
 const DECISIONS = ['fails', 'holds', 'unsure'];
 
@@ -35,6 +37,14 @@ function writeJson(file, data) {
 
 const items = () => readJson(SAMPLE).items;
 const reviews = () => readJson(REVIEWS, {});
+
+// an item's prior review, with who made it and when, or null
+function priorReview(id) {
+    const prior = readJson(PRIOR, null);
+    const entry = prior && prior.items && prior.items[id];
+    if (!entry || !DECISIONS.includes(entry.decision)) return null;
+    return {decision: entry.decision, note: entry.note || '', reviewer: prior.reviewer || null, reviewed: prior.reviewed || null};
+}
 
 function progress() {
     const all = items();
@@ -63,7 +73,7 @@ app.get('/api/items/:index', (req, res) => {
     const item = all[index];
     if (!item) return res.status(404).send('no such item');
     writeJson(POSITION, {index});
-    res.send({...item, index, total: all.length, review: reviews()[item.id] || null});
+    res.send({...item, index, total: all.length, review: reviews()[item.id] || null, prior_review: priorReview(item.id)});
 });
 
 // the first item without a decision after the given index (or from the start)

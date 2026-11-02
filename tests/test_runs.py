@@ -139,7 +139,7 @@ def test_a_run_gives_its_actions_reads_changes_traffic_and_verification(tmp_path
 def test_a_run_without_instrumentation_has_no_verification(tmp_path):
     events = [{"seq": 1, "ts": "t1", "type": "action", "kind": "tap"}]
     folder = write_run(tmp_path / "run", events=events)
-    record = json.loads((folder / "run.json").read_text())
+    record = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     del record["instrumentation"]
     (folder / "run.json").write_text(json.dumps(record))
     run = load(folder)
@@ -148,7 +148,7 @@ def test_a_run_without_instrumentation_has_no_verification(tmp_path):
 
 def test_an_instrumentation_that_failed_to_start_is_no_verification(tmp_path):
     folder = write_run(tmp_path / "run", events=[{"seq": 1, "ts": "t1", "type": "action"}])
-    record = json.loads((folder / "run.json").read_text())
+    record = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     record["instrumentation"] = {"backend": "frida", "error": "server_unreachable", "detail": "closed"}
     (folder / "run.json").write_text(json.dumps(record))
     run = load(folder)
@@ -180,7 +180,7 @@ def test_a_run_that_cannot_be_relied_on_is_refused(tmp_path, meta, reason):
 
 def test_an_export_that_was_not_validated_is_refused(tmp_path):
     folder = write_run(tmp_path / "run")
-    record = json.loads((folder / "run.json").read_text())
+    record = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     for validated in ({"ratatoskr": "0.2.0", "conforming": False}, None):
         record["capture"]["validated"] = validated
         (folder / "run.json").write_text(json.dumps(record))
@@ -199,7 +199,7 @@ def test_an_instrumentation_record_that_does_not_conform_is_refused(tmp_path):
     assert refused(write_run(tmp_path / "read", events=[no_returned])) == "invalid_record"
 
     folder = write_run(tmp_path / "block")
-    record = json.loads((folder / "run.json").read_text())
+    record = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     record["instrumentation"]["settings"] = ["location round:2"]
     del record["instrumentation"]["validated"]  # Skuld checks for itself, whatever Loki said
     (folder / "run.json").write_text(json.dumps(record))
@@ -224,7 +224,7 @@ SCAN = {
 
 def with_scans(folder: Path, scans=(SCAN,), count=None) -> Path:
     """Adds the apps' scans to a run's export, as a run with `capture.export: [..., scans]` has them."""
-    record = json.loads((folder / "run.json").read_text())
+    record = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     record["capture"]["records"]["scans"] = len(scans) if count is None else count
     (folder / "run.json").write_text(json.dumps(record))
     (folder / record["capture"]["export"] / "scans.jsonl").write_text("".join(json.dumps(s) + "\n" for s in scans))

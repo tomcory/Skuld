@@ -495,11 +495,11 @@ def propose(
     (root / "oracles").mkdir(exist_ok=True)
     settings = {
         "application": {"package": exp.package, "version": exp.version},
-        "runs": str(exp.directory.parent.resolve()),
+        "runs": inputs.portable(exp.directory.parent, root),
         "verdandi": verdandi,
         "recording": exp.run_id,
     }
-    (root / "workspace.yaml").write_text(yaml.safe_dump(settings, sort_keys=False), encoding="utf-8")
+    (root / "workspace.yaml").write_text(yaml.safe_dump(settings, sort_keys=False), encoding="utf-8", newline="\n")
     report = observe(root, exp.run_id, exp.directory, verdandi)
     template = prompt_template()
     generator = {"id": "skuld.propose", "version": VERSION, "prompt_sha256": _sha(template)}
@@ -611,7 +611,9 @@ def propose(
     fixed = inputs.freeze(root, {"kind": "model", "name": model, "prompt": f"skuld.propose {VERSION}"}, authors=authors)
     summary["fixed"] = fixed
     (root / "proposals").mkdir(exist_ok=True)
-    (root / "proposals" / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n")
+    (root / "proposals" / "summary.json").write_text(
+        json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+    )
     return summary
 
 
@@ -722,7 +724,7 @@ def _write_case(
                 "measurements": cat.fill(o.get("measurements") or [], bindings),
             }
             path = root / "oracles" / f"{oracle_id}@1.yaml"
-            path.write_text(yaml.safe_dump(oracle, sort_keys=False, allow_unicode=True), encoding="utf-8")
+            path.write_text(yaml.safe_dump(oracle, sort_keys=False, allow_unicode=True), encoding="utf-8", newline="\n")
             authors[f"oracles/{path.name}"] = author
             oracle_key = f"{oracle_id}@1"
         purposes.append(
@@ -745,7 +747,9 @@ def _write_case(
         "search_space": {"alternatives": alternatives},
     }
     path = root / "cases" / f"{case_id}.yaml"
-    path.write_text(yaml.safe_dump(case, sort_keys=False, allow_unicode=True, width=120), encoding="utf-8")
+    path.write_text(
+        yaml.safe_dump(case, sort_keys=False, allow_unicode=True, width=120), encoding="utf-8", newline="\n"
+    )
     authors[f"cases/{path.name}"] = author
     return named
 

@@ -32,7 +32,7 @@ it) that its node covers (the node or one above it, as for purpose limitation):
 and per declared strict necessity, a legal basis of Art. 6(1)(b) (processing necessary for a contract with the data
 subject), against the experiments' claims for the practices of its data:
 
-    necessity_refuted            a run shows a user's purpose achieved without it: a not-dependent Dependency claim or a
+    declared_necessity_refuted   a run shows a user's purpose achieved without it: a not-dependent Dependency claim or a
                                  demonstrated Alternative claim, supported at strength run, for a case purpose of the
                                  user; holds for the features the case report covers (an open condition)
     not_comparable               it is declared for no data in particular (the root), as a list of the bases a policy may
@@ -58,7 +58,7 @@ from skuld.inputs import ReportRef
 from skuld.observe import claims as o_claims
 from skuld.transparency import INCOMPLETE, MISSING_IF, UNREAD, Status
 
-VERSION = "4"
+VERSION = "5"
 COMPONENT = {"role": "method", "id": "skuld.relations", "version": VERSION}
 
 CONFLICTING, INSUFFICIENT, NOT_ASSESSABLE, NOT_COMPARABLE = (
@@ -82,7 +82,7 @@ SUPPORTED, PARTIALLY, NOT_ESTABLISHED, TOO_VAGUE = (
 )
 #: A declared strict necessity refuted: Art. 6(1)(b), processing necessary for a contract with the data subject, for data
 #: whose removal a run shows the user's purposes not to depend on
-NECESSITY_REFUTED = "necessity_refuted"
+NECESSITY_REFUTED = "declared_necessity_refuted"
 #: The legal basis that declares processing necessary: for the performance of a contract with the data subject
 CONTRACT = "GDPR-6-1-b"
 #: Why a claim of D has no relation, by its type
@@ -400,7 +400,14 @@ def from_declaration(
                 )
         if outcome is None:
             open_.append(
-                {"id": f"open:D:{o['id']}", "text": o["text"], "qualifies": o["qualifies"], "from": "D", "of": of}
+                {
+                    "id": f"open:D:{o['id']}",
+                    "text": o["text"],
+                    "qualifies": o["qualifies"],
+                    "kind": "fact",
+                    "from": "D",
+                    "of": of,
+                }
             )
         else:
             result, by, reason = outcome
@@ -467,12 +474,20 @@ def open_conditions(
     or an alternative demonstrated), that it holds for the features the case report covers."""
     out: dict[str, dict] = {}
 
-    def entry(key: str, text: str) -> dict:
-        return out.setdefault(key, {"id": f"open:{len(out) + 1}", "text": text, "qualifies": [], "from": "E"})
+    def entry(key: str, text: str, kind: str = "fact") -> dict:
+        return out.setdefault(
+            key, {"id": f"open:{len(out) + 1}", "text": text, "qualifies": [], "kind": kind, "from": "E"}
+        )
 
     for r in relations:
         if r.condition:
-            entry(f"condition:{r.condition}", r.condition)["qualifies"].append(r.id)
+            text = r.condition
+            if r.condition_kind == "source":  # analysed:<channel>, ... (correspondence.py)
+                unread = [c.removeprefix(UNREAD).replace("_", " ") for c in r.condition.split(", ")]
+                text = f"whether the {' and the '.join(unread)}, which no stage analysed, declares the practice"
+            e = entry(f"condition:{r.condition}", text, r.condition_kind or "fact")
+            e["qualifies"].append(r.id)
+            r.condition_open = e["id"]
     for p in subjects.practices:
         if (p.party or {}).get("relation") == "?":
             text = f"whether {p.recipient.removeprefix('domain:')} belongs to the provider or another organisation"
@@ -485,11 +500,11 @@ def open_conditions(
             if cid.startswith(INCOMPLETE):
                 channel = cid.removeprefix(INCOMPLETE).replace("_", " ")
                 text = f"whether the part of the {channel} that was not acquired gives the information"
-                entry(cid, text)["qualifies"].append(information[s.requirement])
+                entry(cid, text, "source")["qualifies"].append(information[s.requirement])
             elif cid.startswith(UNREAD):
                 channel = cid.removeprefix(UNREAD).replace("_", " ")
                 text = f"whether the {channel}, which could not be analysed, gives the information"
-                entry(cid, text)["qualifies"].append(information[s.requirement])
+                entry(cid, text, "source")["qualifies"].append(information[s.requirement])
             else:
                 entry(f"frame:{cid}", frame.conditions[cid].text)["qualifies"].append(information[s.requirement])
     shown = [

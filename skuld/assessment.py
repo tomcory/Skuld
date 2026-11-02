@@ -14,7 +14,7 @@ The assessment of one application version: its subjects, built from O's and D's 
 A practice's uncertainty is the least of its O claims' per factor (they corroborate one another); a declaration's is
 its D claim's, its semantic part read leniently (D_SEMANTIC_AT_MOST): D rates a value its model placed high while its
 analysis is unmeasured (EV-D1), and E reads that as moderate until it is measured. Which of D's channels is exhaustive
-for a predicate, so that its silence is closed, is D's (EXHAUSTIVE).
+for a predicate, so that its silence is closed, is D's, as Ratatoskr states its channel types (ratatoskr.channels).
 
 The assessment records whether O's and D's scopes are comparable (Q8): O's installed version and D's store version
 equal, or a pair the assessment states compatible. The relations read it: where they are not, D's claims are passed
@@ -25,7 +25,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 
-from ratatoskr import align, tilt
+from ratatoskr import align, channels, tilt
 from ratatoskr import claims as claim_views
 from ratatoskr.registry import Registry
 
@@ -105,16 +105,13 @@ def _key(claim: dict) -> tuple[str, str, str | None, str]:
     return claim["type"], claim["datum"]["node"], target, actor(claim)
 
 
-#: D's channel types exhaustive for a predicate (D's report, tab:channels): only the Data safety section, for the
-#: collection and the sharing of each of its data types. No channel is exhaustive for a transparency requirement.
-EXHAUSTIVE = {"data_safety": frozenset({"collection", "sharing"})}
 #: The highest semantic uncertainty E reads of a D claim (the lenient reading of an unmeasured model's placement)
 D_SEMANTIC_AT_MOST = "moderate"
 
 
 def exhaustive(channel: str, predicate: str) -> bool:
     """Whether D's channel is exhaustive for the predicate, so that the silence of its complete document is closed."""
-    return predicate in EXHAUSTIVE.get(channel, ())
+    return channels.exhaustive(channel, predicate)
 
 
 def _tsn(claim: dict) -> dict:
@@ -231,7 +228,10 @@ def collection(report: ReportRef | None) -> dict | None:
 
 
 def comparability(a: Assessment, compatible_versions: set[frozenset[str]] | None = None) -> dict:
-    """Whether O's and D's claims may be related: one application, versions equal or stated compatible (Q8)."""
+    """Whether O's and D's claims may be related: one application, versions equal or stated compatible (Q8), by
+    `compatible_versions` or else by the statements of the workspace."""
+    if compatible_versions is None:
+        compatible_versions = a.compatible_pairs()
     if a.declaration is None:
         return {"comparable": None, "reasons": ["no D report"], "unknown": []}
     d = a.declaration.load()["collection"]
@@ -263,5 +263,10 @@ def build(a: Assessment, registry: Registry | None) -> Subjects:
             "domains": sorted(provider.domains),
             "package_domain": provider.package_domain,
         },
-        [COMPONENT, align.COMPONENT, *([registry.reference() | {"role": "registry"}] if registry else [])],
+        [
+            COMPONENT,
+            align.COMPONENT,
+            channels.COMPONENT,
+            *([registry.reference() | {"role": "registry"}] if registry else []),
+        ],
     )

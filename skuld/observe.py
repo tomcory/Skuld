@@ -38,8 +38,12 @@ def observe(root: Path, run_id: str, run_dir: Path, command: list[str], make: bo
     if not path.is_file():
         if not make:
             raise ObservationError(f"{run_id}: no observation report")
+        # from the workspace, which a relative path in the command (Verðandi's project) is relative to
         result = subprocess.run(
-            [*command, "analyse", str(run_dir), "--out", str(path.parent)], capture_output=True, text=True
+            [*command, "analyse", str(Path(run_dir).resolve()), "--out", str(path.parent.resolve())],
+            capture_output=True,
+            text=True,
+            cwd=root,
         )
         if result.returncode != 0 or not path.is_file():
             raise ObservationError(f"{run_id}: verdandi analyse failed: {result.stderr.strip()[-300:]}")

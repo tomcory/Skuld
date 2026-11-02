@@ -79,6 +79,22 @@ def combined(cid: str, members: list[dict], **fields) -> dict:
     if status in DECISIVE:
         claim["strength"] = first.get("strength", "own")
         claim["sufficiency"] = {"sufficient": True}
+        # the members of lesser strength it decided over: a model's sample overruled by a measurement, or the reverse
+        overruled = [
+            {
+                "claim": m["id"],
+                "channels": m["channels"],
+                **({"stage": m["stage"]} if m.get("stage") else {}),
+                **({"tier": m["tier"]} if m.get("tier") else {}),
+                "status": m["status"],
+                "strength": m.get("strength", "own"),
+            }
+            for m in members
+            if m["status"] in DECISIVE
+            and (m["status"], m.get("relationship")) != (status, first.get("relationship"))
+        ]
+        if overruled:
+            claim["overruled"] = overruled
     else:
         why = next((m["sufficiency"].get("reason") for m in agreeing if m["sufficiency"].get("reason")), None)
         missing = sorted({x for m in members for x in m["sufficiency"].get("missing", [])})

@@ -21,7 +21,7 @@ import os
 import sys
 from pathlib import Path
 
-from skuld import catalogue, config, corpus, execute, inputs, propose, select
+from skuld import catalogue, config, corpus, execute, inputs, manifest, propose, select
 from skuld.ask import AskError
 from skuld.context import ContextError
 from skuld.expectation import IndependenceError
@@ -82,7 +82,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--recorded", required=True, help="the recorded run the replays follow")
     run.add_argument("--config", required=True, help="Loki's base configuration")
     run.add_argument("--device", required=True, help="adb serial")
-    run.add_argument("--conditions", nargs="+", required=True, help="'baseline' and the alternatives' conditions")
+    run.add_argument(
+        "--conditions",
+        nargs="+",
+        default=["all"],
+        help="'baseline' and the alternatives' conditions; 'all' (the default): baseline and every alternative of the "
+        "workspace's fixed cases",
+    )
+    run.add_argument("--json", action="store_true", help="one JSON line per run (order, condition, exit, folder)")
     run.add_argument("--repeat", type=int, default=3, help="runs per condition (default: 3)")
     run.add_argument("--loki", default=str(LOKI), help="Loki's folder (default: the sibling Loki)")
     run.add_argument(
@@ -127,6 +134,13 @@ def build_parser() -> argparse.ArgumentParser:
     select_ = commands.add_parser("select", help="choose the experiments the assessment asks for, within the budget")
     select_.add_argument("workspace", type=Path)
     select_.add_argument("--replace", action="store_true", help="replace a fixed selection, keeping it")
+    select_.add_argument(
+        "--extend", action="store_true", help="add to a fixed selection, keeping its choices (within an investigation)"
+    )
+    select_.add_argument("--budget-seconds", type=int, help="the device budget (default: config.json's)")
+    select_.add_argument(
+        "--list", action="store_true", help="print the candidates as JSON lines (device time, eligible, could change)"
+    )
     check = commands.add_parser(
         "check", help="check the provenance of the assessment's and the case report, and that the assessment rebuilds"
     )
@@ -171,23 +185,33 @@ def main(argv: list[str] | None = None) -> int:
                 if args.workspace
                 else ASGARD / "pilots" / args.pilot / "skuld" / f"{exploration.package}@{exploration.version}"
             )
-            summary = propose.propose(
-                args.exploration,
-                root,
-                args.catalogue,
-                args.model,
-                ["uv", "run", "--project", str(ASGARD / "Verdandi"), "verdandi"],
-                args.api,
-                args.offline,
-                selection=json.loads(args.selection.read_text(encoding="utf-8")) if args.selection else None,
-                registry=args.registry,
-            )
+            settings = {
+                "exploration": str(args.exploration),
+                "model": args.model,
+                "api": args.api,
+                "offline": args.offline,
+                "selection": str(args.selection) if args.selection else None,
+            }
+            with manifest.metered("propose", settings, root) as run:
+                summary = propose.propose(
+                    args.exploration,
+                    root,
+                    args.catalogue,
+                    args.model,
+                    # relative to the workspace, which Verðandi is run from
+                    ["uv", "run", "--project", inputs.portable(ASGARD / "Verdandi", root), "verdandi"],
+                    args.api,
+                    args.offline,
+                    selection=json.loads(args.selection.read_text(encoding="utf-8")) if args.selection else None,
+                    registry=args.registry,
+                )
             for key, entry in summary["episodes"].items():
                 for case in entry["cases"]:
                     print(f"{case['case']:>8}  {case['family']:<40} {entry['title']}")
                 if entry.get("refused"):
                     print(f"{key:>8}  {'(refused)':<40} {'; '.join(entry['refused'])}")
             print(f"{len(summary['fixed'])} inputs fixed in {root}")
+            print(f"manifest {run.path}")
         elif args.command == "corpus":
             from ratatoskr.vocabularies import Vocabulary
 
@@ -223,19 +247,27 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"fixed {name}")
         elif args.command == "run":
             loki = Path(args.loki)
+            workspace = inputs.load(args.workspace)
+            conditions = args.conditions
+            if conditions == ["all"]:
+                conditions = [execute.BASELINE, *sorted(execute.interventions(workspace))]
             entries = execute.run(
-                inputs.load(args.workspace),
+                workspace,
                 Path(args.recorded),
                 Path(args.config),
                 args.device,
-                args.conditions,
+                conditions,
                 args.repeat,
                 ["uv", "run", "--project", str(loki), "--extra", "frida", "loki"],
                 cwd=loki,
                 qualify=args.qualify,
             )
             for e in entries:
-                print(f"{e['order']:3d} {e['condition']:<10} exit {e['exit']}  {e['dir']}")
+                if args.json:
+                    record = {"order": e["order"], "condition": e["condition"], "exit": e["exit"], "folder": str(e["dir"])}
+                    print(json.dumps(record), flush=True)
+                else:
+                    print(f"{e['order']:3d} {e['condition']:<10} exit {e['exit']}  {e['dir']}")
         elif args.command == "expect":
             from skuld import assessment, expectation
             from skuld.parties import load_registry
@@ -245,12 +277,15 @@ def main(argv: list[str] | None = None) -> int:
             registry = load_registry(args.registry)
             built = assessment.build(a, registry)
             names = expectation.names(registry)
-            samples = expectation.expect(
-                a, built, corpus.load(args.corpus), args.seeds, args.model, args.api, args.offline, names=names
-            )
+            settings = {"model": args.model, "api": args.api, "seeds": args.seeds, "offline": args.offline}
+            with manifest.metered("expect", settings, args.workspace) as run:
+                samples = expectation.expect(
+                    a, built, corpus.load(args.corpus), args.seeds, args.model, args.api, args.offline, names=names
+                )
             asked = sum(not s.reused and s.text is not None for s in samples)
             missing = sum(s.text is None for s in samples)
             print(f"{len(samples)} samples ({asked} asked, {missing} missing) in {args.workspace / 'expectation'}")
+            print(f"manifest {run.path}")
         elif args.command == "judge":
             from collections import Counter
 
@@ -263,24 +298,34 @@ def main(argv: list[str] | None = None) -> int:
             built = assessment.build(a, registry)
             found = corpus.load(args.corpus)
             hypotheses = judge.stage1(a, built, found, registry)
-            samples = judge.judge(
-                a,
-                built,
-                found,
-                corpus.load(args.corpus / corpus.NORMS),
-                hypotheses,
-                [f.id for f in a.frame.requirement("purpose_compatible").factors],
-                args.seeds,
-                args.model,
-                args.api,
-                args.offline,
-                names=expectation.names(registry),
-                only=tuple(args.question or judge.QUESTIONS),
-            )
+            only = tuple(args.question or judge.QUESTIONS)
+            settings = {
+                "model": args.model,
+                "api": args.api,
+                "seeds": args.seeds,
+                "offline": args.offline,
+                "questions": list(only),
+            }
+            with manifest.metered("judge", settings, args.workspace) as run:
+                samples = judge.judge(
+                    a,
+                    built,
+                    found,
+                    corpus.load(args.corpus / corpus.NORMS),
+                    hypotheses,
+                    [f.id for f in a.frame.requirement("purpose_compatible").factors],
+                    args.seeds,
+                    args.model,
+                    args.api,
+                    args.offline,
+                    names=expectation.names(registry),
+                    only=only,
+                )
             asked = sum(not s.reused and s.text is not None for _, s in samples)
             missing = sum(s.text is None for _, s in samples)
             per = dict(Counter(q.question for q, _ in samples))
             print(f"{len(samples)} samples {per} ({asked} asked, {missing} missing) in {args.workspace / 'assessment'}")
+            print(f"manifest {run.path}")
         elif args.command == "describe":
             observations = []
             for o in args.observation:
@@ -314,8 +359,13 @@ def main(argv: list[str] | None = None) -> int:
                 f"{relations}; {len(report['concerns'])} concerns, {len(report['open'])} open conditions "
                 f"-> {args.workspace / REPORT}"
             )
+        elif args.command == "select" and args.list:
+            for c in select.listing(args.workspace, args.budget_seconds):
+                print(json.dumps(c, ensure_ascii=False))
         elif args.command == "select":
-            selection = select.select(args.workspace, args.replace)
+            selection = select.select(
+                args.workspace, args.replace, budget_seconds=args.budget_seconds, extend=args.extend
+            )
             for e in selection["entries"]:
                 kind = "chosen" if e["kind"] == select.CHOICE else "refused"
                 print(
@@ -360,11 +410,11 @@ def main(argv: list[str] | None = None) -> int:
             if args.action == "draw":
                 if not args.workspaces:
                     raise calibrate.CalibrationError("draw needs the assessment workspaces")
-                manifest = calibrate.draw(args.folder, args.workspaces, args.registry, args.per_stratum, args.seed)
-                for st in manifest["strata"]:
+                drawn = calibrate.draw(args.folder, args.workspaces, args.registry, args.per_stratum, args.seed)
+                for st in drawn["strata"]:
                     name = f"{st['principle']} {st['tier']} {st['step']} {st['outcome']}"
                     print(f"{name:<75} {st['drawn']:>3} of {st['population']:>4}")
-                print(f"{sum(st['drawn'] for st in manifest['strata'])} items -> {args.folder}")
+                print(f"{sum(st['drawn'] for st in drawn['strata'])} items -> {args.folder}")
             elif args.action == "score":
                 scores = calibrate.score(args.folder)
                 for st in scores["strata"]:

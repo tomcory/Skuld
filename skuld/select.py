@@ -15,9 +15,21 @@ when it does not.
       - {id: P-22c276a76c, reason: pursue}
       - {id: concern:P-22c276a76c:1, reason: calibrate}
 
+The Investigator (Odin) passes its order and budget the same way (S-26): entries with the reason `investigate` carry a
+rank, and are taken in rank order while their device time fits the budget, given by `--budget-seconds` over
+config.json's; the candidates no entry names follow in Skuld's order. Which candidates are eligible stays Skuld's.
+
+    chosen:
+      - {id: P-22c276a76c, reason: investigate, rank: 1}
+
+`skuld select --list` writes nothing and prints the candidates as JSON lines, each with its estimated device time,
+whether it is eligible, and whether an experiment could change its practice's qualified result: a case that is already
+an established discrepancy or a supported concern cannot change by a minimisation concern being supported or refuted.
+
 A case's device time is estimated as (1 + its alternatives) × repeats runs, and one qualifying replay, of
-`run_seconds` each. A selection is fixed once: making another replaces it only on request, and keeps the one it
-replaces.
+`run_seconds` each. A selection is fixed once: making another replaces it only on request (`--replace`), and keeps the
+one it replaces. Within one investigation it may be extended (`--extend`), which keeps every earlier choice and
+refusal, counts the device time already chosen, and adds the candidates it did not yet hold.
 """
 
 import hashlib
@@ -31,12 +43,20 @@ import yaml
 
 from skuld import combine, config, inputs, space
 
-VERSION = "1"
+VERSION = "2"
 AUTHOR = {"kind": "rule", "id": "skuld.select", "version": VERSION}
 FILE = "inputs/selection.json"
 CHOSEN = "inputs/chosen.yaml"
 #: Why an entry of `inputs/chosen.yaml` is chosen
-REASONS = {"pursue": "pursued by the author", "calibrate": "in the calibration sample"}
+REASONS = {
+    "pursue": "pursued by the author",
+    "calibrate": "in the calibration sample",
+    "investigate": "in the Investigator's order",
+}
+#: Reasons whose entries are chosen whatever the budget; an investigation's are taken within it, by rank
+UNBUDGETED = ("pursue", "calibrate")
+#: Qualified results an experiment cannot change: a minimisation concern adds nothing to a higher result
+SETTLED = ("externally_established_discrepancy", "externally_supported_concern")
 CHOICE, REFUSAL = "experiment_choice", "experiment_refusal"
 #: The defaults of config.json's `experiments`
 DEFAULTS = {"budget_seconds": 0, "repeats": 3, "run_seconds": 240}
@@ -50,8 +70,8 @@ def settings() -> dict:
     return {**DEFAULTS, **(config.load().get("experiments") or {})}
 
 
-def _chosen(root: Path) -> dict[str, str]:
-    """The ids `inputs/chosen.yaml` names, each with its reason."""
+def _chosen(root: Path) -> dict[str, tuple[str, int]]:
+    """The ids `inputs/chosen.yaml` names, each with its reason and rank (0 where it has none)."""
     path = root / CHOSEN
     if not path.is_file():
         return {}
@@ -60,7 +80,55 @@ def _chosen(root: Path) -> dict[str, str]:
     for e in entries:
         if e.get("reason") not in REASONS:
             raise SelectionError(f"{CHOSEN}: {e.get('id')}: the reason is one of {', '.join(REASONS)}")
-        out[str(e["id"])] = e["reason"]
+        rank = e.get("rank", 0)
+        if e["reason"] == "investigate" and (not isinstance(rank, int) or rank < 1):
+            raise SelectionError(f"{CHOSEN}: {e.get('id')}: an investigation's entry has a rank of 1 or more")
+        out[str(e["id"])] = (e["reason"], rank)
+    return out
+
+
+def _cost(c: dict, s: dict) -> int:
+    alternatives = sum(len(x["alternatives"]) for x in c["components"])
+    return ((1 + alternatives) * s["repeats"] + 1) * s["run_seconds"]
+
+
+def _entry_id(c: dict) -> str:
+    return f"selection:{c['practice']}:{c['purpose'].rsplit(':', 1)[1]}"
+
+
+def _could_change(report: dict) -> dict[str, bool]:
+    """Per practice, whether an experiment could change its case's qualified result."""
+    cases = (report.get("qualification") or {}).get("cases") or []
+    return {c["subject"]: c["result"] not in SETTLED for c in cases if c["kind"] == "practice"}
+
+
+def listing(root: str | Path, budget_seconds: int | None = None) -> list[dict]:
+    """The candidates of an assessment workspace with their device time, eligibility and whether an experiment could
+    change their case's result; writes nothing."""
+    root = Path(root)
+    report = json.loads((root / "assessment.json").read_text(encoding="utf-8"))
+    practices = json.loads((root / "subjects.json").read_text(encoding="utf-8"))["practices"]
+    s = {**settings(), **({"budget_seconds": budget_seconds} if budget_seconds is not None else {})}
+    change = _could_change(report)
+    out = []
+    for c in candidates(report, practices):
+        refusal = None
+        if not c["components"]:
+            refusal = "Skuld can impose nothing on its components"
+        elif c.get("tried"):
+            refusal = f"an experiment could not assess it ({c['tried']})"
+        out.append(
+            {
+                "id": _entry_id(c),
+                "practice": c["practice"],
+                "purpose": c["purpose"],
+                "concern": c["concern"],
+                "cost_seconds": _cost(c, s),
+                "eligible": refusal is None,
+                **({"refusal": refusal} if refusal else {}),
+                "could_change": change.get(c["practice"], True),
+            }
+        )
     return out
 
 
@@ -102,34 +170,51 @@ def candidates(report: dict, practices: list[dict]) -> list[dict]:
     return out
 
 
-def select(root: str | Path, replace: bool = False, now: datetime | None = None) -> dict:
-    """Writes the selection of an assessment workspace from its report (`skuld assess` first); returns it."""
+def select(
+    root: str | Path,
+    replace: bool = False,
+    now: datetime | None = None,
+    budget_seconds: int | None = None,
+    extend: bool = False,
+) -> dict:
+    """Writes the selection of an assessment workspace from its report (`skuld assess` first); returns it.
+    `budget_seconds` overrides config.json's budget; `extend` keeps an existing selection and adds to it."""
     root = Path(root)
     path = root / FILE
     report_path = root / "assessment.json"
     if not report_path.is_file():
         raise SelectionError(f"{root}: no assessment.json; run skuld assess first")
-    if path.is_file() and not replace:
-        raise SelectionError(f"{path} is fixed; select again only with --replace, which keeps it")
+    if path.is_file() and not (replace or extend):
+        raise SelectionError(f"{path} is fixed; select again only with --replace, which keeps it, or --extend")
     report = json.loads(report_path.read_text(encoding="utf-8"))
     practices = json.loads((root / "subjects.json").read_text(encoding="utf-8"))["practices"]
-    s = settings()
+    s = {**settings(), **({"budget_seconds": budget_seconds} if budget_seconds is not None else {})}
     named = _chosen(root)
     spent, entries = 0, []
-    found = candidates(report, practices)
-    first = [c for c in found if {c["practice"], c["concern"]} & set(named)]
+    if extend and path.is_file():
+        earlier = json.loads(path.read_text(encoding="utf-8"))
+        entries = list(earlier["entries"])
+        spent = earlier["device_seconds"]
+    held = {e["id"] for e in entries}
+    found = [c for c in candidates(report, practices) if _entry_id(c) not in held]
+
+    def mark(c: dict) -> tuple[str, int] | None:
+        return next((named[k] for k in (c["concern"], c["practice"]) if k in named), None)
+
+    first = sorted((c for c in found if mark(c)), key=lambda c: (mark(c)[0] == "investigate", mark(c)[1]))
     for c in first + [c for c in found if c not in first]:
-        alternatives = sum(len(x["alternatives"]) for x in c["components"])
-        cost = ((1 + alternatives) * s["repeats"] + 1) * s["run_seconds"]
-        entry = {"id": f"selection:{c['practice']}:{c['purpose'].rsplit(':', 1)[1]}", **c, "cost_seconds": cost}
-        marked = next((named[k] for k in (c["concern"], c["practice"]) if k in named), None)
+        cost = _cost(c, s)
+        entry = {"id": _entry_id(c), **c, "cost_seconds": cost}
+        marked = mark(c)
         undecided = f"reasoning does not decide it (concern (iv) {c['concern_status'] or 'not stated'})"
         if not c["components"]:
             entry.update(kind=REFUSAL, reason="Skuld can impose nothing on its components")
         elif c.get("tried"):
             entry.update(kind=REFUSAL, reason=f"an experiment could not assess it ({c['tried']})")
-        elif marked:
-            entry.update(kind=CHOICE, reason=f"{REASONS[marked]}; {undecided}")
+        elif marked and marked[0] in UNBUDGETED:
+            entry.update(kind=CHOICE, reason=f"{REASONS[marked[0]]}; {undecided}")
+        elif marked and spent + cost <= s["budget_seconds"]:
+            entry.update(kind=CHOICE, reason=f"{REASONS[marked[0]]} (rank {marked[1]}); {undecided}; within the budget")
         elif spent + cost <= s["budget_seconds"]:
             entry.update(kind=CHOICE, reason=f"{undecided}; within the budget")
         elif not s["budget_seconds"]:
@@ -154,7 +239,7 @@ def select(root: str | Path, replace: bool = False, now: datetime | None = None)
         old = json.loads(path.read_text(encoding="utf-8"))
         path.rename(path.with_name(f"selection-{old['created'].replace(':', '')}.json"))
     path.parent.mkdir(exist_ok=True)
-    path.write_text(json.dumps(selection, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(selection, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     return selection
 
 

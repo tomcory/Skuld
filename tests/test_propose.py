@@ -396,7 +396,9 @@ def test_a_feature_refused_twice_is_left_out_and_the_others_kept(tmp_path):
     assert provider.calls == 2
     assert [c["case"] for c in summary["episodes"]["e1"]["cases"]] == ["e1"]
     assert summary["episodes"]["e1"]["refused"] == ["feature 2: slot picker is not filled"]
-    assert "Your previous answer was refused" in (root / "proposals" / "e1" / "a2" / "prompt.txt").read_text()
+    assert "Your previous answer was refused" in (root / "proposals" / "e1" / "a2" / "prompt.txt").read_text(
+        encoding="utf-8"
+    )
 
 
 # -- the predicates and the path ----------------------------------------------------------------------------------
@@ -415,7 +417,7 @@ def test_texts_and_screens_are_judged_between_the_actions_an_oracle_names(tmp_pa
 
 def test_a_path_cannot_start_after_its_last_action(tmp_path):
     root = ws.build(tmp_path / "ws", freeze=False)
-    case = yaml.safe_load((root / "cases" / "start.yaml").read_text())
+    case = yaml.safe_load((root / "cases" / "start.yaml").read_text(encoding="utf-8"))
     case["feature"]["path"] = {"run": "rec-1", "from": 3, "actions": 2}
     (root / "cases" / "start.yaml").write_text(yaml.safe_dump(case))
     with pytest.raises(inputs.InputError, match="starts after its last action"):

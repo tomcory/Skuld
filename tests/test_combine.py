@@ -42,6 +42,20 @@ def test_the_strongest_claim_decides_a_disagreement_and_its_value():
     assert (c["status"], c["relationship"]) == ("supported", "not_dependent")
 
 
+def test_a_combined_claim_records_the_members_it_overruled():
+    model = {**claim("rs", "supported", "doc", ["x"]), "stage": "assessment"}
+    c = combine.combined("C", [model, claim("ex", "refuted", "run", challenging=["k"]), claim("ex2", "refuted", "run")])
+    assert c["overruled"] == [
+        {"claim": "rs", "channels": ["rs"], "stage": "assessment", "status": "supported", "strength": "doc"}
+    ]
+    # a disagreement in value is overruled too; members that agree, or cannot decide, are not
+    shown = claim("ex", "supported", "run", ["k"], value="not_dependent")
+    c = combine.combined("C", [claim("rs", "supported", "doc", ["x"]), shown, claim("na", "not_assessable")])
+    assert [m["claim"] for m in c["overruled"]] == ["rs"]
+    agreeing = combine.combined("C", [claim("rs", "supported", "doc", ["x"]), claim("ex", "supported", "run", ["k"])])
+    assert "overruled" not in agreeing
+
+
 def test_equally_strong_claims_that_disagree_in_status_or_value_are_conflicted():
     c = combine.combined("C", [claim("a", "supported", "doc", ["x"]), claim("b", "refuted", "doc", challenging=["y"])])
     assert c["status"] == "conflicted" and c["supporting"] == ["x"] and c["challenging"] == ["y"]

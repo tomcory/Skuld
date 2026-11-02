@@ -4,7 +4,7 @@ E's concerns (E def:concern), by four rules:
     (i)   information not given, for the collection and a transparency requirement (rule tier): supported if its
           status is missing, citing what decides that it applies and D's silence on its label; supported under an
           open condition if missing_if. That no document bears the label is D's analysis not finding it, and no
-          channel of D is exhaustive for a transparency requirement (assessment.EXHAUSTIVE), so U_s is moderate
+          channel of D is exhaustive for a transparency requirement (ratatoskr.channels), so U_s is moderate
     (ii)  not specific, for a declared purpose (reasoning tier): stated where a sample judges it not specific;
           supported if the samples' combined judgement is
     (iii) no specified purpose covers it, for a practice and a supported inferred purpose: stated where no purpose
@@ -148,14 +148,15 @@ def not_specific(frame: Frame, statements, judgements: list[dict], items, applic
     """Concerns (ii) and coverage per declared purpose statement, from the specificity samples' judgements."""
     r = frame.requirement("purpose_specific")
     if not _applies(applicability, r.id):
-        return [], [Covered(r.id, s.declarations[0], "rule", False) for s in statements]
+        return [], [Covered(r.id, d, "rule", False) for s in statements for d in s.declarations]
     concerns, covered = [], []
     for s in statements:
         mine = [j for j in judgements if j["statement"] == s.id]
         if not mine:
             continue
         channels = sorted({ch for j in mine for ch in j["channels"]})
-        covered.append(Covered(r.id, s.declarations[0], "reasoning"))
+        # every declaration of the statement is assessed with it (a concern names the statement's first)
+        covered += [Covered(r.id, d, "reasoning") for d in s.declarations]
         flagged = [j for j in mine if not j["specific"]]
         if not flagged:
             continue

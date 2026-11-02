@@ -39,7 +39,7 @@ def test_an_assessment_names_what_it_reads_and_loads_it(workspace):
     assert a.frame.id == "gdpr-art5" and a.models["expectation"] == a.models["assessment"]
     assert a.cases is None  # no case workspace in this folder
     assert (
-        yaml.safe_load((root / "assessment.yaml").read_text())["observation"][0]["path"]
+        yaml.safe_load((root / "assessment.yaml").read_text(encoding="utf-8"))["observation"][0]["path"]
         == "../o/observation_report.json"
     )
 
@@ -64,7 +64,7 @@ def test_a_changed_report_or_run_is_refused(workspace, change):
 
 def test_a_frame_of_another_version_is_refused(workspace):
     root = workspace[0]
-    data = yaml.safe_load((root / "assessment.yaml").read_text())
+    data = yaml.safe_load((root / "assessment.yaml").read_text(encoding="utf-8"))
     data["frame"]["sha256"] = "0" * 64
     (root / "assessment.yaml").write_text(yaml.safe_dump(data))
     with pytest.raises(inputs.InputError, match="frame"):
@@ -77,7 +77,7 @@ def test_an_assessment_without_d_or_an_exploration(tmp_path):
     inputs.describe_assessment(root, "app.example", "1.0", [(o, None)], None, None, CORPUS)
     a = inputs.load_assessment(root)
     assert a.declaration is None and a.exploration is None
-    data = yaml.safe_load((root / "assessment.yaml").read_text())
+    data = yaml.safe_load((root / "assessment.yaml").read_text(encoding="utf-8"))
     data["observation"] = []
     (root / "assessment.yaml").write_text(yaml.safe_dump(data))
     with pytest.raises(inputs.InputError, match="at least one O report"):
@@ -87,7 +87,8 @@ def test_an_assessment_without_d_or_an_exploration(tmp_path):
 FIXTURES = {
     "pilatesworkout.yogaworkout.loseweight.workoutapps@1.6.4": (3, True, False, True),
     "air.nn.mobile.app.main@3.8.96": (1, True, True, False),
-    "de.wetteronline.wetterapp@2026.20": (None, False, True, True),
+    # D since 2026-10-31: Data safety, listing and in-app notice; the policy did not render (G-5)
+    "de.wetteronline.wetterapp@2026.20": (None, True, True, True),
 }
 
 
@@ -107,7 +108,11 @@ def test_the_case_studys_fixtures_load(name):
     for report in a.observations:
         assert report.load()["observations"][0]["package"] == a.package
     if a.declaration:
-        assert a.declaration.load()["collection"]["store_version"] == a.version
+        store_version = a.declaration.load()["collection"]["store_version"]
+        # an unknown store version (WetterOnline's collection) is comparable, with the version recorded unknown
+        assert (
+            store_version in (None, a.version) or frozenset((store_version, a.version)) in a.compatible_pairs()
+        )
 
 
 def test_skuld_describe_writes_the_assessment_workspace(tmp_path):

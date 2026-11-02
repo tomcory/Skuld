@@ -14,7 +14,9 @@ def test_a_reports_provenance_is_complete_and_a_tampered_record_is_found(tmp_pat
     assert check(workspace, report) == []
 
     observation = root / "observation" / "run-02" / "observation_report.json"
-    observation.write_text(observation.read_text().replace("advertising_id", "android_id", 1))
+    observation.write_text(
+        observation.read_text(encoding="utf-8").replace("advertising_id", "android_id", 1), encoding="utf-8"
+    )
     problems = check(workspace, report)
     assert any("run-02: its observation report does not verify" in p for p in problems)
 

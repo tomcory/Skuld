@@ -120,7 +120,7 @@ def test_the_modules_that_write_statuses_call_no_model():
         "select",
         "space",
     ):
-        tree = ast.parse((Path(__file__).parents[1] / "skuld" / f"{module}.py").read_text())
+        tree = ast.parse((Path(__file__).parents[1] / "skuld" / f"{module}.py").read_text(encoding="utf-8"))
         imported = {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
         imported |= {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
         assert not any(name.startswith("ratatoskr.llm") for name in imported), module

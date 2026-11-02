@@ -4,8 +4,9 @@ screens around it and documentation, without anything the provider says.
 
 One batch per episode (Q2): the practices that occurred in it, answered each in its own part of the schema; practices
 of no known episode form the batch `launch`. The batch's screens are those of the episode in the first run that has
-them, with the screens the notice classifier (Ratatoskr's `notices`, R-7) takes for consent dialogs or privacy notices
-left out and recorded as left out, so that what D collects as declarations never reaches this stage (gate 1). The
+them, with what the notice classifier (Ratatoskr's `notices`, R-7) takes for a notice left out and recorded as left
+out: a consent dialog's whole screen, a privacy notice's texts that speak of data, the rest of whose screen is kept.
+What D collects as declarations, the same texts, never reaches this stage (gate 1). The
 context holds no part of D's report: `check` refuses one.
 
 A sample per batch and seed (`skuld expect`) is kept under expectation/<batch>/s<seed>/ (ask.py); `read` turns an
@@ -26,7 +27,7 @@ from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 
-from ratatoskr.notices import classify
+from ratatoskr.notices import classify, notice_texts
 from ratatoskr.vocabularies import Vocabulary
 
 from skuld import ask, config
@@ -123,7 +124,7 @@ class Batch:
     practices: list[Practice]
     run: str | None
     screens: list[tuple[str, str]] = field(default_factory=list)
-    left_out: list[dict] = field(default_factory=list)  # notice screens, with their kind and terms
+    left_out: list[dict] = field(default_factory=list)  # notices, with their kind, terms and whether the whole screen
 
 
 def components(practice: Practice) -> dict[str, tuple[str, str]]:
@@ -184,11 +185,16 @@ def batches(a: Assessment, subjects: Subjects) -> list[Batch]:
                 break
         kept, left_out = [], []
         for sid, text in screens:
-            notice = classify(text.split(" | "))
-            if notice:
-                left_out.append({"screen": sid, "kind": notice[0], "terms": notice[1]})
-            else:
+            texts = text.split(" | ")
+            notice = classify(texts)
+            if not notice:
                 kept.append((sid, text))
+                continue
+            declared = notice_texts(texts)
+            rest = [t for t in texts if t not in declared]
+            left_out.append({"screen": sid, "kind": notice[0], "terms": notice[1], "whole": not rest})
+            if rest:
+                kept.append((sid, " | ".join(rest)))
         out.append(Batch(LAUNCH if key == "?" else f"e{key}", practices, run_id, kept[:MAX_SCREENS], left_out))
     return out
 
@@ -493,7 +499,7 @@ def kept(a: Assessment, subjects: Subjects, corpus: Corpus, registry=None) -> li
             answer = json.loads(sample.text)
         except ValueError:
             answer = {}
-        name = str(sample.folder.relative_to(a.root / "expectation"))
+        name = sample.folder.relative_to(a.root / "expectation").as_posix()
         out.append((name, context, answer if isinstance(answer, dict) else {}))
     return out
 
