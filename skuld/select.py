@@ -30,7 +30,9 @@ experiment; qualification proposes one per eligible candidate, by `refusal` here
 A case's device time is estimated as (1 + its alternatives) × repeats runs, and one qualifying replay, of
 `run_seconds` each. A selection is fixed once: making another replaces it only on request (`--replace`), and keeps the
 one it replaces. Within one investigation it may be extended (`--extend`), which keeps every earlier choice and
-refusal, counts the device time already chosen, and adds the candidates it did not yet hold.
+refusal that does not depend on the budget, counts the device time already chosen, and decides the others again:
+the candidates it did not yet hold and those an earlier budget refused (the Investigator gives each batch just the
+device time of its choice, so its next batch may choose what the earlier one refused).
 """
 
 import hashlib
@@ -205,7 +207,8 @@ def select(
     spent, entries = 0, []
     if extend and path.is_file():
         earlier = json.loads(path.read_text(encoding="utf-8"))
-        entries = list(earlier["entries"])
+        # a refusal for the budget alone (eligible, so `refusal` finds nothing) is decided again under the new budget
+        entries = [e for e in earlier["entries"] if e["kind"] == CHOICE or refusal(e) is not None]
         spent = earlier["device_seconds"]
     held = {e["id"] for e in entries}
     found = [c for c in candidates(report, practices) if _entry_id(c) not in held]

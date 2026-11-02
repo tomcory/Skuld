@@ -85,7 +85,7 @@ Options (from `--help`):
 | `expect` | `--model` (default: config.json's), `--api`, `--seeds …`, `--offline` (only the samples kept), `--corpus`, `--registry` |
 | `judge` | `--model` (default: the assessment's, else config.json's), `--api`, `--seeds …`, `--question specificity\|compatibility\|minimisation …`, `--offline`, `--corpus`, `--registry` |
 | `assess`, `check` | `--registry` |
-| `select` | `--replace` (replace a fixed selection, keeping it), `--extend` (add to a fixed selection, keeping its choices), `--budget-seconds` (over config.json's), `--list` (the candidates as JSON lines: device time, eligible, could change; writes nothing) |
+| `select` | `--replace` (replace a fixed selection, keeping it), `--extend` (add to a fixed selection, keeping its choices; what an earlier budget refused is decided again), `--budget-seconds` (over config.json's), `--list` (the candidates as JSON lines: device time, eligible, could change; writes nothing) |
 | `propose` | `--pilot <pilot>` or `--workspace <folder>`, `--catalogue`, `--model`, `--api`, `--offline`, `--selection <selection.json>`, `--registry` |
 | `freeze` | `--author` (required), `--model` (the author is a model), `--prompt` |
 | `change` | `--reason` (required) |

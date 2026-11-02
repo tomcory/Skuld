@@ -310,10 +310,30 @@ def test_a_selection_is_extended_within_an_investigation_and_keeps_what_it_held(
     report_["claims"].append(hypothesis("claim:P-loc:7", "P-loc", "ServiceProvision"))
     (workspace / "assessment.json").write_text(json.dumps(report_))
     extended = select.select(workspace, budget_seconds=10**6, extend=True)
-    assert extended["entries"][: len(first["entries"])] == first["entries"]
-    new = extended["entries"][len(first["entries"]) :]
-    assert [e["purpose"] for e in new] == ["claim:P-loc:7"] and new[0]["kind"] == select.CHOICE
+    kept = [e for e in first["entries"] if select.refusal(e)]  # refused whatever the budget
+    assert kept and extended["entries"][: len(kept)] == kept
+    new = extended["entries"][len(kept) :]
+    budget = [e["purpose"] for e in first["entries"] if not select.refusal(e)]  # refused only for the budget (0)
+    assert [e["purpose"] for e in new] == budget + ["claim:P-loc:7"]
+    assert all(e["kind"] == select.CHOICE for e in new)
     assert len(list((workspace / "inputs").glob("selection-*.json"))) == 1  # the earlier one is kept
+
+
+def test_an_extension_decides_again_what_an_earlier_budget_refused(workspace):
+    # Odin's batches: the first gets just its choice's device time, so Skuld refuses the rest over the budget; a
+    # second batch in the same workspace line must be able to choose one of those
+    costs = {c["practice"]: c["cost_seconds"] for c in select.listing(workspace)}
+    (workspace / "inputs").mkdir()
+    (workspace / select.CHOSEN).write_text("chosen:\n  - {id: P-ads, reason: investigate, rank: 1}\n")
+    first = select.select(workspace, budget_seconds=costs["P-ads"])
+    assert {e["practice"]: e["kind"] for e in first["entries"]}["P-loc"] == select.REFUSAL
+    (workspace / select.CHOSEN).write_text("chosen:\n  - {id: P-loc, reason: investigate, rank: 1}\n")
+    second = select.select(workspace, budget_seconds=costs["P-ads"] + costs["P-loc"], extend=True)
+    by = {e["practice"]: e for e in second["entries"]}
+    assert by["P-ads"] == {e["practice"]: e for e in first["entries"]}["P-ads"]  # the earlier choice, as it was
+    assert by["P-loc"]["kind"] == select.CHOICE and "rank 1" in by["P-loc"]["reason"]
+    assert second["device_seconds"] == costs["P-ads"] + costs["P-loc"]
+    assert len(second["entries"]) == len(first["entries"])  # decided again, not added twice
 
 
 def test_the_listing_says_whether_an_experiment_could_change_a_result(workspace):
