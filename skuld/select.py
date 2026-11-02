@@ -23,8 +23,9 @@ config.json's; the candidates no entry names follow in Skuld's order. Which cand
       - {id: P-22c276a76c, reason: investigate, rank: 1}
 
 `skuld select --list` writes nothing and prints the candidates as JSON lines, each with its estimated device time,
-whether it is eligible, and whether an experiment could change its practice's qualified result: a case that is already
-an established discrepancy or a supported concern cannot change by a minimisation concern being supported or refuted.
+whether it is eligible, and whether an experiment could change a case's qualified result. That is qualification's
+experiment step for the purpose (`qualify/nextsteps.py`), which qualifies the case under each outcome of the
+experiment; qualification proposes one per eligible candidate, by `refusal` here, so the two never disagree.
 
 A case's device time is estimated as (1 + its alternatives) × repeats runs, and one qualifying replay, of
 `run_seconds` each. A selection is fixed once: making another replaces it only on request (`--replace`), and keeps the
@@ -56,7 +57,6 @@ REASONS = {
 #: Reasons whose entries are chosen whatever the budget; an investigation's are taken within it, by rank
 UNBUDGETED = ("pursue", "calibrate")
 #: Qualified results an experiment cannot change: a minimisation concern adds nothing to a higher result
-SETTLED = ("externally_established_discrepancy", "externally_supported_concern")
 CHOICE, REFUSAL = "experiment_choice", "experiment_refusal"
 #: The defaults of config.json's `experiments`
 DEFAULTS = {"budget_seconds": 0, "repeats": 3, "run_seconds": 240}
@@ -96,10 +96,25 @@ def _entry_id(c: dict) -> str:
     return f"selection:{c['practice']}:{c['purpose'].rsplit(':', 1)[1]}"
 
 
+def refusal(candidate: dict) -> str | None:
+    """Why no experiment is chosen for a candidate, or None where it is eligible."""
+    if not candidate["components"]:
+        return "Skuld can impose nothing on its components"
+    if candidate.get("tried"):
+        return f"an experiment could not assess it ({candidate['tried']})"
+    return None
+
+
 def _could_change(report: dict) -> dict[str, bool]:
-    """Per practice, whether an experiment could change its case's qualified result."""
-    cases = (report.get("qualification") or {}).get("cases") or []
-    return {c["subject"]: c["result"] not in SETTLED for c in cases if c["kind"] == "practice"}
+    """Per purpose, whether its experiment could change a case's qualified result: qualification's experiment step
+    for it (qualify/nextsteps.py), which tests each outcome of the experiment on the case."""
+    steps = (report.get("qualification") or {}).get("next_steps") or []
+    out: dict[str, bool] = {}
+    for s in steps:
+        purpose = (s.get("target") or {}).get("purpose")
+        if s["kind"] == "experiment" and purpose:
+            out[purpose] = out.get(purpose, False) or s["could_change"]
+    return out
 
 
 def listing(root: str | Path, budget_seconds: int | None = None) -> list[dict]:
@@ -112,11 +127,7 @@ def listing(root: str | Path, budget_seconds: int | None = None) -> list[dict]:
     change = _could_change(report)
     out = []
     for c in candidates(report, practices):
-        refusal = None
-        if not c["components"]:
-            refusal = "Skuld can impose nothing on its components"
-        elif c.get("tried"):
-            refusal = f"an experiment could not assess it ({c['tried']})"
+        refused = refusal(c)
         out.append(
             {
                 "id": _entry_id(c),
@@ -124,9 +135,10 @@ def listing(root: str | Path, budget_seconds: int | None = None) -> list[dict]:
                 "purpose": c["purpose"],
                 "concern": c["concern"],
                 "cost_seconds": _cost(c, s),
-                "eligible": refusal is None,
-                **({"refusal": refusal} if refusal else {}),
-                "could_change": change.get(c["practice"], True),
+                "eligible": refused is None,
+                **({"refusal": refused} if refused else {}),
+                # an ineligible candidate has no experiment step, so it could change nothing
+                "could_change": refused is None and change.get(c["purpose"], False),
             }
         )
     return out
@@ -135,7 +147,7 @@ def listing(root: str | Path, budget_seconds: int | None = None) -> list[dict]:
 def candidates(report: dict, practices: list[dict]) -> list[dict]:
     """The practices and supported inferred purposes whose minimisation is undecided, with what Skuld could impose."""
     by_id = {p["id"]: p for p in practices}
-    concern = {c["purpose"]: c for c in report["concerns"] if c["step"] == "less_invasive_alternative"}
+    concern = {c.get("purpose"): c for c in report["concerns"] if c["step"] == "less_invasive_alternative"}
     tested = [c for c in report["claims"] if c.get("case") and c["type"] == "alternative"]
     decided = {b for c in tested if c["status"] in combine.DECISIVE for b in c["basis"]}
     tried = {b: c for c in tested if c["status"] == "not_assessable" for b in c["basis"]}
@@ -157,7 +169,7 @@ def candidates(report: dict, practices: list[dict]) -> list[dict]:
                 "beneficiary": h["purpose"].get("beneficiary"),
                 "concern": k["id"] if k else None,
                 "concern_status": k["status"] if k else None,
-                "episodes": p["episodes"],
+                "episodes": p.get("episodes") or [],
                 "fields": {f: p.get(f) for f in ("id", "claim_type", "data", "recipient")},
                 "components": space.imposable(SimpleNamespace(**{**p, "party": p.get("party")})),
                 **(

@@ -412,3 +412,10 @@ def test_the_fixtures_are_qualified_whole(name):
     keys = [(CASE_ORDER.index(c["result"]), c["subject"]) for c in q["cases"]]
     assert keys == sorted(keys)
     assert {k: v for k, v in q["profile"].items() if k != "o_d_by_channel"} == PROFILES[name]
+    # one signal for experiments: a step per purpose skuld select finds eligible, and the listing reads its flag
+    from skuld import select
+
+    listed = select.listing(path.parent)
+    steps = {s["target"]["purpose"]: s for s in q["next_steps"] if "purpose" in s.get("target", {})}
+    assert {c["purpose"] for c in listed if c["eligible"]} == set(steps)
+    assert all(c["could_change"] == steps[c["purpose"]]["could_change"] for c in listed if c["eligible"])

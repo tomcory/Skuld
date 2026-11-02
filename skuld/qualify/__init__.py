@@ -162,6 +162,12 @@ def qualify(report: dict, requirements: dict[str, str], data=None, registry=None
     """The qualification of an assessment: `requirements` gives each requirement of the frame the kind of its subject
     (practice, declaration, collection); `data` is the data vocabulary, `registry` the recipient register."""
     index = Index(report, requirements)
+    from skuld import select as selection  # select reads qualification's steps; import here, not at module load
+
+    index.experiments = {}
+    for c in selection.candidates(report, report["subjects"]["practices"]):
+        if selection.refusal(c) is None:
+            index.experiments.setdefault(c["practice"], []).append(c)
     coverage = _Coverage(report)
     with_d = report["inputs"]["declaration"] is not None
     cases, purposes, collection = placement.place(index)

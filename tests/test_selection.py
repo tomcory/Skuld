@@ -317,14 +317,21 @@ def test_a_selection_is_extended_within_an_investigation_and_keeps_what_it_held(
 
 
 def test_the_listing_says_whether_an_experiment_could_change_a_result(workspace):
-    assert all(c["could_change"] for c in select.listing(workspace))
+    # one signal: qualification's experiment step for the purpose, which tests the experiment's outcomes on the case
+    listed = select.listing(workspace)
+    assert not any(c["could_change"] for c in listed)  # no qualification: no step says it could
     report_ = json.loads((workspace / "assessment.json").read_text(encoding="utf-8"))
     report_["qualification"] = {
-        "cases": [{"kind": "practice", "subject": "P-ads", "result": "externally_supported_concern"}]
+        "next_steps": [
+            {"kind": "experiment", "target": {"practice": c["practice"], "purpose": c["purpose"]},
+             "could_change": c["practice"] != "P-ads"}
+            for c in listed
+        ]
     }
     (workspace / "assessment.json").write_text(json.dumps(report_))
     by = {c["practice"]: c for c in select.listing(workspace)}
     assert not by["P-ads"]["could_change"] and by["P-loc"]["could_change"]
+    assert not by["P-own"]["could_change"]  # not eligible: no experiment step
     assert by["P-own"]["eligible"] is False and by["P-own"]["refusal"]
     assert not (workspace / select.FILE).exists()  # listing writes nothing
 

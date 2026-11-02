@@ -16,6 +16,9 @@ take within its pass; the rest stay in the dossier as recommended follow-up.
     verifiable, precondition_failed; not_admitted of a
     minimisation concern or of a dependency or
     alternative claim
+    a purpose skuld select finds eligible (its           experiment     skuld, through loki
+    minimisation undecided, a component Skuld can
+    impose on, no experiment tried it)
     gap not_admitted of any other concern or claim       re-analyse     skuld, the reasoning tier asked again
                                                                         (only minimisation has an experiment)
     gap purpose_vague; an open fact condition            review         a person
@@ -33,7 +36,7 @@ from skuld.qualify.conditions import SOURCE
 from skuld.qualify.conditions import channel as source_channel
 from skuld.qualify.results import Con, View, result
 
-VERSION = "1"
+VERSION = "2"
 COMPONENT = {"role": "method", "id": "skuld.qualify.nextsteps", "version": VERSION}
 
 EXPERIMENT = (
@@ -210,12 +213,37 @@ def _open_variants(view: View, o: dict) -> list[View]:
     return variants
 
 
+def _experiment_step(view: View, c: dict) -> tuple[dict, list[View]]:
+    """The experiment `skuld select` would choose for an eligible purpose, with its outcomes: minimisation assessed,
+    the concern supported or not raised."""
+    alternatives = [a for comp in c["components"] for a in comp["alternatives"]]
+    step = {
+        "kind": "experiment",
+        "by": "skuld",
+        "target": {"practice": c["practice"], "purpose": c["purpose"], **({"concern": c["concern"]} if c["concern"] else {})},
+        "decides": f"whether {c['node'] or 'the purpose'} is achieved with less ({', '.join(alternatives)})",
+        "from": [c["concern"] or c["purpose"]],
+    }
+    base = _assessed(view, "data_minimised")
+    held = [x for x in base.concerns if x.id == c["concern"]]
+    if held:
+        variants = resolutions_of_concerns(base, held)
+    else:
+        added = base.copy()
+        added.concerns.append(Con(c["purpose"], "data_minimised", "less_invasive_alternative", "supported"))
+        variants = [added, base]
+    return step, variants
+
+
 def candidates(index, holding, view: View) -> list[tuple[dict, list[View]]]:
     """A holding's next steps, each with the resolutions that test whether it could change the holding's result."""
     out = []
     for gid in holding.gaps:
         g = index.gaps[gid]
         out.append((_gap_step(index, holding, g), _gap_variants(index, holding, view, g)))
+    if holding.kind == "practice":
+        for c in getattr(index, "experiments", {}).get(holding.subject, []):
+            out.append(_experiment_step(view, c))
     for oid in holding.open:
         o = index.open[oid]
         out.append((_open_step(index, view, o), _open_variants(view, o)))
