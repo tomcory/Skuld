@@ -111,6 +111,8 @@ def test_observed_without_declaration_is_established_only_on_an_exhaustive_chann
         a = Assessment()
         p = a.practice()
         a.assessed_for_practice(p)
+        for channel in silent.split(", "):
+            a.document(channel)
         a.relation("O-D", "observed_without_declaration", p, silence=[f"D: {silent}"])
         c = case(qualified(a), p)
         return c["result"], c["reason"]
@@ -118,6 +120,24 @@ def test_observed_without_declaration_is_established_only_on_an_exhaustive_chann
     established, _ = result("data_safety, policy")
     assert established == DISCREPANCY
     omitted, why = result("policy")
+    assert omitted == CONCERN and "an omission, not a denial" in why
+
+
+def test_the_silence_of_an_incomplete_document_is_an_omission():
+    """An exhaustive channel closes its silence only where its document is complete (def:qualification, 21 Nov 2026)."""
+
+    def result(complete: bool) -> tuple[str, str]:
+        a = Assessment()
+        p = a.practice()
+        a.assessed_for_practice(p)
+        a.document("data_safety", complete=complete)
+        a.document("policy")
+        a.relation("O-D", "observed_without_declaration", p, silence=["D: data_safety, policy"])
+        c = case(qualified(a), p)
+        return c["result"], c["reason"]
+
+    assert result(True)[0] == DISCREPANCY
+    omitted, why = result(False)
     assert omitted == CONCERN and "an omission, not a denial" in why
 
 

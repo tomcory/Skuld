@@ -21,7 +21,9 @@ from skuld.qualify.placement import Holding, Index
 from skuld.qualify.results import Con, Gap, Rel, Unassessed, View
 from skuld.uncertainty import is_high
 
-VERSION = "2"  # 2: only a declared purpose's specificity is set aside, not concern (iii)
+#: 2: only a declared purpose's specificity is set aside, not concern (iii); 3: an exhaustive channel closes its silence
+#: only where its document is complete, else the mismatch is an omission (def:qualification; 21 Nov 2026)
+VERSION = "3"
 COMPONENT = {"role": "method", "id": "skuld.qualify", "version": VERSION}
 COMPONENTS = [
     COMPONENT,
@@ -98,10 +100,20 @@ def _requirements_of(index: Index, coverage: _Coverage, holding: Holding, with_d
     return assessed, missing, inapplicable
 
 
-def _omission(relation: dict) -> bool:
-    """Whether an O–D relation of symbol ≠ is an omission: it reads only the silence of channels not exhaustive for
-    the aspect's predicate (observed without declaration where no silent channel is exhaustive), or a correspondence
-    with a sibling node only (related), which reads the silence on the observed node."""
+def complete_channels(report: dict) -> frozenset[str]:
+    """D's channels whose documents were analysed and acquired complete: only their silence can be closed."""
+    documents = (report["subjects"].get("collection") or {}).get("documents", [])
+    return frozenset(
+        d["channel"] for d in documents if d.get("status", "analysed") == "analysed" and d.get("complete", True)
+    )
+
+
+def _omission(relation: dict, complete: frozenset[str]) -> bool:
+    """Whether an O–D relation of symbol ≠ is an omission: it reads only a silence that is not closed, where no silent
+    channel is both exhaustive for the aspect's predicate and complete (`complete`, D's channels whose documents were
+    acquired complete; observed without declaration), or a correspondence with a sibling node only (related), which
+    reads the silence on the observed node. An established ≠ rests on a denial or on the silence of a complete document
+    of a channel that declares every case (def:qualification)."""
     if relation.get("type") != "O-D":
         return False
     if relation.get("outcome") == "observed_without_declaration":
@@ -110,7 +122,7 @@ def _omission(relation: dict) -> bool:
 
         predicate = PREDICATE.get(relation.get("aspect") or "data", "collection")
         silent = [c for line in relation.get("silence") or () for c in line.removeprefix("D: ").split(", ") if c]
-        return not any(exhaustive(c, predicate) for c in silent)
+        return not any(c in complete and exhaustive(c, predicate) for c in silent)
     return relation.get("partial") == "related"
 
 
@@ -129,7 +141,7 @@ def _view(index: Index, holding: Holding, assessed: list, missing: list, inappli
                 r.get("condition"),
                 is_high(r.get("uncertainty")),
                 r.get("partial"),
-                _omission(r),
+                _omission(r, index.complete),
             )
         )
     cons, aside = [], []
@@ -187,6 +199,7 @@ def qualify(report: dict, requirements: dict[str, str], data=None, registry=None
     `applicability` the frame's applicability conditions (`applies_if`), whose kind is applicability."""
     index = Index(report, requirements)
     index.applicability = frozenset(applicability)
+    index.complete = complete_channels(report)
     from skuld import select as selection  # select reads qualification's steps; import here, not at module load
 
     index.experiments = {}

@@ -201,5 +201,17 @@ class Assessment:
             }
         )
 
+    def document(self, channel, complete=True) -> None:
+        """An analysed document of D's, acquired complete or not."""
+        self.report["subjects"]["collection"]["documents"].append(
+            {
+                "channel": channel,
+                "document": f"{channel}.json",
+                "status": "analysed",
+                "complete": complete,
+                **({} if complete else {"incomplete": "incomplete as acquired"}),
+            }
+        )
+
     def build(self) -> dict:
         return copy.deepcopy(self.report)
