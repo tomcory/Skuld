@@ -549,8 +549,8 @@ wheels = [
 
 [[package]]
 name = "ratatoskr"
-version = "0.33.0"
-source = { git = "ssh://git@github.com/tomcory/Ratatoskr.git?rev=0.33.0#6c3f520bf387d4b92d8946f3f4347b5ba88f3f55" }
+version = "0.34.0"
+source = { git = "ssh://git@github.com/tomcory/Ratatoskr.git?rev=0.34.0#24096878c022391192df24b2f051ff9ae2a54609" }
 
 [package.optional-dependencies]
 anthropic = [
@@ -712,8 +712,8 @@ reason = [
 requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "ratatoskr", extras = ["anthropic", "ollama", "openai"], marker = "extra == 'reason'", git = "ssh://git@github.com/tomcory/Ratatoskr.git?rev=0.33.0" },
-    { name = "ratatoskr", extras = ["client", "validate"], git = "ssh://git@github.com/tomcory/Ratatoskr.git?rev=0.33.0" },
+    { name = "ratatoskr", extras = ["anthropic", "ollama", "openai"], marker = "extra == 'reason'", git = "ssh://git@github.com/tomcory/Ratatoskr.git?rev=0.34.0" },
+    { name = "ratatoskr", extras = ["client", "validate"], git = "ssh://git@github.com/tomcory/Ratatoskr.git?rev=0.34.0" },
 ]
 provides-extras = ["reason", "dev"]
 
