@@ -97,6 +97,11 @@ def test_a_run_that_fell_back_to_the_app_set_id_is_verified_and_its_comparison_n
     claims = [c for made in case_claims(workspace, report).values() for c in made]
     read = next(c for c in claims if c.type == "dependency" and c.component == "aaid" and c.purpose == "P1")
     assert read.comparisons[0].substitutes == [APP_SET_ID]
+    # the purpose needed a datum of the kind (substitutable, 21 Nov 2026); the App Set ID is coarser than the
+    # advertising ID, so the removal is a demonstrated alternative
+    assert (read.relationship, read.status) == ("substitutable", "supported") and APP_SET_ID in read.reason
+    removal = next(c for c in claims if c.type == "alternative" and c.alternative == "A1" and c.purpose == "P1")
+    assert removal.status == "supported"
     assert f"preserves (substitute: {APP_SET_ID})" in markdown(report)
 
 

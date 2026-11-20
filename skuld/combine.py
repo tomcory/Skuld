@@ -27,7 +27,9 @@ model and yields no finding: the claims it combines are kept, in the samples and
                   uncertainty to moderate (`aligned_above`) (C1, author 14 Nov 2026: that a function survives without the data
                   shows nothing for a narrower purpose, while that it breaks holds for every purpose it includes); an
                   experiment's Dependency
-                  claim is combined with the hypotheses' on the same component. Where no hypothesis aligns, reasoning
+                  claim is combined with the hypotheses' on the same component; a run's value decides over the documents' by its
+                  strength, so a run's substitutable overrules a hypothesis of essential (the purpose survived the
+                  removal) as it overrules one of quality_dependent. Where no hypothesis aligns, reasoning
                   is silent on the experimental case's purpose, and the experiment's claim stands combined alone.
 
 A combined claim's uncertainty is used here, to set its concerns', and not stored: the assessment names this function
@@ -43,8 +45,9 @@ DECISIVE = ("supported", "refuted")
 #: The combination as a named method of the report: 2 since claims that could not be assessed abstain (13 Nov 2026);
 #: 3 since an alternative demoted by gate (d) takes the uncertainty of the members that agree with it, not of those
 #: that support it (20 Nov 2026); 4: one level with its reasons (Ratatoskr 0.34.0): either over the agreeing members,
-#: needs over all where none agrees, aligned_above for C1
-VERSION = "4"
+#: needs over all where none agrees, aligned_above for C1; 5: a substitutable dependency that decides keeps its reason,
+#: which names the substitutes (21 Nov 2026)
+VERSION = "5"
 COMPONENT = {"role": "method", "id": "skuld.combine", "version": VERSION}
 #: What a combined claim carries over from the claim that decides it
 CARRIED = ("stage", "tier", "case", "scope", "component", "relationship", "alternative", "level")
@@ -93,6 +96,8 @@ def combined(cid: str, members: list[dict], **fields) -> dict:
         if k in first:
             claim[k] = first[k]
     if status in DECISIVE:
+        if first.get("relationship") == "substitutable" and first.get("reason"):
+            claim["reason"] = first["reason"]  # the substitutes the application fell back to
         claim["strength"] = first.get("strength", "own")
         claim["sufficiency"] = {"sufficient": True}
         # the members of lesser strength it decided over: a model's sample overruled by a measurement, or the reverse

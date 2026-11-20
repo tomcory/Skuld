@@ -722,6 +722,7 @@ def case_claims(cases: Workspace, report: dict) -> dict[str, list[rules.Claim]]:
     comparisons, the components present in the baseline, the alternatives that are no members of the search space
     and why the others were not compared."""
     by_case = {c["id"]: c for c in report["cases"]}
+    data = vocabulary(DATA_VOCABULARY)
     out = {}
     for case in cases.cases:
         measured = by_case.get(case.id)
@@ -738,7 +739,7 @@ def case_claims(cases: Workspace, report: dict) -> dict[str, list[rules.Claim]]:
         compared = {
             (k["purpose"], k["alternative"]): _comparison(k) for k in report["comparisons"] if k["case"] == case.id
         }
-        out[case.id] = rules.claims(case, present, compared, missing_why, invalid)
+        out[case.id] = rules.claims(case, present, compared, missing_why, invalid, data)
     return out
 
 
@@ -769,7 +770,9 @@ def premises(cases: Workspace | None, root: Path, practices: list, item) -> list
                         "channel": f"ex:{case.id}",
                         "case": CASE_REPORT,
                         "premises": [k.id],
-                        "method": f"the case report's comparison {k.id} ({k.outcome})",
+                        "method": f"the case report's comparison {k.id} ({k.outcome}"
+                        + (f"; substitute: {', '.join(k.substitutes)}" if k.substitutes else "")
+                        + ")",
                         "uncertainty": k.technical(),
                     },
                 )
@@ -813,7 +816,10 @@ def premises(cases: Workspace | None, root: Path, practices: list, item) -> list
                     **({"strength": "run"} if decisive else {}),
                     **({"relationship": c.relationship} if c.relationship else {}),
                     **({"alternative": f"{case.id}:{c.alternative}", "level": "demonstrated"} if c.alternative else {}),
-                    **({"reason": c.reason} if c.reason and not decisive else {}),
+                    # a substitutable dependency names its substitutes though it is supported
+                    **(
+                        {"reason": c.reason} if c.reason and (not decisive or c.relationship == "substitutable") else {}
+                    ),
                 }
                 out.append(x)
     return out

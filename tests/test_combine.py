@@ -78,6 +78,19 @@ def test_a_combined_claim_records_the_members_it_overruled():
     assert "overruled" not in agreeing
 
 
+def test_a_runs_substitutable_overrules_a_documented_essential_and_names_its_substitute():
+    shown = {
+        **claim("ex", "supported", "run", ["k"], value="substitutable"),
+        "reason": "the application fell back to the substitute device-or-other-ids.app-set-id",
+    }
+    c = combine.combined("C", [claim("rs", "supported", "doc", ["x"]), shown])
+    assert (c["status"], c["relationship"], c["strength"]) == ("supported", "substitutable", "run")
+    assert [m["claim"] for m in c["overruled"]] == ["rs"]
+    assert "app-set-id" in c["reason"]
+    # a decisive claim of another value keeps no reason of its own, as before
+    assert "reason" not in combine.combined("C", [{**claim("rs", "supported", "doc", ["x"]), "reason": "r"}])
+
+
 def test_equally_strong_claims_that_disagree_in_status_or_value_are_conflicted():
     c = combine.combined("C", [claim("a", "supported", "doc", ["x"]), claim("b", "refuted", "doc", challenging=["y"])])
     assert c["status"] == "conflicted" and c["supporting"] == ["x"] and c["challenging"] == ["y"]

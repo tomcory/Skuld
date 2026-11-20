@@ -36,6 +36,16 @@ def test_a_dependency_is_decided_by_the_value_of_the_strongest_claim():
     assert outcome([proposed]) == ("no_functional_dependency_established", None)
 
 
+def test_a_substitutable_dependency_is_a_dependency_on_a_datum_of_its_kind():
+    """A run's substitutable is no not_dependent (the purpose needed a datum of the kind) and decides over documents
+    by its strength (Ratatoskr 0.37.0, 21 Nov 2026)."""
+    essential = claim("d1", "dependency", "supported", "doc", relationship="essential")
+    substitutable = claim("d2", "dependency", "supported", "run", relationship="substitutable")
+    assert outcome([substitutable]) == ("functional_dependency_supported", "d2")
+    assert outcome([essential, substitutable]) == ("functional_dependency_supported", "d2")
+    assert outcome([essential, {**substitutable, "strength": "doc"}])[0] == "conflicting"
+
+
 def test_minimisation_takes_the_deciding_claims_level_and_strength():
     described = claim("a1", "alternative", "supported", "doc", level="technically_supported")
     shown = claim("a2", "alternative", "supported", "run", level="demonstrated")

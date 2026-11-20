@@ -6,7 +6,9 @@ claims; a relation names the claims it reads in `to`, and its outcome is a funct
 
     dependency    the Dependency claims on the component for the purpose (the hypotheses', and the experiments' for a
                   case purpose ≈ it), decided by the combination's rule: functional (data) or recipient dependency
-                  supported if the deciding claim supports essential or quality_dependent; no functional dependency
+                  supported if the deciding claim supports essential, quality_dependent or substitutable (the purpose
+                  needs a datum of the component's kind; whether this one is the least invasive is minimisation's
+                  question, which the Alternative claim of the same comparison answers); no functional dependency
                   established, or recipient dependency not established, otherwise; conflicting if the claims of
                   greatest strength disagree, not assessable if every claim is
     minimisation  the Alternative claims on the component for the purpose: an alternative demonstrated if one is
@@ -34,7 +36,10 @@ subject), against the experiments' claims for the practices of its data:
 
     declared_necessity_refuted   a run shows a user's purpose achieved without it: a not-dependent Dependency claim or a
                                  demonstrated Alternative claim, supported at strength run, for a case purpose of the
-                                 user; holds for the features the case report covers (an open condition)
+                                 user; holds for the features the case report covers (an open condition). A
+                                 substitutable Dependency claim refutes nothing by itself: the purpose needed a datum
+                                 of the kind; the removal's Alternative claim refutes it where every substitute is at
+                                 most as invasive
     not_comparable               it is declared for no data in particular (the root), as a list of the bases a policy may
                                  use is, which no practice can refute
 
@@ -58,10 +63,12 @@ from skuld.inputs import ReportRef
 from skuld.observe import claims as o_claims
 from skuld.transparency import INCOMPLETE, MISSING_IF, UNREAD, Status
 
+#: 9: a substitutable Dependency claim supports a dependency (on a datum of its kind), refutes no declared necessity and
+#: holds for the features the case report covers (21 Nov 2026);
 #: 8: a recipient D names is the provider's own by its owner when D's documents were collected (20 Nov 2026);
 #: 7: D–E: a purpose, or its data, D could not place (Urda 2.1.0) is not comparable as such; 6: claims of practices
 #: left out for an unknown datum are passed on as such
-VERSION = "8"
+VERSION = "9"
 COMPONENT = {"role": "method", "id": "skuld.relations", "version": VERSION}
 
 CONFLICTING, INSUFFICIENT, NOT_ASSESSABLE, NOT_COMPARABLE = (
@@ -94,8 +101,12 @@ UNRELATED = {
     "declares_retention": "E relates no declared retention",
     "declares_transfer": "E relates no declared transfers",
 }
-#: The values of a Dependency claim that state a functional dependency
-DEPENDS = ("essential", "quality_dependent")
+#: The values of a Dependency claim that state a functional dependency: substitutable states one on a datum of the
+#: component's kind, which a substitute met (Ratatoskr 0.37.0)
+DEPENDS = ("essential", "quality_dependent", "substitutable")
+#: The values of a Dependency claim a run supports by a purpose that survived the removal: they hold for the features
+#: the case report covers
+SURVIVED = ("not_dependent", "substitutable")
 
 
 def e_ref(claim_id: str) -> dict:
@@ -495,7 +506,7 @@ def open_conditions(
 ) -> list[dict]:
     """The conditions E could not decide: a relation's condition, a party, a requirement's undecided condition; and,
     for every experimental claim that a purpose is achieved without a component or with less of it (not dependent,
-    or an alternative demonstrated), that it holds for the features the case report covers."""
+    substitutable, or an alternative demonstrated), that it holds for the features the case report covers."""
     out: dict[str, dict] = {}
 
     def entry(key: str, text: str, kind: str = "fact") -> dict:
@@ -535,7 +546,7 @@ def open_conditions(
         x["id"]
         for x in tested
         if x["status"] == "supported"
-        and ((x["type"] == "dependency" and x.get("relationship") == "not_dependent") or x["type"] == "alternative")
+        and ((x["type"] == "dependency" and x.get("relationship") in SURVIVED) or x["type"] == "alternative")
     ]
     if shown:
         text = f"holds for the features the case report covers ({', '.join(features)})"

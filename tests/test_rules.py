@@ -6,12 +6,15 @@ import itertools
 from pathlib import Path
 
 import pytest
+from ratatoskr.vocabularies import Vocabulary
 
 from skuld import rules
 from skuld.comparison import Comparison, outcome
 from skuld.inputs import Alternative, Case, Component, Feature, Purpose
 from skuld.oracles import Decision, worse
 
+DATA = Vocabulary.load("asgard-data")
+APP_SET_ID, ANDROID_ID = "device-or-other-ids.app-set-id", "device-or-other-ids.android-id"
 PURPOSE = Purpose("p", {}, "ServiceProvision", "exact", "feature", "sufficient", "functional", (), "O@1")
 COMPONENT = Component("e", "D", node="device-or-other-ids.advertising-id")
 
@@ -20,8 +23,8 @@ def alt(aid: str, removal: bool = False) -> Alternative:
     return Alternative(aid, "e", removal, ({"component": "e", "value": None},), {}, aid)
 
 
-def comparison(aid: str, result: str, worse_: dict | None = None) -> Comparison:
-    return Comparison(aid, "c", "p", aid, ["b1"], ["a1"], result, worse=worse_ or {})
+def comparison(aid: str, result: str, worse_: dict | None = None, substitutes=()) -> Comparison:
+    return Comparison(aid, "c", "p", aid, ["b1"], ["a1"], result, worse=worse_ or {}, substitutes=list(substitutes))
 
 
 def dep(result: str, worse_: dict | None = None) -> tuple[str | None, str]:
@@ -39,6 +42,48 @@ def test_a_preserving_removal_with_a_measurement_worse_in_every_run_is_quality_d
 
 def test_a_preserving_removal_with_mixed_measurements_refutes_essential_only():
     assert dep("preserves", {"m": "some"}) == ("essential", "refuted")
+
+
+def test_a_removal_the_application_survived_by_a_substitute_is_substitutable_and_names_it():
+    """Remini read the App Set ID where the advertising ID was removed: the purpose needs a datum of that kind, not
+    this one (21 Nov 2026; before, not_dependent)."""
+    made = rules.dependency(
+        PURPOSE, COMPONENT, comparison("R", "preserves", {"m": "none"}, [APP_SET_ID]), "search_space_not_run"
+    )
+    assert (made.relationship, made.status) == ("substitutable", "supported")
+    assert made.supporting == ["k:R"] and APP_SET_ID in made.reason
+    # with a worse measurement too: the substitute decides, the purpose survived
+    worse = rules.dependency(PURPOSE, COMPONENT, comparison("R", "preserves", {"m": "all"}, [APP_SET_ID]), "x")
+    assert (worse.relationship, worse.status) == ("substitutable", "supported")
+    # a broken purpose is essential whatever the application read
+    broke = rules.dependency(PURPOSE, COMPONENT, comparison("R", "breaks", substitutes=[APP_SET_ID]), "x")
+    assert broke.relationship == "essential"
+
+
+def test_an_alternative_survived_by_a_substitute_is_demonstrated_only_if_the_substitute_is_at_most_as_invasive():
+    removal = alt("R", removal=True)
+    coarser = rules.alternative(
+        PURPOSE, removal, comparison("R", "preserves", substitutes=[APP_SET_ID]), "x", COMPONENT, DATA
+    )
+    assert coarser.status == "supported" and coarser.supporting == ["k:R"]
+    # the Android ID is not ordered below the advertising ID: no less invasive alternative is shown
+    finer = rules.alternative(
+        PURPOSE, removal, comparison("R", "preserves", substitutes=[ANDROID_ID]), "x", COMPONENT, DATA
+    )
+    assert finer.status == "not_established" and not finer.supporting and not finer.challenging
+    assert ANDROID_ID in finer.reason and finer.why == "not_admitted" and ANDROID_ID in finer.missing[0]
+    # without the vocabulary no substitute is shown to be at most as invasive
+    assert rules.alternative(PURPOSE, removal, comparison("R", "preserves", substitutes=[APP_SET_ID]), "x").status == (
+        "not_established"
+    )
+    # through claims(): the removal's Alternative claim reads the same comparison
+    case = Case("c", Feature("F", "F", "e", None, 0, "o"), (PURPOSE,), (COMPONENT,), (removal,), Path("."))
+    made = rules.claims(
+        case, {"e": True}, {("p", "R"): comparison("R", "preserves", substitutes=[ANDROID_ID])}, {}, data=DATA
+    )
+    by_type = {c.type: c for c in made}
+    assert by_type["dependency"].relationship == "substitutable"
+    assert by_type["alternative"].status == "not_established"
 
 
 def test_a_breaking_removal_is_essential():

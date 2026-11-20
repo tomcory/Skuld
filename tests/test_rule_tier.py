@@ -482,12 +482,27 @@ def test_a_declared_necessity_is_refuted_by_a_run_never_supported_and_not_compar
             "purpose": user,
             "case": "launch",
         },  # a document refutes no necessity
+        {
+            "id": "claim:x:3",
+            "type": "dependency",
+            "subject": p.id,
+            "relationship": "substitutable",
+            "status": "supported",
+            "strength": "run",
+            "purpose": user,
+            "case": "launch",
+        },  # a substitute met the purpose: a datum of the kind was needed, which refutes no necessity
     ]
     out = {r.subject: r for r in relations.d_e(built, [], {}, DATA, vocabulary(PURPOSES), tested)}
     by_value = {d.id: (d.data, d.value) for d in built.declarations}
     refuted = [r for r in out.values() if r.outcome == relations.NECESSITY_REFUTED]
     assert [by_value[r.subject] for r in refuted] == [("personal-info.name", "GDPR-6-1-b")]
     assert [t["claim"] for t in refuted[0].to] == ["claim:x:1"]
+    # a substitutable dependency holds, as a not_dependent one does, only for the features the case report covers
+    open_ = relations.open_conditions(built, [], [], None, [], tested, ["launch"])
+    assert [o["qualifies"] for o in open_ if o["text"].startswith("holds for the features")] == [
+        ["claim:x:1", "claim:x:2", "claim:x:3"]
+    ]
     assert any(r.outcome == "not_comparable" and by_value[r.subject][0] == "data" for r in out.values())
     # no run for the e-mail address, and consent declares no necessity: no relation, the claim is passed on
     assert not any(
