@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.6.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.7.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -49,14 +49,14 @@ afterwards (`uv pip install -e ../Ratatoskr`). The extra `reason` brings the mod
 The assessment of an application version, from O's and D's reports (the experiments are optional and off by default):
 
 ```bash
-skuld describe cases/app@1.0 --package com.example.app --version 1.0 \
+skuld describe workspaces/app@1.0 --package com.example.app --version 1.0 \
     --observation <O report>=<run> --declaration <D report> --exploration <Loki exploration>   # assessment.yaml
-skuld expect cases/app@1.0       # stage-1 samples: expectation/<batch>/s<seed>/
-skuld judge cases/app@1.0        # stage-2 samples: assessment/<question>/<subject>/s<seed>/
-skuld assess cases/app@1.0       # subjects.json, assessment.json, assessment.md; no model asked
-skuld aggregate cases/app@1.0    # aggregate.json, aggregate.md: the concerns as aggregated concerns a reader can work through
-skuld check cases/app@1.0        # every digest and pointer resolves, the assessment rebuilds identically
-                                 # (with the reading and notice definition it names)
+skuld expect workspaces/app@1.0      # stage-1 samples: expectation/<batch>/s<seed>/
+skuld judge workspaces/app@1.0       # stage-2 samples: assessment/<question>/<subject>/s<seed>/
+skuld assess workspaces/app@1.0      # subjects.json, assessment.json, assessment.md; no model asked
+skuld aggregate workspaces/app@1.0   # aggregate.json, aggregate.md: the concerns as aggregated concerns a reader can work through
+skuld check workspaces/app@1.0       # every digest and pointer resolves, the assessment rebuilds identically
+                                     # (with the reading and notice definition it names)
 ```
 
 ## Commands
@@ -76,10 +76,10 @@ skuld check cases/app@1.0        # every digest and pointer resolves, the assess
 | `skuld review expect-draw\|expect-score\|expect-agree <folder> …` | the reviewers' check of a sample of the expectation stage's predictions, blind to the model run: per practice its purposes (plausible, DPV node, beneficiary, role, citations) and stated dependencies (relationship, steps), judged against the stage's own context; agreement per question, purposes missed, two reviewers' κ | `assessment.json`, `expectation/`, the reviews | `sample.json`, `key.json`, `scores.json`, `agreement.json` | no |
 | `skuld check <ws>` | the provenance check and the rebuild, with the reading (`skuld.judge.reading`) and the notice definition (`ratatoskr.notices`; 1.1.0 if the report names none) the report names; a report made under earlier method versions is noted, not refused | the workspace | – (exit status) | no |
 | `skuld select <ws>` | chooses experiments, within the budget, in the order `inputs/chosen.yaml` gives; or lists the candidates or their groups | `assessment.json`, `inputs/chosen.yaml` | `inputs/selection.json`; with `--list` or `--groups` JSON lines on stdout | no |
-| `skuld propose <exploration>` | generates cases from Loki's exploration and the catalogue | the exploration, `catalogue/` | a case workspace's inputs, `proposals/`, `manifests/propose_<time>.json` | yes |
-| `skuld freeze <ws>` | fixes inputs written by hand, by digest | `cases/`, `oracles/` | `frozen.json` | no |
+| `skuld propose <exploration>` | generates experimental cases from Loki's exploration and the catalogue | the exploration, `catalogue/` | a case workspace's inputs, `proposals/`, `manifests/propose_<time>.json` | yes |
+| `skuld freeze <ws>` | fixes inputs written by hand, by digest | `cases/` (the experimental cases), `oracles/` | `frozen.json` | no |
 | `skuld change <ws> <input>` | records a change of a fixed input | the input | `frozen.json` | no |
-| `skuld run <ws>` | the replays of each condition, through Loki, in rotated order | the cases, Loki's base configuration | `configs/`, `runs.jsonl`, Loki's run folders | no |
+| `skuld run <ws>` | the replays of each condition, through Loki, in rotated order; first the installed version (adb), which must be the recording's and the workspace's or stated compatible with them | the experimental cases, Loki's base configuration | `configs/`, `runs.jsonl`, Loki's run folders | no |
 | `skuld analyse <ws>` | the case report of the experiments | the runs, Verðandi's reports, the oracles | `observation/`, `report.json`, `report.md` | no |
 | `skuld calibrate draw <dir> <ws>…` | draws a calibration sample for an expert's blind review; several workspaces of one application (one per model family) are merged across families | assessments | `<dir>/`: `sample.json`, `key.json`, `documents/`, `manifest.json` | no |
 | `skuld calibrate score <dir>` | error rates from the expert's decisions | `<dir>/reviews.json` | `<dir>/scores.json` | no |
@@ -87,7 +87,10 @@ skuld check cases/app@1.0        # every digest and pointer resolves, the assess
 | `skuld calibrate agree <dir> <a> <b>` | two reviewers' agreement (Cohen's kappa) and their disagreements | two reviews files | `<dir>/agreement.json`; `<dir>/reviews.json` seeded with the agreed decisions if absent | no |
 | `skuld corpus check` | passages without source or date, about nothing, with an id other than their file's, or without a person's check (`verified: {by, date}`) | `corpus/` | – | no |
 | `skuld corpus coverage <reports>` | recipients and data of O's reports no passage covers | O's reports | – | no |
-| `skuld catalogue` | the catalogue's families, reviewed or not | `catalogue/` | – | no |
+| `skuld corpus keep` | before `corpus/` changes: copies it, with its norms, to `corpora/<first 8 of its digest>/`, checked to have the same digest | `corpus/` | `corpora/<digest>/` | no |
+| `skuld corpus repoint <ws…>` | after the change: every workspace whose `corpus.path` is `corpus/` but whose digest is a kept one gets its path rewritten to the kept copy, and nothing else; a workspace whose corpus was not kept is listed and fails the command | `assessment.yaml`, `corpora/` | `assessment.yaml`, `corpora/<digest>-repointed.tsv` | no |
+| `skuld purposes map <ws…> --out <map>` | places the purpose nodes stage 1 invented (outside the vocabulary) at the nearest node by the similarity of embeddings; extends an existing map, keeping its labels | stage-1 answers | the map (see `purpose_map`) | an embedding model |
+| `skuld catalogue` | the catalogue's families, each with its review (who, when) or "not reviewed"; `--review <id>@<version> --by <person>` records one | `catalogue/` | `catalogue/reviews/<id>@<version>.yaml` | no |
 
 Options (from `--help`):
 
@@ -101,15 +104,17 @@ Options (from `--help`):
 | `propose` | `--pilot <pilot>` or `--workspace <folder>`, `--catalogue`, `--model`, `--api` (default: config's `client.api`), `--offline`, `--selection <selection.json>`, `--registry` |
 | `freeze` | `--author` (required), `--model` (the author is a model), `--prompt` |
 | `change` | `--reason` (required) |
-| `run` | `--recorded <Loki run>`, `--config <Loki configuration>`, `--device <adb serial>` (all required), `--conditions …` (default `all`: baseline and every alternative of the workspace's cases), `--repeat` (3), `--loki` (the sibling Loki), `--qualify` (one baseline replay first), `--case` (replay only up to the end of this case's path), `--keep-going` (Loki goes on after an action it could not replay), `--json` (one JSON line per run) |
+| `run` | `--recorded <Loki run>`, `--config <Loki configuration>`, `--device <adb serial>` (all required), `--conditions …` (default `all`: baseline and every alternative of the workspace's experimental cases), `--repeat` (3), `--loki` (the sibling Loki), `--qualify` (one baseline replay first), `--case` (replay only up to the end of this experimental case's path), `--keep-going` (Loki goes on after an action it could not replay), `--json` (one JSON line per run) |
 | `analyse` | `--offline` (existing observation reports only) |
 | `calibrate` | `--per-stratum`, `--seed` (default: config.json's; draw only), `--registry` |
-| `review` | `--per-stratum`, `--per-run`, `--anchor`, `--seed`, `--step` (draw); `--prefix` (expect-draw); `--reviewer` (export); `--application`, `--reason` (exclude) |
-| `corpus` | `--corpus` (default: Skuld's) |
-| `catalogue` | `--catalogue` (default: Skuld's) |
+| `review` | `--per-stratum`, `--per-run`, `--anchor`, `--seed`, `--step` (draw); `--prefix`, `--per-app` (expect-draw); `--reviewer` (export); `--application`, `--reason` (exclude) |
+| `corpus` | `--corpus` (default: Skuld's); `--dry-run` (repoint: list only) |
+| `purposes` | `--out` (required), `--model` (default `qwen3-embedding:8b-fp16`, on the server of `OLLAMA_BASE_URL`) |
+| `catalogue` | `--catalogue` (default: Skuld's); `--review <family>`, `--by <person>`, `--note` |
 
-`--registry` names the recipient registry (default: Ratatoskr's built one); give `propose`, `expect`, `judge`, `assess`
-and `check` the same one, or none.
+`--registry` names the recipient registry (default: `config.json`'s `registry.path`, else Ratatoskr's built one); give
+`propose`, `expect`, `judge`, `assess` and `check` the same one, or none. Where `registry.sha256` pins a build, a
+registry of other content is refused.
 
 ## Configuration
 
@@ -123,12 +128,17 @@ and `check` the same one, or none.
 | `client.api`, `.timeout` | `ollama`, 5400 s | the provider (the default of `--api`) and its timeout (the gateway allows about 100 minutes; qwen3.8 at `xhigh` took up to 30 minutes, queue included) |
 | `client.cache.enabled` | false | no response cache: the kept samples are Skuld's record of every answer |
 | `client.limits` | 128 requests at a time for gemma4:31b, 256 for qwen3.8:27b, 4 for others | per model, within what the gateway recommends ([`../docs/INFERENCE_GUIDE.md`](../docs/INFERENCE_GUIDE.md): 128–160 and 256–384); the study's profiles keep theirs (timeout 1800 s, fewer requests at a time) |
+| `client.retry_budget` | 1800 s | a failed request is retried, with jittered backoff, as long as the time since its first attempt stays within this (Ratatoskr 0.32.0), so that a gateway outage of minutes is waited out |
 | `client.max_tokens_cap` | 32768 | an answer cut off at its token limit is asked again with twice the limit, up to this; one still cut off is refused (kept aside as `answer.length.json` with `record.length.json`, counted `truncated`): the question's next attempt is asked, told so, and the cut-off attempt is asked again next run |
 | `expectation.seeds`, `assessment.seeds` | 1, 2, 3 | the samples per batch or question |
 | `expectation.think`, `assessment.think` | `xhigh` | the model's thinking (null: the model's default; a level: its effort). On the gateway a level is qwen3.8's effort (`low`, `medium`; `high` and `xhigh` both its top effort) but, since 20 Nov 2026 03:26, a cap on gemma4's thinking tokens (`low` 1,024, `medium` 4,096, `high` 16,384, `xhigh` none); `low` cuts most of gemma4's thinking short |
 | `expectation.traffic` | off | stage 1 sees excerpts of the practice's traffic |
 | `expectation.topup` | off | stage 1 asks again, alone, for the practices its batches left out |
+| `expectation.batch_size` | none | at most this many practices per batch: an episode's practices are split, in order, into batches `e<episode>.<n>` with the same screens (one remedy, to be measured, for qwen3.8 answering only a batch's first practice) |
 | `assessment.known_data_only` | off | the practices whose datum O could not identify are left out |
+| `registry.path`, `.sha256` | none, none | the recipient registry and the digest of the build a study decides on (Ratatoskr's `Registry.from_config`); unset, Ratatoskr's built one, unchecked |
+| `vocabularies.<id>` | the bundled version | the version of a vocabulary, e.g. `{"dpv-purposes": "2.3"}`: the purpose vocabulary's nodes are part of the stage-1 prompt, so samples asked under one version are found only under it |
+| `prompts.<id>` | the current version | an earlier version of a prompt (`skuld/templates.py`; kept as `skuld/prompts/versions/<id>-<version>.md`), so that samples asked with it are found again |
 | `purpose_map` | none | invented purpose nodes mapped to the vocabulary's: a path (relative to the repository), or `{path, sha256}`, refused if the file's digest differs |
 | `experiments.budget_seconds` | 0 | device time for experiments; 0 is off |
 | `experiments.repeats`, `.run_seconds` | 3, 240 | runs per condition and a run's expected length, for the budget (`skuld run --repeat` sets the runs made) |
@@ -149,19 +159,27 @@ digest of the configuration in force (`configuration`), and `skuld config` shows
 | `study-2026-11-qwen-low-traffic-topup` | its final qwen3.8:27b run: temperature 0.4, reasoning low, `max_tokens` 32,768, traffic, top-up, known data only, the study's purpose map; timeout 1800 s, 128 requests at a time |
 | `gemma-xhigh` | gemma4:31b as in the study's final run for stages 1 and 2 (vendor sampling, `max_tokens` 32,768, traffic, top-up, known data only, the study's purpose map), with thinking `xhigh`; the generator's sampling and the client's timeout and limits from `config.json` |
 | `qwen-xhigh` | qwen3.8:27b with its recommended sampling for thinking (temperature 1.0, `top_p` 0.95, `top_k` 20, `min_p` 0) and thinking `xhigh`, otherwise as `gemma-xhigh` |
-| `fixtures-2026-10` | the three fixtures in `cases/`: `config.json` until 20 Nov 2026 (temperature 0.4 for both stages, 0.2 for the generator, `max_tokens` 8192, the model's default thinking); their kept samples are found only under it |
+| `fixtures-2026-10` | the three fixtures in `workspaces/`: `config.json` until 20 Nov 2026 (temperature 0.4 for both stages, 0.2 for the generator, `max_tokens` 8192, the model's default thinking); their kept samples are found only under it |
+
+Every profile above but the two `xhigh` ones also names what its samples were asked with that has changed since:
+`dpv-purposes` 2.3 (2.3.1, Ratatoskr 0.32.0, adds a node, which changes the stage-1 prompt) and the prompts before
+20 Nov 2026 (expectation and expectation_traffic 4, specificity and compatibility 1, minimisation 2), when the context
+moved to the end of every prompt and the minimisation prompt came to say "list no entry for it".
 
 The study's profiles state every value they had from `config.json` at the time, so that a later `config.json` changes
 no study run. They keep the options their samples record, `think` among them: a sample's options identify it, so a
 profile that asked `xhigh` where its run recorded `low` would keep none of the run's samples. Since the gateway made
 gemma4's levels caps (20 Nov 2026), a question the gemma4 profile asks anew thinks less than the run's did.
 
-The study's purpose map is `purpose-maps/study-2026-11.json` (digest `2c8e24b1ddb8…`, as its assessments name it).
+The study's purpose map is `purpose-maps/study-2026-11.json` (digest `2c8e24b1ddb8…`, as its assessments name it),
+built on `dpv-purposes` 2.3 by the study's script, whose method is now `skuld purposes map`; a map is extended only on
+the vocabulary version it was built on.
 
 ## Files
 
 An assessment workspace holds one application version; in a pilot it is `pilots/<pilot>/skuld/<package>@<version>/`,
-the case study's are in `cases/` (local data, ignored by Git):
+the case study's are in `workspaces/` (local data, ignored by Git; `cases/` until 20 Nov 2026, renamed since "case"
+is the unit of qualification, and an experiment's case is an experimental case):
 
 ```text
 <workspace>/
@@ -178,12 +196,12 @@ the case study's are in `cases/` (local data, ignored by Git):
   inputs/chosen.yaml               concerns or practices chosen first: pursued by the author, or in the calibration sample
   workspace.yaml                   for experiments: the application, where its runs are, how Verðandi is called
                                    (verdandi) and with which annotators (verdandi_options, e.g. --model, --student)
-  cases/<case>.yaml                a case: feature, purposes with requirements and oracle, components, search space
+  cases/<case>.yaml                an experimental case: feature, purposes with requirements and oracle, components, search space
   oracles/<id>@<v>.yaml            success and invalid conditions, measurements with direction and tolerance
   frozen.json                      every input's digest, when it was fixed, its author and its changes
   proposals/                       the generator's prompts and answers per episode
   configs/, runs.jsonl             Loki's configuration per condition; the runs, in order
-  qualification.json               the cases the qualifying replay did not qualify, with why (not the assessment's
+  qualification.json               the experimental cases the qualifying replay did not qualify, with why (not the assessment's
                                    qualification, which is in assessment.json)
   observation/<run>/               Verðandi's report of each run
   report.json, report.md           the case report (expectation_report)
@@ -213,16 +231,16 @@ generator's feature families; local until deployed), and a calibration sample's 
 ## Tests
 
 ```bash
-uv run pytest                     # 371 tests on 2026-11-20
+uv run pytest                     # 436 tests on 2026-11-20
 ruff format . && ruff check .
 ```
 
-Tests that read local data skip without it: the three fixtures' assessments are rebuilt and checked when `cases/` holds
+Tests that read local data skip without it: the three fixtures' assessments are rebuilt and checked when `workspaces/` holds
 them (Pilates Workout 1.6.4, NeuroNation 3.8.96, WetterOnline 2026.20), under the profile they were asked with
-(`fixtures-2026-10`; by hand: `skuld --profile fixtures-2026-10 check cases/<fixture>`); one test reads a real Loki run
+(`fixtures-2026-10`; by hand: `skuld --profile fixtures-2026-10 check workspaces/<fixture>`); one test reads a real Loki run
 (`SKULD_RUN_DIR`, or the latest captured and instrumented run in the sibling `Loki/runs/`); one analyses the dry run's
 case workspace (`SKULD_DRY_RUN`, or the Pilates fixture). Earlier copies of the Pilates workspace are in
-`cases/archive/`.
+`workspaces/archive/`.
 
 ## Documentation
 

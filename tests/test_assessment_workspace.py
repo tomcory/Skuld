@@ -94,7 +94,7 @@ FIXTURES = {
 
 @pytest.mark.parametrize("name", FIXTURES)
 def test_the_case_studys_fixtures_load(name):
-    root = ROOT / "cases" / name
+    root = ROOT / "workspaces" / name
     if not (root / "assessment.yaml").is_file():
         pytest.skip("the case study's workspaces are not in this checkout")
     a = inputs.load_assessment(root)

@@ -1,6 +1,6 @@
 """
-The experimental channel's status rule: claims read from a case's comparisons, by rule, without a model. For a purpose
-p and a component ε of the baseline u_0:
+The experimental channel's status rule: claims read from an experimental case's comparisons, by rule, without a model.
+For a purpose p and a component ε of the baseline u_0:
 
 - Dependency(ε, p) reads the comparison of the removal u_0 \\ ε: one claim with its value. If the removal breaks p,
   essential is supported; if it preserves p, not_dependent is supported if no measurement of the oracle is worse in

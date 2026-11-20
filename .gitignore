@@ -20,7 +20,7 @@ dist/
 docs/
 
 # workspaces: local data, as Urda's reports
-cases/
+workspaces/
 
 # the catalogue of feature families: local until it is deployed
 catalogue/

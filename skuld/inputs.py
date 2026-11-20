@@ -1,10 +1,10 @@
 """
-A workspace: the cases of one application version, their named inputs and the runs they read.
+A workspace: the experimental cases of one application version, their named inputs and the runs they read.
 
 ```text
 <workspace>/
   workspace.yaml          application, where the runs are, how Verðandi is called
-  cases/<case>.yaml       a case's feature, purposes, components and search space
+  cases/<case>.yaml       an experimental case's feature, purposes, components and search space
   oracles/<id>@<v>.yaml   an oracle: success and invalid conditions, measurements
   frozen.json             every input's digest, the time it was fixed, its author and its later changes
   runs.jsonl              the runs: id, folder, condition, position in the sequence
@@ -12,7 +12,7 @@ A workspace: the cases of one application version, their named inputs and the ru
   report.json, report.md  the expectation report
 ```
 
-A case file and an oracle file are named inputs. They are fixed by `freeze` before the runs they
+An experimental case's file and an oracle file are named inputs. They are fixed by `freeze` before the runs they
 judge; a later change is recorded with its reason, never made silently (`check_frozen`).
 """
 
@@ -224,7 +224,7 @@ def load(root: str | Path) -> Workspace:
 
 
 def input_files(root: Path) -> list[Path]:
-    """The named inputs of a workspace: its case and oracle files."""
+    """The named inputs of a workspace: the files of its experimental cases and oracles."""
     return sorted((root / "cases").glob("*.yaml")) + sorted((root / "oracles").glob("*.yaml"))
 
 
@@ -498,7 +498,7 @@ class Assessment:
     """
     An assessment workspace: one application version, the O reports of its observations, D's report (or none), the
     exploration whose screens the expectation stage reads (or none), the frame and the corpus by digest, the models;
-    and, where the folder is also a case workspace, its cases as the experimental channel's.
+    and, where the folder is also a case workspace, its experimental cases as the experimental channel's.
     """
 
     root: Path

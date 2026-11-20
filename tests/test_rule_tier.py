@@ -494,7 +494,7 @@ FIXTURES = [
 
 @pytest.mark.parametrize("name", FIXTURES)
 def test_the_fixtures_reports_are_valid_and_pilates_reproduces_the_worked_example(name, fixtures_profile):
-    root = ROOT / "cases" / name
+    root = ROOT / "workspaces" / name
     if not (root / "assessment.yaml").is_file():
         pytest.skip("the case study's workspaces are not in this checkout")
     kept = {

@@ -279,7 +279,7 @@ def test_the_report_is_written_valid_with_a_rendering(tmp_path):
 
 def _dry_run() -> Path | None:
     root = os.environ.get("SKULD_DRY_RUN") or (
-        Path(__file__).parents[1] / "cases" / "pilatesworkout.yogaworkout.loseweight.workoutapps@1.6.4"
+        Path(__file__).parents[1] / "workspaces" / "pilatesworkout.yogaworkout.loseweight.workoutapps@1.6.4"
     )
     root = Path(root)
     return root if (root / "observation").is_dir() else None

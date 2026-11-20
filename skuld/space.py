@@ -10,11 +10,11 @@ recipient is the provider's is decided as for the assessment's practices (partie
 the domain where the register has none, so that a selection never asks for a removal the generator does not derive.
 
 Conditions are named by their intervention, and an intervention depends on the recording only, never on the
-episode, so that the cases that impose it share its runs.
+episode, so that the experimental cases that impose it share its runs.
 
-For the assessment, the same rules per practice (`imposable`), and the practice component a case's component varies
-(`varies`): a datum's removal or precision varies the data of every practice of that datum or a datum below it, a
-recipient's removal the recipient of every transmission to that entity.
+For the assessment, the same rules per practice (`imposable`), and the practice component an experimental case's
+component varies (`varies`): a datum's removal or precision varies the data of every practice of that datum or a datum
+below it, a recipient's removal the recipient of every transmission to that entity.
 """
 
 from collections.abc import Callable
@@ -57,9 +57,9 @@ def provider_own(registry, provider: parties.Controller) -> Callable[[dict], boo
 
 
 def derive(report: dict, episodes: set[str], package: str, keep=None, own=None) -> tuple[list[dict], list[dict]]:
-    """The components and alternatives of a case whose path is the given episodes of the recording; with `keep`,
-    only the components it keeps (a selection's) and their alternatives. `own` decides whether a recipient is the
-    provider's (default: by the package alone, without the register)."""
+    """The components and alternatives of an experimental case whose path is the given episodes of the recording; with
+    `keep`, only the components it keeps (a selection's) and their alternatives. `own` decides whether a recipient is
+    the provider's (default: by the package alone, without the register)."""
     own = own or provider_own(None, parties.controller(None, package))
     components: dict[str, dict] = {}
     alternatives: list[dict] = []
@@ -135,8 +135,8 @@ def _node(source: str) -> str:
 
 
 def varies(component: dict, practice, data) -> str | None:
-    """The component of a practice (`<practice>.data` or `<practice>.recipient`) that a case's component varies, or
-    None."""
+    """The component of a practice (`<practice>.data` or `<practice>.recipient`) that an experimental case's component
+    varies, or None."""
     if component["dimension"] in ("D", "G"):
         node = component.get("node")
         if node and practice.data in data and data.is_a(practice.data, node):
@@ -152,7 +152,7 @@ def imposable(practice) -> list[dict]:
     out = []
     data = vocabulary(DATA)
     known = practice.data in data
-    # as `varies` reads a case's components: a datum at or below a source's node, or below location
+    # as `varies` reads an experimental case's components: a datum at or below a source's node, or below location
     source = NODE_SOURCES.get(practice.data) or next(
         (s for node, s in NODE_SOURCES.items() if known and node in data and data.is_a(practice.data, node)), None
     )

@@ -9,8 +9,8 @@ or where an experiment already ran and could not assess it (no oracle observes t
 could observe the purpose at all: no family of Skuld's catalogue has a purpose with an oracle that the candidate's
 purpose would align with (`combine.aligned`: the same beneficiary, the family's node its own or one above it). Such a
 purpose is served, if at all, where no run shows it (an advertising network matching a profile, an analytics backend
-counting a use), so an experiment could only test another purpose of its case (author, 12 Nov 2026, after 15 of 18
-groups of the gemma run had no oracle for their purpose). Of the others, those
+counting a use), so an experiment could only test another purpose of its experimental case (author, 12 Nov 2026, after
+15 of 18 groups of the gemma run had no oracle for their purpose). Of the others, those
 `inputs/chosen.yaml` names (concern or practice ids, each with its reason: pursued by the author, or in the calibration
 sample) are chosen first, and their device time counts; the rest are chosen in order while their device time fits the
 budget (config.json's `experiments`: off at a budget of 0, the default), and refused with the budget as the reason
@@ -35,7 +35,7 @@ experiment; qualification proposes one per eligible candidate, by `refusal` here
 Candidates are decided in groups (author, 12 Nov 2026): one per data type and purpose node of the application, the
 unit of the aggregated concerns (`skuld aggregate`). A group's eligible candidates are chosen or refused together, its
 ineligible ones are refused each with its own reason, as before. The runs an alternative needs are shared by every
-case that imposes it (`space`: a condition depends on the recording only), so the device time counts each
+experimental case that imposes it (`space`: a condition depends on the recording only), so the device time counts each
 intervention once: one baseline per selection, (repeats + 1) runs with its qualifying replay, and repeats runs per
 intervention not yet counted, of `run_seconds` each. A candidate's `cost_seconds` in a selection is what it adds; in
 the listing, what it would cost alone ((1 + its alternatives) × repeats runs and one replay), as Odin reads it. A selection is fixed once: making another replaces it only on request (`--replace`), and keeps the
@@ -55,7 +55,8 @@ from types import SimpleNamespace
 from skuld import catalogue, combine, config, inputs, space, yamlio
 
 VERSION = (
-    "4"  # 4: a datum below a hooked source's node is imposable, as cases vary it; 3: unobservable purposes refused
+    "4"  # 4: a datum below a hooked source's node is imposable, as experimental cases vary it;
+    # 3: unobservable purposes refused
 )
 AUTHOR = {"kind": "rule", "id": "skuld.select", "version": VERSION}
 FILE = "inputs/selection.json"
@@ -235,7 +236,7 @@ def unobservable(node: str | None, who: str | None, observed: list[tuple[str, st
     """Why no experiment could observe a purpose, or None: no observed purpose of the same beneficiary at its node or
     above it (the alignment of a case purpose with a hypothesis purpose, `combine.aligned`)."""
     if not node or node not in vocabulary:
-        return None  # an unknown node is left to the cases, as before
+        return None  # an unknown node is left to the experimental cases, as before
     lineage = {node, *vocabulary.ancestors(node)}
     whom = combine.beneficiary(who)
     if any(n in lineage and b == whom for n, b in observed):
@@ -435,8 +436,8 @@ def chosen(selection: dict) -> list[dict]:
 
 
 def keeps(selection: dict, data) -> tuple[set[str], Callable[[dict], bool]]:
-    """For the generator: the episodes of the chosen practices, and whether a case's component varies a component
-    the selection chose."""
+    """For the generator: the episodes of the chosen practices, and whether an experimental case's component varies a
+    component the selection chose."""
     entries = chosen(selection)
     episodes = {e for x in entries for e in x["episodes"]}
     wanted = [(SimpleNamespace(**x["fields"]), {c["component"] for c in x["components"]}) for x in entries]

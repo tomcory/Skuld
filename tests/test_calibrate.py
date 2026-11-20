@@ -7,7 +7,7 @@ from skuld.assess import REPORT
 from tests.test_assess import ROOT
 
 FIXTURES = [
-    ROOT / "cases" / name
+    ROOT / "workspaces" / name
     for name in (
         "pilatesworkout.yogaworkout.loseweight.workoutapps@1.6.4",
         "air.nn.mobile.app.main@3.8.96",

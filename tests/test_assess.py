@@ -227,7 +227,7 @@ FIXTURES = [
 
 @pytest.mark.parametrize("name", FIXTURES)
 def test_the_fixtures_subjects(name, tmp_path):
-    root = ROOT / "cases" / name
+    root = ROOT / "workspaces" / name
     if not (root / "assessment.yaml").is_file():
         pytest.skip("the case study's workspaces are not in this checkout")
     before = (root / SUBJECTS).read_text(encoding="utf-8") if (root / SUBJECTS).is_file() else None

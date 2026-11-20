@@ -455,7 +455,7 @@ def test_the_result_is_the_first_step_that_holds_and_lower_evidence_never_change
 
 @pytest.mark.parametrize("name", FIXTURES)
 def test_the_fixtures_are_qualified_whole(name):
-    path = ROOT / "cases" / name / "assessment.json"
+    path = ROOT / "workspaces" / name / "assessment.json"
     if not path.is_file():
         pytest.skip("the case study's workspaces are not in this checkout")
     report = json.loads(path.read_text(encoding="utf-8"))
