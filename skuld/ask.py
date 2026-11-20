@@ -16,6 +16,10 @@ record of every answer, which a report is rebuilt from (EV-E-REPLAY).
 `ask_with_feedback` asks again where the caller refuses an answer, with the refusal appended to the prompt, a sample of
 its own per attempt and the next seed.
 
+An answer cut off at the token limit, or one Ratatoskr's client rejects (refused, withheld, runaway, a prompt over the
+context), is no sample: its record is kept aside (`record.length.json`, `record.rejected.json`) and the request asked
+again next time; the run goes on without it.
+
 Every request is counted in the process's tally (`usage()`): asked, kept (`cached`), missing offline, failed, with the
 tokens and seconds of those asked and each model's digest. A command reads it into its run manifest (`manifest.py`).
 """
@@ -31,7 +35,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ratatoskr.llm import Call, Client, Options, Provider
-from ratatoskr.llm.client import default_limit
+from ratatoskr.llm.client import AnswerRejected, default_limit
 
 from skuld import config
 
@@ -51,6 +55,7 @@ class Usage:
     cached: int = 0
     missing: int = 0  # offline, and no sample kept
     truncated: int = 0  # cut off at the token limit (after Ratatoskr's re-asks up to max_tokens_cap): refused
+    rejected: int = 0  # the model refused, the API withheld it, it ran away or the prompt did not fit: refused
     failed: int = 0
     retries: int = 0
     prompt_tokens: int = 0
@@ -193,6 +198,19 @@ def ask(
     try:
         result = asking.sync.chat(call)
         digest = asking.sync.digests().get(model)
+    except AnswerRejected as e:
+        # an answer that came back unusable (refused, withheld, runaway, over the context) is no sample: its record is
+        # kept aside and the request asked again next time, as a cut-off answer is; it does not end the run
+        _count(rejected=1, retries=asking.stats.retries)
+        record["refused"] = str(e)
+        record["created"] = datetime.now(UTC).isoformat(timespec="seconds")
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "prompt.txt").write_text(prompt, encoding="utf-8", newline="\n")
+        (folder / "record.rejected.json").write_text(
+            json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+        )
+        (folder / "answer.json").unlink(missing_ok=True)
+        return Sample(folder, record, None, False)
     except Exception as e:
         _count(failed=1, retries=asking.stats.retries)
         raise AskError(f"{model}: {type(e).__name__}: {e}") from e

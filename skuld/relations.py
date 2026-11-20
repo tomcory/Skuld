@@ -63,12 +63,13 @@ from skuld.inputs import ReportRef
 from skuld.observe import claims as o_claims
 from skuld.transparency import INCOMPLETE, MISSING_IF, UNREAD, Status
 
-#: 9: a substitutable Dependency claim supports a dependency (on a datum of its kind), refutes no declared necessity and
+#: 10: the features condition qualifies only claims an experiment showed (strength run; an alternative demonstrated),
+#: not one decided by documents (21 Nov 2026); 9: a substitutable Dependency claim supports a dependency (on a datum of its kind), refutes no declared necessity and
 #: holds for the features the case report covers (21 Nov 2026);
 #: 8: a recipient D names is the provider's own by its owner when D's documents were collected (20 Nov 2026);
 #: 7: D–E: a purpose, or its data, D could not place (Urda 2.1.0) is not comparable as such; 6: claims of practices
 #: left out for an unknown datum are passed on as such
-VERSION = "9"
+VERSION = "10"
 COMPONENT = {"role": "method", "id": "skuld.relations", "version": VERSION}
 
 CONFLICTING, INSUFFICIENT, NOT_ASSESSABLE, NOT_COMPARABLE = (
@@ -546,7 +547,11 @@ def open_conditions(
         x["id"]
         for x in tested
         if x["status"] == "supported"
-        and ((x["type"] == "dependency" and x.get("relationship") in SURVIVED) or x["type"] == "alternative")
+        and x.get("strength") == "run"
+        and (
+            (x["type"] == "dependency" and x.get("relationship") in SURVIVED)
+            or (x["type"] == "alternative" and x.get("level") == "demonstrated")
+        )
     ]
     if shown:
         text = f"holds for the features the case report covers ({', '.join(features)})"

@@ -161,3 +161,32 @@ def test_a_kept_sample_of_other_weights_under_the_same_name_is_not_reused(tmp_pa
     # a server that states nothing matches by name, as a sample that states nothing does
     silent = Serves(None)
     assert _ask(tmp_path, silent).reused and silent.asked == 0
+
+
+class Rejects(Provider):
+    """Answers with the finish reason it is given (runaway, refusal) until `heals`, then properly."""
+
+    api = "fake"
+
+    def __init__(self, reason: str, heals: bool = False):
+        super().__init__()
+        self.reason, self.heals = reason, heals
+
+    async def complete(self, model, prompt, response_format="text", params=None, model_options=None, on_text=None):
+        if self.heals:
+            return LLMResponse(text='{"a": 1}', finish_reason="stop")
+        return LLMResponse(
+            text='{"a": ' + " " * 50, finish_reason=self.reason, refusal="no" if self.reason == "refusal" else None
+        )
+
+
+def test_a_runaway_or_refused_answer_leaves_its_sample_missing_and_the_run_goes_on(tmp_path):
+    for reason, words in (("runaway", "ran away"), ("refusal", "refused")):
+        folder = tmp_path / reason
+        sample = _ask(folder, Rejects(reason))
+        assert sample.text is None and words in sample.record["refused"]
+        assert not (folder / "s1" / "answer.json").exists() and (folder / "s1" / "record.rejected.json").is_file()
+        assert ask.usage().rejected == 1 and ask.usage().failed == 0
+        # not kept: the next run asks again
+        again = _ask(folder, Rejects(reason, heals=True))
+        assert again.text == '{"a": 1}' and ask.usage().calls == 1
