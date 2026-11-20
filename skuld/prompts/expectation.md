@@ -26,7 +26,10 @@ Where no part of the context shows a part of a purpose or supports a step, cite 
 
 Nodes of the purpose vocabulary: {nodes}
 
-Answer with JSON only, in the form the response schema gives, naming each practice by its id.
+Answer with JSON only, in the form the response schema gives. "purposes" and "dependencies" are each an object with
+one entry for every practice of the context, under the practice's id: a list of that practice's purposes, and a list
+of its dependencies. Answer every practice, not only the first: give each at least one purpose; a practice's list of
+dependencies may be empty.
 
 The context:
 

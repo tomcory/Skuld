@@ -4,8 +4,10 @@ The prompts' texts by version. `prompts/<id>.md` is the current version (CURRENT
 names them (config.json's or a profile's `prompts`, e.g. `{"minimisation": "2"}` in the fixtures' profile). A prompt's
 version is part of every sample's identity, and so is the digest of its text.
 
-    expectation, expectation_traffic   5: the context last, after the fixed instructions (INFERENCE_GUIDE.md: a fixed
-                                          part first and byte-identical, so the server reuses its prefix); 4 before
+    expectation, expectation_traffic   6: the answer keyed by practice id, every practice of the batch required by
+                                          the schema (expectation.answer_schema; 21 Nov 2026); 5: the context last,
+                                          after the fixed instructions (INFERENCE_GUIDE.md: a fixed part first and
+                                          byte-identical, so the server reuses its prefix); 4 before
     specificity, compatibility          2: the context last; 1 before
     minimisation                        3: the context last, and "list no entry for it" where a component admits no
                                           alternative, which the models wrote as "none" (2: "give none for it")
@@ -18,8 +20,8 @@ from importlib import resources
 from ratatoskr.errors import ConfigError
 
 CURRENT = {
-    "expectation": "5",
-    "expectation_traffic": "5",
+    "expectation": "6",
+    "expectation_traffic": "6",
     "specificity": "2",
     "compatibility": "2",
     "minimisation": "3",

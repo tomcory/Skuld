@@ -457,3 +457,111 @@ def test_a_dependency_names_its_purpose_by_id_or_by_a_node_only_one_purpose_of_i
     assert keys[("P-1", "P-1.purpose.2")] == ("P-1", "P-1.purpose.2")
     assert keys[("P-1", "Advertising")] == ("P-1", "P-1.purpose.1")
     assert ("P-1", "ServiceProvision") not in keys  # two purposes have it: which one is meant is not known
+
+
+# -- the answer keyed by practice id (prompt version 6, 21 Nov 2026) -----------------------------------------------
+
+
+def keyed_answer(answer: dict) -> dict:
+    """A list-shaped answer as prompt version 6 asks for it: purposes and dependencies keyed by practice id."""
+    out = {}
+    for section in ("purposes", "dependencies"):
+        out[section] = {}
+        for item in answer[section]:
+            out[section].setdefault(item["practice"], []).append({k: v for k, v in item.items() if k != "practice"})
+    return out
+
+
+def test_a_batchs_schema_requires_every_practice_of_the_batch():
+    from jsonschema import Draft202012Validator
+
+    schema = expectation.answer_schema(["P-a", "P-b"], "6")
+    for section in ("purposes", "dependencies"):
+        part = schema["properties"][section]
+        assert part["type"] == "object" and part["required"] == ["P-a", "P-b"]
+        assert set(part["properties"]) == {"P-a", "P-b"} and part["additionalProperties"] is False
+        assert "practice" not in part["properties"]["P-a"]["items"]["properties"]
+        assert "practice" not in part["properties"]["P-a"]["items"]["required"]
+    assert schema["properties"]["purposes"]["properties"]["P-a"]["minItems"] == 1
+    # no contains/minContains, which guided decoders often ignore
+    assert "contains" not in json.dumps(schema)
+    item = {
+        "id": "p1",
+        "action": "a",
+        "object": "o",
+        "beneficiary": "USER",
+        "context": "c",
+        "outcome": "x",
+        "node": "ServiceProvision",
+        "role": "FUNCTIONAL",
+        "specific": True,
+        "cites": {"outcome": []},
+    }
+    validator = Draft202012Validator(schema)
+    assert not list(
+        validator.iter_errors({"purposes": {"P-a": [item], "P-b": [item]}, "dependencies": {"P-a": [], "P-b": []}})
+    )
+    # the first practice alone, as qwen answered 27 of the study's 72 batches, is refused by the schema
+    assert list(validator.iter_errors({"purposes": {"P-a": [item]}, "dependencies": {"P-a": []}}))
+    assert list(validator.iter_errors({"purposes": {"P-a": [item], "P-b": []}, "dependencies": {"P-a": [], "P-b": []}}))
+    # an earlier prompt version (a profile's) is asked with the list shape it was asked with
+    assert expectation.answer_schema(["P-a"], "5") is expectation.ANSWER_SCHEMA
+    assert expectation.answer_schema(["P-a"], "4") is expectation.ANSWER_SCHEMA
+
+
+def test_a_keyed_answer_reads_to_the_claims_of_the_list_answer_and_a_list_answer_still_reads(workspace):
+    a, built = workspace
+    expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=FakeModel())
+    (name, context, answer), *_ = [
+        k for k in expectation.kept(a, built, load_corpus(a.corpus)) if k[0].startswith("launch")
+    ]
+    practices = {p.id: p for p in built.practices}
+    as_list = expectation.read(answer, name, context, practices)
+    keyed = keyed_answer(answer)
+    assert as_list and expectation.read(keyed, name, context, practices) == as_list
+    assert expectation.listed(answer) == answer  # an answer of an earlier prompt, as the study's kept samples
+    practice = answer["purposes"][0]["practice"]
+    assert expectation.answered(json.dumps(keyed)) == {practice}
+    batch = next(b for b in expectation.batches(a, built) if b.key == "launch")
+    assert expectation.refusals(json.dumps(keyed), batch, context.ids) == expectation.refusals(
+        json.dumps(answer), batch, context.ids
+    )
+
+
+def test_the_stage_1_prompt_tells_the_keyed_shape_and_earlier_versions_are_kept():
+    from skuld import templates
+
+    for prompt in ("expectation", "expectation_traffic"):
+        assert templates.CURRENT[prompt] == "6"
+        assert "under the practice's id" in templates.text(prompt, "6")
+        for earlier in ("4", "5"):
+            assert "under the practice's id" not in templates.text(prompt, earlier)
+
+
+def test_a_model_given_the_keyed_schema_answers_every_practice_and_needs_no_topup(workspace, monkeypatch):
+    from skuld import config
+
+    a, built = workspace
+    loaded = config.load()
+    monkeypatch.setattr(config, "load", lambda: {**loaded, "expectation": {**loaded["expectation"], "topup": True}})
+
+    class Keyed(FakeModel):
+        """Answers as the schema it is given asks: every practice id the schema requires."""
+
+        async def complete(self, model, prompt, *args, **kwargs):
+            self.prompts.append(prompt.messages[0]["content"])
+            ids = prompt.response_schema["properties"]["purposes"]["required"]
+            one = json.loads((await FakeModel().complete(model, prompt)).text)
+            answer = {"purposes": {}, "dependencies": {}}
+            for pid in ids:
+                answer["purposes"][pid] = [{k: v for k, v in one["purposes"][0].items() if k != "practice"}]
+                answer["dependencies"][pid] = []
+            return LLMResponse(text=json.dumps(answer))
+
+    model = Keyed()
+    expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=model)
+    batches = expectation.batches(a, built)
+    assert len(model.prompts) == len(batches)  # no refusal, no top-up
+    for b in batches:
+        (_, _, answer), *_ = [k for k in expectation.kept(a, built, load_corpus(a.corpus)) if k[0].startswith(b.key)]
+        assert {x["practice"] for x in answer["purposes"]} == {p.id for p in b.practices}

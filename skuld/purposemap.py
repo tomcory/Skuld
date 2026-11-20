@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from skuld.common import PURPOSES, vocabulary
+from skuld.expectation import listed
 
 MODEL = "qwen3-embedding:8b-fp16"
 INSTRUCT = (
@@ -43,7 +44,7 @@ def labels(workspaces: list[Path]) -> Counter:
     for root in workspaces:
         for path in sorted(Path(root).glob("expectation/**/answer.json")):
             try:
-                answer = json.loads(path.read_text(encoding="utf-8") or "{}")
+                answer = listed(json.loads(path.read_text(encoding="utf-8") or "{}"))
             except ValueError:
                 continue
             for p in (answer.get("purposes") or []) if isinstance(answer, dict) else []:

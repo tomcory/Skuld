@@ -3,7 +3,11 @@ The expectation stage (E def:stages): what each practice can be expected to serv
 screens around it and documentation, without anything the provider says.
 
 One batch per episode (Q2): the practices that occurred in it, answered each in its own part of the schema; practices
-of no known episode form the batch `launch`. The batch's screens are those of the episode in the first run that has
+of no known episode form the batch `launch`. From prompt version 6 (KEYED_SINCE, 21 Nov 2026) the answer's purposes and
+dependencies are objects keyed by the batch's practice ids, every id required and given at least one purpose
+(`answer_schema`), so that constrained decoding (vLLM's guided JSON, Ollama's `format`) makes the model answer every
+practice (qwen3.8 answered only the first in 27 of the study's 72 batches); `listed` reads a keyed answer back into the
+list shape of earlier prompts' answers, which are still read as they are. The batch's screens are those of the episode in the first run that has
 them, with what the notice classifier (Ratatoskr's `notices`, R-7) takes for a notice left out and recorded as left
 out: a consent dialog's whole screen, a privacy notice's texts that speak of data, the rest of whose screen is kept.
 What D collects as declarations, the same texts, never reaches this stage (gate 1). The
@@ -53,8 +57,9 @@ VERSION = "4"
 PROMPT = "expectation"
 PROCEDURE = {"id": "skuld.expectation", "version": VERSION}
 #: How the samples' answers are read, apart from VERSION (which identifies the kept samples): 2 since a purpose at no
-#: node of the vocabulary has the gap reason purpose_not_in_vocabulary, not purpose_vague (20 Nov 2026)
-READING = "2"
+#: node of the vocabulary has the gap reason purpose_not_in_vocabulary, not purpose_vague (20 Nov 2026); 3: an answer
+#: keyed by practice id (prompt version 6) is read as the list it stands for (`listed`, 21 Nov 2026)
+READING = "3"
 READING_COMPONENT = {"role": "method", "id": "skuld.expectation.reading", "version": READING}
 #: The kinds of part a stage-1 context may hold, each with the origins its provenance may have; never D's report
 KINDS = {
@@ -133,6 +138,68 @@ ANSWER_SCHEMA = {
         },
     },
 }
+#: The first version of the stage-1 prompts whose answer is keyed by practice id (`answer_schema`); a sample asked with an
+#: earlier one (a profile's `prompts`) is asked again with the list shape it was asked with (ANSWER_SCHEMA)
+KEYED_SINCE = 6
+
+
+def _without_practice(item: dict) -> dict:
+    """An item of the list shape without its practice, which a keyed answer's key gives."""
+    return {
+        **item,
+        "required": [k for k in item["required"] if k != "practice"],
+        "properties": {k: v for k, v in item["properties"].items() if k != "practice"},
+    }
+
+
+def keyed(prompt_version: str) -> bool:
+    """Whether answers to a stage-1 prompt version are keyed by practice id."""
+    return str(prompt_version).isdigit() and int(prompt_version) >= KEYED_SINCE
+
+
+def answer_schema(practices: list[str], prompt_version: str | None = None) -> dict:
+    """The answer schema of a batch: for a prompt version from KEYED_SINCE on, purposes and dependencies each an object
+    whose properties are the batch's practice ids, all required and no other, each a list of the list shape's items
+    without `practice` (a practice's purposes at least one); for an earlier version, ANSWER_SCHEMA. Constrained decoders
+    enforce required properties, where they often ignore `contains`/`minContains`."""
+    if not keyed(prompt_version if prompt_version is not None else templates.version(prompt_id())):
+        return ANSWER_SCHEMA
+    ids = list(dict.fromkeys(practices))
+
+    def by_practice(section: str, at_least: int) -> dict:
+        item = _without_practice(ANSWER_SCHEMA["properties"][section]["items"])
+        each = {"type": "array", **({"minItems": at_least} if at_least else {}), "items": item}
+        return {
+            "type": "object",
+            "required": ids,
+            "additionalProperties": False,
+            "properties": dict.fromkeys(ids, each),
+        }
+
+    return {
+        "type": "object",
+        "required": ["purposes", "dependencies"],
+        "properties": {"purposes": by_practice("purposes", 1), "dependencies": by_practice("dependencies", 0)},
+    }
+
+
+def listed(answer):
+    """An answer in the list shape: a keyed answer's items each with the practice its key names, in the keys' order;
+    an answer in the list shape (an earlier prompt's, as the study's kept samples) as it is."""
+    if not isinstance(answer, dict):
+        return answer
+    out = dict(answer)
+    for section in ("purposes", "dependencies"):
+        value = answer.get(section)
+        if isinstance(value, dict):
+            out[section] = [
+                {**item, "practice": pid} if isinstance(item, dict) else item
+                for pid, items in value.items()
+                for item in (items if isinstance(items, list) else [items])
+            ]
+    return out
+
+
 #: The uncertainty of a stage-1 claim: moderate from documents, high from the model's own knowledge; no technique is
 #: measured, and a premise claim reads no norm (an open judgement is its concern's)
 FROM_DOC = uncertainty.of("from_documents")
@@ -486,7 +553,7 @@ def answered(text: str | None) -> set[str]:
         return set()
     if not isinstance(answer, dict):
         return set()
-    return {ref(p.get("practice")) for p in (answer.get("purposes") or ()) if isinstance(p, dict)}
+    return {ref(p.get("practice")) for p in (listed(answer).get("purposes") or ()) if isinstance(p, dict)}
 
 
 def sample_folder(root: Path, batch: Batch, seed: int, attempt: int = 1) -> Path:
@@ -505,6 +572,7 @@ def refusals(text: str | None, batch: Batch, ids: set[str]) -> list[str]:
         return ["the answer is not JSON"]
     if not isinstance(answer, dict):
         return ["the answer is not an object"]
+    answer = listed(answer)
     practices = {p.id: p for p in batch.practices}
     out = []
     answered = {ref(p.get("practice")) for p in _items(answer.get("purposes"))}
@@ -582,7 +650,7 @@ def expect(
                 sample, refused, _ = ask.ask_with_feedback(
                     lambda attempt: sample_folder(a.root, batch, seed, attempt),
                     prompt,
-                    ANSWER_SCHEMA,
+                    answer_schema(record["practices"], record["prompt"]["version"]),
                     lambda asked: {**record, "prompt": {**record["prompt"], "sha256": ask.sha256(asked)}},
                     ("batch", "practices", "procedure", "prompt", "corpus", "context"),
                     lambda text: refusals(text, batch, ids),
@@ -655,7 +723,7 @@ def _topups(
                 sample, refused, _ = ask.ask_with_feedback(
                     lambda attempt: topup_folder(a.root, single, seed, pid, attempt),
                     prompt,
-                    ANSWER_SCHEMA,
+                    answer_schema(record["practices"], record["prompt"]["version"]),
                     lambda asked: {**record, "prompt": {**record["prompt"], "sha256": ask.sha256(asked)}},
                     ("batch", "practices", "topup_of", "procedure", "prompt", "corpus", "context"),
                     lambda text: refusals(text, single, context.ids),
@@ -724,7 +792,9 @@ def purpose_map_sha256() -> str | None:
 
 
 def read(answer: dict, sample: str, context: Context, practices: dict[str, Practice]) -> list[dict]:
-    """The claims of one stage-1 sample, by E's status rules, with the citation rule applied."""
+    """The claims of one stage-1 sample, by E's status rules, with the citation rule applied; a keyed answer as the list
+    it stands for (`listed`)."""
+    answer = listed(answer)
     ids = context.ids
     practice_parts = context.of_kind("practice")
     kinds = {p["id"]: p["kind"] for p in context.parts}
@@ -862,8 +932,9 @@ def names(registry) -> dict[str, str]:
 def kept(
     a: Assessment, subjects: Subjects, corpus: Corpus, registry=None, notices: str | None = None
 ) -> list[tuple[str, Context, dict]]:
-    """The kept samples of the current batches: (sample name, context, answer), without asking; the batches' screens
-    by the notice definition in version `notices` (default NOTICES), as the samples were made."""
+    """The kept samples of the current batches: (sample name, context, answer in the list shape, `listed`), without
+    asking; the batches' screens by the notice definition in version `notices` (default NOTICES), as the samples were
+    made."""
     out = []
     for sample in expect(a, subjects, corpus, offline=True, names=names(registry), notices=notices):
         if sample.text is None:
@@ -874,7 +945,7 @@ def kept(
         except ValueError:
             answer = {}
         name = sample.folder.relative_to(a.root / "expectation").as_posix()
-        out.append((name, context, answer if isinstance(answer, dict) else {}))
+        out.append((name, context, listed(answer) if isinstance(answer, dict) else {}))
     return out
 
 

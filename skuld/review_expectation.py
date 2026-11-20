@@ -56,6 +56,7 @@ import skuld
 from skuld import inputs
 from skuld.assess import REPORT
 from skuld.calibrate import decisions, file_sha256, kappa, model_identity, read_json, stage_one, wilson, write_json
+from skuld.expectation import listed
 from skuld.review import ReviewError, _given, _uncited, coverage, interleave, source
 
 #: 2 since the drawn units are interleaved by stratum instead of shuffled (every prefix of the sample covers the strata
@@ -110,12 +111,13 @@ def asked(purpose: dict) -> list[str]:
 
 
 def _sample_part(root: Path, ref: str) -> tuple[dict, dict] | None:
-    """The answer and context of the sample a claim's `of` entry names ('e1/s3/a2:d0' -> expectation/e1/s3/a2)."""
+    """The answer and context of the sample a claim's `of` entry names ('e1/s3/a2:d0' -> expectation/e1/s3/a2); a
+    keyed answer as the list it stands for, which the claims' numbers count in (`expectation.listed`)."""
     folder = ref.rpartition(":")[0]
     path = root / "expectation" / folder
     if not (path / "answer.json").is_file():
         return None
-    answer = json.loads((path / "answer.json").read_text(encoding="utf-8"))
+    answer = listed(json.loads((path / "answer.json").read_text(encoding="utf-8")))
     context = (
         json.loads((path / "context.json").read_text(encoding="utf-8")) if (path / "context.json").is_file() else {}
     )
