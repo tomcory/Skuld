@@ -620,6 +620,8 @@ NEXT = {
     "requirements_not_reached": "extend the feature's path and the oracle",
     "precondition_failed": "correct the alternative against the baseline",
     "not_admitted": "repeat the comparison, or ask the reasoning tier again",
+    "substitute_more_invasive": "none by experiment: the application falls back to a datum at least as invasive; a person"
+    " judges what that means for the purpose",
     "source_absent": "skuld judge",
     "source_not_analysable": "decode the connection's content (TLS interception, the protocol's format), then observe again",
 }

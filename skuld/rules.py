@@ -29,10 +29,11 @@ from skuld.comparison import Comparison
 from skuld.configuration import coarser
 from skuld.inputs import Alternative, Case, Component, Purpose
 
-#: The status rule as a named method of the report: 2 since a removal the application survived by a substitute is
+#: The status rule as a named method of the report: 3 since an alternative survived by a more invasive substitute has
+#: the gap reason substitute_more_invasive (Ratatoskr 0.38.0, 21 Nov 2026); 2 since a removal the application survived by a substitute is
 #: substitutable, and an alternative survived by a substitute more invasive than its datum is not demonstrated
 #: (21 Nov 2026); 1 was recorded as Skuld's version
-VERSION = "2"
+VERSION = "3"
 COMPONENT = {"role": "method", "id": "skuld.rules", "version": VERSION}
 
 
@@ -131,8 +132,10 @@ def alternative(
         claim.reason = f"{alt.id} was not compared"
     elif comparison.outcome == "preserves" and worse:
         claim.comparisons = [comparison]
-        claim.missing = [f"a comparison of an alternative to {alt.id} that also withholds {', '.join(worse)}"]
-        claim.why = "not_admitted"
+        claim.missing = [
+            f"a substitute at most as invasive as {(component.node if component else None) or 'its datum'}"
+        ]
+        claim.why = "substitute_more_invasive"
         claim.reason = (
             f"under {alt.id} the application fell back to {_named(worse)}, not at most as invasive as "
             f"{(component.node if component else None) or 'its datum'}"

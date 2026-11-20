@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.9.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.9.1.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -234,7 +234,7 @@ generator's feature families; local until deployed), and a calibration sample's 
 ## Tests
 
 ```bash
-uv run pytest                     # 456 tests on 2026-11-21
+uv run pytest                     # 457 tests on 2026-11-21
 ruff format . && ruff check .
 ```
 

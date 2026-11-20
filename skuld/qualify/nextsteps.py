@@ -21,7 +21,8 @@ take within its pass; the rest stay in the dossier as recommended follow-up.
     impose on, no experiment tried it)
     gap not_admitted of any other concern or claim       re-analyse     skuld, the reasoning tier asked again
                                                                         (only minimisation has an experiment)
-    gap purpose_vague; an open fact condition            review         a person
+    gap purpose_vague, substitute_more_invasive; an      review         a person
+    open fact condition
     gap purpose_not_in_vocabulary                        re-analyse     skuld, the purpose map extended or the
                                                                         stage asked again
     gap oracle_not_observable, applicability_unknown,    audit_request  the provider: an evidence-assisted audit
@@ -38,8 +39,9 @@ from skuld.qualify.conditions import SOURCE
 from skuld.qualify.conditions import channel as source_channel
 from skuld.qualify.results import Con, View, result
 
-#: 3 (20 Nov 2026): the gap reason purpose_not_in_vocabulary (Ratatoskr 0.32.0) is re-analysed by Skuld
-VERSION = "3"
+#: 4 (21 Nov 2026): the gap reason substitute_more_invasive (Ratatoskr 0.38.0) goes to a person's review; 3 (20 Nov
+#: 2026): the gap reason purpose_not_in_vocabulary (Ratatoskr 0.32.0) is re-analysed by Skuld
+VERSION = "4"
 COMPONENT = {"role": "method", "id": "skuld.qualify.nextsteps", "version": VERSION}
 
 EXPERIMENT = (
@@ -155,7 +157,7 @@ def _gap_step(index, g: dict) -> dict:
             target["practice"] = subject
         elif not concern and not claim:
             target = {"case": _subject(g)}
-    elif reason == "purpose_vague":
+    elif reason in ("purpose_vague", "substitute_more_invasive"):
         kind, by = "review", "person"
     elif reason == "purpose_not_in_vocabulary":
         kind, by = "re-analyse", "skuld"

@@ -71,7 +71,11 @@ def test_an_alternative_survived_by_a_substitute_is_demonstrated_only_if_the_sub
         PURPOSE, removal, comparison("R", "preserves", substitutes=[ANDROID_ID]), "x", COMPONENT, DATA
     )
     assert finer.status == "not_established" and not finer.supporting and not finer.challenging
-    assert ANDROID_ID in finer.reason and finer.why == "not_admitted" and ANDROID_ID in finer.missing[0]
+    assert (
+        ANDROID_ID in finer.reason
+        and finer.why == "substitute_more_invasive"
+        and "at most as invasive" in finer.missing[0]
+    )
     # without the vocabulary no substitute is shown to be at most as invasive
     assert rules.alternative(PURPOSE, removal, comparison("R", "preserves", substitutes=[APP_SET_ID]), "x").status == (
         "not_established"

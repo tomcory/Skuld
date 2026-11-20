@@ -66,6 +66,20 @@ def test_a_relation_reads_os_silence_and_ds_silence_on_a_channel_not_exhaustive(
     assert exact.uncertainty == of("actor_inferred", ("model_decision", "moderate"))
 
 
+def test_an_exhaustive_channel_closes_a_silence_only_if_its_document_is_complete():
+    practice = SimpleNamespace(id="P-1", uncertainty=of())
+
+    def silence_on_data_safety(complete: bool) -> dict:
+        collection = {"documents": [{"channel": "data_safety", "status": "analysed", "complete": complete}]}
+        subjects = SimpleNamespace(practices=[practice], declarations=[], collection=collection)
+        r = Relation("r", "O-D", "rule", OBSERVED_ONLY, {}, subject="P-1", aspect="data", silence=["D: data_safety"])
+        correspondence._uncertainty([r], subjects)
+        return r.uncertainty
+
+    assert silence_on_data_safety(True) == of()
+    assert silence_on_data_safety(False) == of("silence_not_exhaustive")
+
+
 def purpose(u: dict) -> dict:
     return {
         "id": "claim:P-1:1",
