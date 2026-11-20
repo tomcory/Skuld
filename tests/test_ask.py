@@ -125,3 +125,39 @@ def test_a_last_attempt_cut_off_leaves_the_last_answer_standing_with_its_refusal
     for offline in (False, True):
         sample, refused, attempts = run(offline)
         assert sample.text == '{"a": 1}' and refused == ["wrong"] and attempts == 1
+
+
+class Serves(Provider):
+    """Answers, and states what serves the model as the gateway's /v1/models does."""
+
+    api = "fake"
+
+    def __init__(self, weights: str | None):
+        super().__init__()
+        self.weights, self.asked = weights, 0
+
+    async def complete(self, model, prompt, response_format="text", params=None, model_options=None, on_text=None):
+        self.asked += 1
+        return LLMResponse(text='{"a": 1}')
+
+    async def served(self):
+        return {"m": {"owned_by": "vllm", "root": self.weights, "max_model_len": 131072}} if self.weights else {}
+
+
+def test_a_sample_records_what_serves_its_model_and_the_reasoning_default(tmp_path):
+    sample = _ask(tmp_path, Serves("google/gemma-4-31b-FP8"))
+    model = sample.record["model"]
+    assert model["served"] == {"owned_by": "vllm", "root": "google/gemma-4-31b-FP8", "max_model_len": 131072}
+    assert model["think"] == "model default" and "think" not in sample.record["options"]
+    assert ask.usage().served == {"m": model["served"]}
+
+
+def test_a_kept_sample_of_other_weights_under_the_same_name_is_not_reused(tmp_path):
+    _ask(tmp_path, Serves("google/gemma-4-31b-FP8"))
+    same = Serves("google/gemma-4-31b-FP8")
+    assert _ask(tmp_path, same).reused and same.asked == 0
+    other = Serves("gemma4:31b-q4_K_M")
+    assert not _ask(tmp_path, other).reused and other.asked == 1
+    # a server that states nothing matches by name, as a sample that states nothing does
+    silent = Serves(None)
+    assert _ask(tmp_path, silent).reused and silent.asked == 0

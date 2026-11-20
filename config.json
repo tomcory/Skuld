@@ -16,6 +16,7 @@
   "client": {
     "api": "ollama",
     "timeout": 5400.0,
+    "retry_budget": 1800,
     "limits": {
       "default": 4,
       "models": {
@@ -28,6 +29,10 @@
       "enabled": false
     },
     "max_tokens_cap": 32768
+  },
+  "registry": {
+    "path": null,
+    "sha256": null
   },
   "expectation": {
     "seeds": [

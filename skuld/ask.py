@@ -58,9 +58,14 @@ class Usage:
     thinking_chars: int = 0
     seconds: float = 0.0
     models: dict = field(default_factory=dict)  # name -> digest of the models asked
+    served: dict = field(default_factory=dict)  # name -> what the server states it serves (Ratatoskr's served())
 
     def as_dict(self) -> dict:
-        return {k: (round(v, 3) if isinstance(v, float) else v) for k, v in self.__dict__.items() if k != "models"}
+        return {
+            k: (round(v, 3) if isinstance(v, float) else v)
+            for k, v in self.__dict__.items()
+            if k not in ("models", "served")
+        }
 
 
 _usage = Usage()
@@ -81,8 +86,8 @@ def reset_usage() -> None:
 def _count(**added) -> None:
     with _lock:
         for k, v in added.items():
-            if k == "models":
-                _usage.models.update(v)
+            if k in ("models", "served"):
+                getattr(_usage, k).update(v)
             else:
                 setattr(_usage, k, getattr(_usage, k) + v)
 
@@ -104,14 +109,43 @@ def client(api: str, provider: Provider | None = None) -> Client:
     return Client.from_config(config.load(), api=api, provider=provider, cache=False, raise_errors=True)
 
 
-def _kept(folder: Path, record: dict, identity: tuple[str, ...]) -> str | None:
+#: What the server serves, per API, asked once per process (`served`)
+_SERVED: dict[str, dict] = {}
+#: The fields of what is served that make two answers of one model name not interchangeable: the backend and weights
+SERVED_IDENTITY = ("owned_by", "root")
+
+
+def served(api: str, provider: Provider | None = None) -> dict[str, dict]:
+    """{model: what the server's model list states of it (backend `owned_by`, weights `root`, `max_model_len`)}, as
+    Ratatoskr's served() gives it; {} where the server lists nothing or cannot be asked. On the SNET gateway, Ollama's
+    digests (/api/tags) are those of its Q4 copies also of the models vLLM serves in FP8, so a sample records this
+    beside the digest."""
+    if provider is None and api in _SERVED:
+        return _SERVED[api]
+    try:
+        listing = client(api, provider).sync.served()
+    except Exception:  # noqa: BLE001 (a server without a list states nothing)
+        listing = {}
+    if provider is None:
+        _SERVED[api] = listing
+    return listing
+
+
+def _kept(folder: Path, record: dict, identity: tuple[str, ...], now: dict | None = None) -> str | None:
+    """The kept answer of the request, if its record matches the identity and the model's name. Where both the kept
+    record and the server now state what serves the model (`now`), they must also agree in backend and weights, so
+    that a Q4 and an FP8 answer under one name are not taken for each other; a sample that states nothing (asked before
+    20 Nov 2026), or a server that states nothing, is matched by name as before."""
     path, answer = folder / "record.json", folder / "answer.json"
     if not path.is_file() or not answer.is_file():
         return None
     kept = json.loads(path.read_text(encoding="utf-8"))
-    if all(kept.get(k) == record[k] for k in identity) and kept["model"]["name"] == record["model"]["name"]:
-        return answer.read_text(encoding="utf-8")
-    return None
+    if not (all(kept.get(k) == record[k] for k in identity) and kept["model"]["name"] == record["model"]["name"]):
+        return None
+    then = kept["model"].get("served")
+    if then and now and any(then.get(k) != now.get(k) for k in SERVED_IDENTITY):
+        return None
+    return answer.read_text(encoding="utf-8")
 
 
 def ask(
@@ -133,11 +167,14 @@ def ask(
     The sample of a request in `folder`: kept, or asked now. `record` holds the request's identity under the keys
     `identity` names, and gets the model, the options, the answer's digest and the time; `files` are written into the
     folder beside the answer (a context, for example). `think` switches a thinking model's reasoning on or off, or sets
-    its level ("low", "xhigh": on the gateway an effort for Qwen, a cap on thinking tokens for Gemma); None leaves the model's default and is not recorded, so that
-    samples asked before the setting existed stay kept.
+    its level ("low", "xhigh": on the gateway an effort for Qwen, a cap on thinking tokens for Gemma); None leaves the
+    model's default, which is not part of the options (so that samples asked before the setting existed stay kept) but
+    is recorded as the model's `think`, "model default". The record also states what the server says it serves
+    (`served`); a kept sample that states it is reused only for the same backend and weights (`_kept`).
     """
     record = {**record, "model": {"api": api, "name": model}, "options": _options(options, think)}
-    text = _kept(folder, record, (*identity, "options"))
+    now = None if offline else served(api, provider).get(model)
+    text = _kept(folder, record, (*identity, "options"), now)
     if text is not None:
         _count(cached=1)
         return Sample(folder, json.loads((folder / "record.json").read_text(encoding="utf-8")), text, True)
@@ -160,6 +197,10 @@ def ask(
         _count(failed=1, retries=asking.stats.retries)
         raise AskError(f"{model}: {type(e).__name__}: {e}") from e
     record["model"]["digest"] = digest
+    if now:
+        record["model"]["served"] = now
+    # the reasoning setting asked with, outside the identity (options): unset, it is the model's default
+    record["model"]["think"] = think if think is not None else "model default"
     record["answer"] = {"sha256": sha256(result.content)}
     record["cost"] = {
         "seconds": round(result.seconds, 3),
@@ -175,6 +216,7 @@ def ask(
         truncated=1 if cut_off else 0,
         retries=asking.stats.retries,
         models={model: digest},
+        served={model: now} if now else {},
         **{k: record["cost"][k] or 0 for k in ("seconds", "prompt_tokens", "output_tokens", "thinking_chars")},
     )
     record["created"] = datetime.now(UTC).isoformat(timespec="seconds")

@@ -16,9 +16,9 @@ that the recipient belongs to another organisation.
 """
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from ratatoskr.errors import ConfigError
-from ratatoskr.registry import Registry, normalise_name, registrable_domain
+from ratatoskr.registry import Registry, default_path, normalise_name, registrable_domain
 
 OWN, OTHER, UNKNOWN = "own", "other", "?"
 
@@ -41,11 +41,16 @@ class Party:
 
 
 def load_registry(path=None) -> Registry | None:
-    """The recipient register (default: Ratatoskr's built one), or None without it."""
-    try:
-        return Registry.load(path)
-    except ConfigError:
+    """The recipient register: `path`, else the one config.json's `registry.path` names, else Ratatoskr's built one;
+    None without it. Where the configuration pins a build (`registry.sha256`, Ratatoskr 0.32.0's
+    Registry.from_config), a register of other content is refused, never read in its place."""
+    from skuld import config
+
+    section = config.load().get("registry") or {}
+    location = Path(path) if path else Path(section["path"]) if section.get("path") else default_path()
+    if not location.is_file():
         return None  # without the register, recipients are domains and their parties open
+    return Registry.load(location, section.get("sha256"))
 
 
 def controller(declaration: dict | None, package: str) -> Controller:
@@ -63,12 +68,14 @@ def controller(declaration: dict | None, package: str) -> Controller:
     return Controller(frozenset(names), frozenset(domains), package_domain)
 
 
-def relate(recipient: str, registry: Registry | None, provider: Controller) -> Party:
-    """Whether a recipient is the provider or another organisation, with the basis of the decision."""
+def relate(recipient: str, registry: Registry | None, provider: Controller, at=None) -> Party:
+    """Whether a recipient is the provider or another organisation, with the basis of the decision; `at` is when the
+    recipient was observed or declared, and the owner is the register's owner then (an acquisition after it does not
+    count), else today's."""
     domain = recipient.removeprefix("domain:") if recipient.startswith("domain:") else None
     entity = registry.entities.get(recipient) if registry is not None and domain is None else None
     if entity is not None:
-        owner = registry.owner(entity.id)
+        owner = registry.owner(entity.id, at=at)
         owner_names = {normalise_name(n) for n in (owner.name, *owner.aliases, entity.name)}
         if owner_names & provider.names:
             return Party(recipient, OWN, [f"register owner {owner.name} is the controller D names"], owner.id)

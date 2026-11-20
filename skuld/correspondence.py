@@ -36,13 +36,14 @@ from ratatoskr import claims as claim_views
 from ratatoskr.registry import Registry
 from ratatoskr.vocabularies import Vocabulary
 
-from skuld.assessment import Declaration, Practice, Subjects, exhaustive
+from skuld.assessment import Declaration, Practice, Subjects, at, exhaustive
 from skuld.uncertainty import highest, joined
 
-VERSION = "7"  # 7: D's marks on the root (Urda 2.1.0): a denial of no data in particular contradicts under no
-# condition of its own, a value D could not place leaves the relation undecided; 6: a denial naming a recipient
-# contradicts only a transmission to it; 5: denials relate to
-# transmissions only; a root-category denial contradicts under a condition
+#: 8: a practice's recipient and a declared one are compared by their owners when the practice was observed (20 Nov
+#: 2026); 7: D's marks on the root (Urda 2.1.0): a denial of no data in particular contradicts under no condition of
+#: its own, a value D could not place leaves the relation undecided; 6: a denial naming a recipient contradicts only a
+#: transmission to it; 5: denials relate to transmissions only; a root-category denial contradicts under a condition
+VERSION = "8"
 COMPONENT = {"role": "method", "id": "skuld.correspondence", "version": VERSION}
 
 EXACTLY, HIERARCHICALLY, PARTIALLY = "corresponds_exactly", "corresponds_hierarchically", "corresponds_partially"
@@ -124,7 +125,7 @@ def _recipient_outcome(practice: Practice, value: dict, registry: Registry | Non
         return None
     declared = value.get("entity") or value.get("_entity")
     if declared:
-        r = align.recipients(entity, declared, registry)
+        r = align.recipients(entity, declared, registry, at=at(practice.observed))
         if r.kind == align.SAME_ENTITY:
             return EXACTLY, "same entity"
         if r.kind == align.SAME_OWNER:
@@ -135,7 +136,7 @@ def _recipient_outcome(practice: Practice, value: dict, registry: Registry | Non
         if category == types.root:
             return PARTIALLY, ROOT_CATEGORY  # 'recipients' says only that someone receives
         try:
-            r = align.recipient_category(entity, category, registry, types)
+            r = align.recipient_category(entity, category, registry, types, at=at(practice.observed))
         except KeyError:  # a category the vocabulary does not know relates to no recipient
             return None
         if r.kind in (align.EQUAL, align.NARROWER):

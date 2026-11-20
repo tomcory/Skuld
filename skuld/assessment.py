@@ -25,6 +25,7 @@ import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime
 
 from ratatoskr import align, channels, tilt
 from ratatoskr import claims as claim_views
@@ -36,7 +37,9 @@ from skuld.inputs import Assessment, ReportRef
 from skuld.observe import claims as o_claims
 from skuld.uncertainty import FACTORS, ORDER, highest
 
-VERSION = "2"  # 2: D's marks on the root read from its derived documents (Urda 2.1.0)
+#: 2: D's marks on the root read from its derived documents (Urda 2.1.0); 3: a practice's recipient is related to the
+#: provider by its owner when it was first observed (`observed`), not today's (20 Nov 2026)
+VERSION = "3"
 COMPONENT = {"role": "method", "id": "skuld.assessment", "version": VERSION}
 
 
@@ -54,6 +57,7 @@ class Practice:
     party: dict | None = None
     recipient_categories: list[str] = field(default_factory=list)
     jurisdictions: list[str] = field(default_factory=list)  # the recipient's, where O states one
+    observed: str | None = None  # when it was first observed: the earliest start of its observations' scopes
     u0: dict = field(default_factory=dict)
     uncertainty: dict = field(default_factory=dict)  # t, s, n: the least of its O claims' per factor
 
@@ -165,6 +169,11 @@ def practices(reports: list[ReportRef], registry: Registry | None, provider: par
     claims_of: dict[str, list[dict]] = {}
     for ref in reports:
         report = ref.load()
+        started = {
+            sc.get("observation"): (sc.get("time") or {}).get("start")
+            for sc in report.get("scopes", [])
+            if isinstance(sc, dict)
+        }
         for claim in o_claims(report):
             if claim.get("status") != "supported" or claim.get("polarity", "+") != "+":
                 continue
@@ -177,6 +186,9 @@ def practices(reports: list[ReportRef], registry: Registry | None, provider: par
             p.contexts += [{**c, "observation": obs} for c in contexts for obs in claim.get("observations", [None])[:1]]
             p.claims.append(_ref("O", ref, claim["id"]))
             p.observations = sorted({*p.observations, *claim.get("observations", [])})
+            times = [started[o] for o in claim.get("observations", []) if started.get(o)]
+            if times:
+                p.observed = min([*times, *([p.observed] if p.observed else [])], key=_instant)
             r = claim.get("recipient") or {}
             if p.recipient and r.get("categories"):
                 p.recipient_categories = sorted({*p.recipient_categories, *r["categories"]})
@@ -187,8 +199,21 @@ def practices(reports: list[ReportRef], registry: Registry | None, provider: par
         p.u0 = baseline([{"claims": claims_of[p.id]}])
         p.uncertainty = _least([_tsn(c) for c in claims_of[p.id]])
         if p.recipient and p.recipient != "?":
-            p.party = asdict(parties.relate(p.recipient, registry, provider))
+            p.party = asdict(parties.relate(p.recipient, registry, provider, at=at(p.observed)))
     return sorted(grouped.values(), key=lambda p: (p.claim_type, p.data, p.recipient or "", p.actor))
+
+
+def _instant(text: str):
+    """A time as O states it, comparable across offsets ("2026-10-22T21:54:12.192+00:00")."""
+    return datetime.fromisoformat(text.replace("Z", "+00:00"))
+
+
+def at(text: str | None) -> datetime | None:
+    """A time as O or D states it, for the register's owners at that time; None if none or unreadable."""
+    try:
+        return _instant(text) if text else None
+    except ValueError:
+        return None
 
 
 def _episode_order(episode: str) -> tuple:

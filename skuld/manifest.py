@@ -6,7 +6,8 @@ settings, whether it succeeded, and what it cost, written into the workspace the
 
 It is Ratatoskr's run manifest (the run, its settings, Skuld's commit and whether the repository was dirty, start and
 end), the configuration (its file, the profile, the digest of what was in force), with the models asked and their
-digests, the status (`ok`, or `failed` with the error), and `calls`: the keys
+digests and, where the server states it, what serves them (`served`: backend, weights, context), the status (`ok`, or
+`failed` with the error), and `calls`: the keys
 of Ratatoskr's client statistics (`calls` asked, `cached` for samples kept and reused, `failed`, `retries`, tokens,
 seconds) and Skuld's `missing` (offline, without a kept sample) and `thinking_chars`. A run that fails writes its
 manifest too, with what it had spent by then.
@@ -45,6 +46,8 @@ class Run:
         if error:
             data["error"] = f"{type(error).__name__}: {error}"
         data["models"] = dict(used.models)
+        if used.served:
+            data["served"] = dict(used.served)  # what the server states it serves, beside Ollama's digests
         data["calls"] = used.as_dict()
         stamp = data["started"].replace("-", "").replace(":", "").replace("+0000", "Z").replace("+00:00", "Z")
         path, n = Path(self.folder) / FOLDER / f"{self.command}_{stamp}.json", 1

@@ -51,14 +51,17 @@ from ratatoskr import align
 from ratatoskr.vocabularies import Vocabulary
 
 from skuld import combine, parties
-from skuld.assessment import Subjects
+from skuld.assessment import Subjects, at
 from skuld.common import DATA, vocabulary
 from skuld.correspondence import Relation, covered
 from skuld.inputs import ReportRef
 from skuld.observe import claims as o_claims
 from skuld.transparency import INCOMPLETE, MISSING_IF, UNREAD, Status
 
-VERSION = "7"  # 7: D–E: a purpose, or its data, D could not place (Urda 2.1.0) is not comparable as such; 6: claims of practices left out for an unknown datum are passed on as such
+#: 8: a recipient D names is the provider's own by its owner when D's documents were collected (20 Nov 2026);
+#: 7: D–E: a purpose, or its data, D could not place (Urda 2.1.0) is not comparable as such; 6: claims of practices
+#: left out for an unknown datum are passed on as such
+VERSION = "8"
 COMPONENT = {"role": "method", "id": "skuld.relations", "version": VERSION}
 
 CONFLICTING, INSUFFICIENT, NOT_ASSESSABLE, NOT_COMPARABLE = (
@@ -405,7 +408,9 @@ def from_declaration(
                 )
         elif comparable and o.get("predicate") == "share":
             recipients = [d.value for d in named if d.type == "declares_recipient" and isinstance(d.value, dict)]
-            found = [parties.relate(r["entity"], registry, provider) for r in recipients if r.get("entity")]
+            # the owners when D's documents were collected
+            when = at((report.get("collection") or {}).get("started"))
+            found = [parties.relate(r["entity"], registry, provider, at=when) for r in recipients if r.get("entity")]
             if recipients and len(found) == len(recipients) and all(f.relation == parties.OWN for f in found):
                 outcome = (
                     "fails",
