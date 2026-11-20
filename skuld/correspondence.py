@@ -405,7 +405,7 @@ PREDICATE = {"data": "collection", "recipient": "sharing"}
 
 def _uncertainty(relations: list[Relation], subjects) -> None:
     """The uncertainty of each O–D relation that relates claims: `needs` over the practice's and the D claims' it names
-    (D's read leniently); where it reads D's silence, at least moderate (`silence_not_exhaustive`) unless every silent
+    (D's at their own level); where it reads D's silence, at least moderate (`silence_not_exhaustive`) unless every silent
     channel is exhaustive for the aspect's predicate (ratatoskr.channels); where it reads O's silence, at least moderate
     (`o_silence`). A relation that relates nothing (not comparable, insufficient evidence) has none."""
     practices = {p.id: p for p in subjects.practices}

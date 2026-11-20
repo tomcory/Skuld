@@ -26,9 +26,9 @@ E's reasons, where they are set:
     few_runs                 moderate  a comparison with a side of fewer than MIN_RUNS runs
     not_demonstrated         moderate  concern (v) on an alternative documented, not demonstrated by a run
 
-O's and D's reasons pass through unchanged into practices, declarations, relations and concerns; D's are read
-leniently, every one at most D_AT_MOST (assessment.py): D rates a value its model placed high while its analysis is
-unmeasured. A report O or D made before Ratatoskr 0.34.0 states factor levels ({f, t, s, n}) and no reason; E reads
+O's and D's reasons pass through unchanged into practices, declarations, relations and concerns, each at its own level:
+a value D's model placed is high (`model_decision`), and so is a relation or concern that rests on it (until 0.9.0 E
+read every reason of D's at most moderate, until D's model was measured; dropped on 21 Nov 2026). A report O or D made before Ratatoskr 0.34.0 states factor levels ({f, t, s, n}) and no reason; E reads
 its uncertainty as low, with no reason (`read`; a whole report with `converted`, which observe.py applies before it
 checks an O report against the schema).
 
@@ -66,8 +66,8 @@ from ratatoskr.uncertainty import (
 )
 
 #: The version of the rules above for claims; raise it when they change. 2: one level with its reasons (Ratatoskr
-#: 0.34.0), for factor levels {t, s, n}
-VERSION = "2"
+#: 0.34.0), for factor levels {t, s, n}; 3: D's reasons at their own level, not at most moderate (21 Nov 2026)
+VERSION = "3"
 CLAIMS = {"function": "skuld.uncertainty", "version": VERSION}
 
 __all__ = [

@@ -27,7 +27,7 @@ doc decides over samples that name no concern, and the disagreement raises the c
 (`samples_disagree`).
 
 A concern's uncertainty is set by its step from its premises, `needs` over what it rests on: the purpose's, a
-comparison's where an experiment decides it, D's (read leniently) where it reads D's classification, the relations'
+comparison's where an experiment decides it, D's where it reads D's classification, the relations'
 for (iii); with its own reasons, `from_documents` for a judgement from documents, `samples_disagree` where the
 samples disagree, `open_judgement` for a judgement of an open term (reasoning tier), `open_condition` under an open
 condition, `silence_not_exhaustive` where it reads a silence not exhaustive for it, `not_demonstrated` for an
@@ -204,7 +204,7 @@ def purpose_limitation(
 ):
     """Concerns (iv) and coverage per practice and supported inferred purpose (judge.Limitation), from the
     compatibility samples' judgements. Both steps rest on D's classification of the specified purposes and their data,
-    so a concern needs the uncertainty `declared` gives each of them (D's, read leniently); one that rests on there
+    so a concern needs the uncertainty `declared` gives each of them (D's); one that rests on there
     being no specified purpose for the data reads the silence of channels exhaustive for no purpose, so it is at least
     moderate (`silence_not_exhaustive`)."""
     declared = declared or {}

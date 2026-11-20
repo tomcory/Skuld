@@ -38,11 +38,12 @@ def test_a_comparisons_uncertainty_names_every_reason_its_technique_is_raised():
     assert reasons(u) == ["few_runs", "runs_not_alternated", "unverifiable"]
 
 
-def test_a_d_claim_is_read_leniently_and_an_old_one_as_low():
+def test_a_d_claim_is_read_at_its_own_level_and_an_old_one_as_low():
     claim = {"uncertainty": of("model_decision", "mapping_fit")}
+    # a value D's model placed is high: no lenient reading of D (21 Nov 2026)
     assert declared_uncertainty(claim) == {
-        "level": "moderate",
-        "reasons": [{"reason": "mapping_fit", "level": "moderate"}, {"reason": "model_decision", "level": "moderate"}],
+        "level": "high",
+        "reasons": [{"reason": "model_decision", "level": "high"}, {"reason": "mapping_fit", "level": "moderate"}],
     }
     assert declared_uncertainty({"uncertainty": {"f": "low", "t": "low", "s": "high", "n": "low"}}) == of()
     assert declared_uncertainty({}) == of()

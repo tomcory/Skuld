@@ -12,10 +12,10 @@ The assessment of one application version: its subjects, built from O's and D's 
     collection    D's documents with their requirement annotations and completeness; None without D.
 
 A practice's uncertainty is its O claims' `either` (they corroborate one another: the least uncertain, with its own
-reasons); a declaration's is its D claim's, every reason read leniently at most D_AT_MOST: D rates a value its model
-placed high while its analysis is unmeasured (EV-D1), and E reads that as moderate until it is measured. O's and D's
-reasons pass through unchanged otherwise; a report made before Ratatoskr 0.34.0, which states factor levels and no
-reason, is read as low (`uncertainty.read`). Which of D's channels is exhaustive
+reasons); a declaration's is its D claim's, every reason at its own level: a value D's model placed is high
+(`model_decision`), and so is what rests on it (until 0.9.0 E read every reason of D's at most moderate; the author
+dropped that lenient reading on 21 Nov 2026). O's and D's reasons pass through unchanged; a report made before
+Ratatoskr 0.34.0, which states factor levels and no reason, is read as low (`uncertainty.read`). Which of D's channels is exhaustive
 for a predicate, so that its silence is closed, is D's, as Ratatoskr states its channel types (ratatoskr.channels).
 
 The assessment records whether O's and D's scopes are comparable (Q8): O's installed version and D's store version
@@ -37,12 +37,13 @@ from skuld import parties
 from skuld.configuration import baseline, recipient
 from skuld.inputs import Assessment, ReportRef
 from skuld.observe import claims as o_claims
-from skuld.uncertainty import capped, either, read
+from skuld.uncertainty import either, read
 
 #: 2: D's marks on the root read from its derived documents (Urda 2.1.0); 3: a practice's recipient is related to the
 #: provider by its owner when it was first observed (`observed`), not today's (20 Nov 2026); 4: one level with its
-#: reasons (Ratatoskr 0.34.0): a practice's is its O claims' `either`, a declaration's D's every reason capped
-VERSION = "4"
+#: reasons (Ratatoskr 0.34.0): a practice's is its O claims' `either`, a declaration's D's every reason capped; 5: a
+#: declaration's is its D claim's, every reason at its own level (no lenient reading of D; 21 Nov 2026)
+VERSION = "5"
 COMPONENT = {"role": "method", "id": "skuld.assessment", "version": VERSION}
 
 
@@ -75,7 +76,7 @@ class Declaration:
     value: object
     polarity: str
     claim: dict
-    uncertainty: dict = field(default_factory=dict)  # the D claim's, every reason at most D_AT_MOST
+    uncertainty: dict = field(default_factory=dict)  # the D claim's, every reason at its own level
     # D's marks on the root (Urda 2.1.0): the declaration names no data, so it holds of all data as stated (_no_data);
     # the fields that hold the root only because D could not place their value (_unplaced: category, purpose); and
     # whether D's report marks them at all (`marked`: an unmarked root of an earlier report may mean either)
@@ -127,18 +128,14 @@ def _key(claim: dict) -> tuple[str, str, str | None, str]:
     return claim["type"], claim["datum"]["node"], target, actor(claim)
 
 
-#: The highest level E reads of a reason of a D claim (the lenient reading of an unmeasured model's placement)
-D_AT_MOST = "moderate"
-
-
 def exhaustive(channel: str, predicate: str) -> bool:
     """Whether D's channel is exhaustive for the predicate, so that the silence of its complete document is closed."""
     return channels.exhaustive(channel, predicate)
 
 
 def declared_uncertainty(claim: dict) -> dict:
-    """A D claim's uncertainty as E reads it: every reason at most D_AT_MOST."""
-    return capped(read(claim.get("uncertainty")), D_AT_MOST)
+    """A D claim's uncertainty as E reads it: every reason at its own level (`read`)."""
+    return read(claim.get("uncertainty"))
 
 
 def _practice_id(key: tuple) -> str:

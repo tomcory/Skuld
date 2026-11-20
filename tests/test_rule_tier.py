@@ -82,20 +82,19 @@ def test_an_observation_corresponds_to_a_declaration_above_it(tmp_path):
     assert (recipient.outcome, recipient.alignment) == ("corresponds_hierarchically", "by category (analytics)")
 
 
-def test_an_o_d_relation_takes_the_uncertainty_of_its_claims_and_ds_leniently(tmp_path):
+def test_an_o_d_relation_takes_the_uncertainty_of_its_claims_and_ds_at_their_own_level(tmp_path):
     o = claim("c1", "personal-info.name", "adco")
     o["uncertainty"] = of("actor_inferred")
     d = d_claim("declares_collection", "personal-info.name")
     d["uncertainty"] = of("model_decision", "open_reading")  # a model's placement: high
     built, rel = relate(tmp_path, [o], [d])
     data = [r for r in by_aspect(rel, "data") if r.outcome == correspondence.EXACTLY]
-    # needs over both, O's and D's reasons passed through, D's every reason read as at most moderate until D's model
-    # is measured
+    # needs over both, O's and D's reasons passed through at their own level: D's model's placement is high
     assert data and data[0].uncertainty == {
-        "level": "moderate",
+        "level": "high",
         "reasons": [
+            {"reason": "model_decision", "level": "high"},
             {"reason": "actor_inferred", "level": "moderate"},
-            {"reason": "model_decision", "level": "moderate"},
             {"reason": "open_reading", "level": "moderate"},
         ],
     }
