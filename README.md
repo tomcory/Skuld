@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.8.2.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.9.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -13,7 +13,9 @@ expert (`skuld calibrate`). Not built: the reasoning tier's argument form (P10).
 ([`ODE/expectation/expectation.tex`](../ODE/expectation/expectation.tex), version 0.9); the plan and its history,
 [`plan/archive/SKULD_REDESIGN_PLAN.md`](../plan/archive/SKULD_REDESIGN_PLAN.md). How Skuld works is in
 [`docs/architecture.md`](docs/architecture.md). Since 0.8.0 (Ratatoskr 0.34.0) a result's uncertainty is one level
-with the reasons that set it (`skuld/uncertainty.py`). Checked against the code on 2026-11-20.
+with the reasons that set it (`skuld/uncertainty.py`); since 0.9.0 (Ratatoskr 0.37.0) D's reasons count at their own
+level, a removal survived by a substitute is `substitutable`, an omission respects the silent document's completeness,
+and stage 1's answer schema requires every practice of a batch. Checked against the code on 2026-11-21.
 
 ## Role in Asgard
 
@@ -232,7 +234,7 @@ generator's feature families; local until deployed), and a calibration sample's 
 ## Tests
 
 ```bash
-uv run pytest                     # 447 tests on 2026-11-20
+uv run pytest                     # 456 tests on 2026-11-21
 ruff format . && ruff check .
 ```
 
