@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.7.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.7.1.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -136,7 +136,7 @@ registry of other content is refused.
 | `expectation.topup` | off | stage 1 asks again, alone, for the practices its batches left out |
 | `expectation.batch_size` | none | at most this many practices per batch: an episode's practices are split, in order, into batches `e<episode>.<n>` with the same screens (one remedy, to be measured, for qwen3.8 answering only a batch's first practice) |
 | `assessment.known_data_only` | off | the practices whose datum O could not identify are left out |
-| `registry.path`, `.sha256` | none, none | the recipient registry and the digest of the build a study decides on (Ratatoskr's `Registry.from_config`); unset, Ratatoskr's built one, unchecked |
+| `registry.path`, `.sha256` | none, the rerun's build, `ba786d32…` (2026-11-20: Ratatoskr 0.33.0, the ownership list 0.33.0, the sources fetched that day) | the recipient registry and the digest of the build a study decides on (Ratatoskr's `Registry.from_config`): a registry of other content, or none, is refused; unset, Ratatoskr's built one, unchecked |
 | `vocabularies.<id>` | the bundled version | the version of a vocabulary, e.g. `{"dpv-purposes": "2.3"}`: the purpose vocabulary's nodes are part of the stage-1 prompt, so samples asked under one version are found only under it |
 | `prompts.<id>` | the current version | an earlier version of a prompt (`skuld/templates.py`; kept as `skuld/prompts/versions/<id>-<version>.md`), so that samples asked with it are found again |
 | `purpose_map` | none | invented purpose nodes mapped to the vocabulary's: a path (relative to the repository), or `{path, sha256}`, refused if the file's digest differs |

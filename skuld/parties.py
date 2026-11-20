@@ -18,6 +18,7 @@ that the recipient belongs to another organisation.
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ratatoskr.errors import ConfigError
 from ratatoskr.registry import Registry, default_path, normalise_name, registrable_domain
 
 OWN, OTHER, UNKNOWN = "own", "other", "?"
@@ -49,6 +50,11 @@ def load_registry(path=None) -> Registry | None:
     section = config.load().get("registry") or {}
     location = Path(path) if path else Path(section["path"]) if section.get("path") else default_path()
     if not location.is_file():
+        if section.get("sha256"):
+            raise ConfigError(
+                f"No recipient registry at {location}, but the configuration pins the build {section['sha256']}: "
+                "build it (python -m ratatoskr.registry.build --offline) from the sources it was built from"
+            )
         return None  # without the register, recipients are domains and their parties open
     return Registry.load(location, section.get("sha256"))
 

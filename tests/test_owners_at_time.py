@@ -56,5 +56,9 @@ def test_a_study_that_pins_its_register_reads_that_build_or_none(tmp_path, monke
     pinned("0" * 64)
     with pytest.raises(ConfigError, match="pins"):
         parties.load_registry()
-    # absent, the recipients are domains, as before
+    # absent while pinned: refused, not read as no register
+    with pytest.raises(ConfigError, match="No recipient registry"):
+        parties.load_registry(tmp_path / "none.json")
+    # absent and unpinned, the recipients are domains, as before
+    pinned(None)
     assert parties.load_registry(tmp_path / "none.json") is None
