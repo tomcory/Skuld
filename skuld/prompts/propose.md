@@ -27,10 +27,10 @@ Fill every slot of the family you chose or described, from the screens below:
 - a slot of kind `text`: one or more texts the LAST screens (those after the flow's last action) show, copied exactly, short (a few words), that show the outcome was reached. Do not take a text that the flow's FIRST screen also shows, nor buttons, tabs, menu entries or other texts that are always present: they would be shown whether or not the feature worked.
 - a slot of kind `screen`: the key of a screen of the flow (`key=`), other than its first screen, that is only reached when the feature worked.
 
-# The flow
-
-{flow}
-
 # Answer
 
 Answer with JSON: `features`, a list with one entry per feature, each with `family` (an id of the catalogue, or "new"), `new_family` (null unless `family` is "new"), `slots` (one entry per slot: its name and its values; one value for a slot of kind `screen`), `name` (a short name of this app's feature), and `outcome` (what this app shows when the feature worked, in one sentence).
+
+# The flow
+
+{flow}

@@ -1,9 +1,7 @@
 You assess whether the purposes a provider of a mobile application declares for its processing of personal data are
-specific, from the context below only. The statements (their ids start with Q) are the provider's declarations, in
+specific, from the context at the end only. The statements (their ids start with Q) are the provider's declarations, in
 its own words and quoted with the sentence they occur in; the passages (their ids start with N) are norms and
 guidelines on what a specific purpose is.
-
-{context}
 
 For each statement:
 
@@ -17,3 +15,7 @@ For each statement:
 Judge only what the statement says, not whether the processing it names takes place or is lawful.
 
 Answer with JSON only, in the form the response schema gives, naming each statement by its id.
+
+The context:
+
+{context}

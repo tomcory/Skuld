@@ -26,7 +26,16 @@ def under(host: str, domain: str) -> bool:
     return host == domain or host.endswith("." + domain)
 
 
-@cache
 def vocabulary(name: str) -> Vocabulary:
-    """A bundled vocabulary, loaded once."""
-    return Vocabulary.load(name)
+    """A bundled vocabulary, loaded once, in the version config.json's (or the profile's) `vocabularies` names, else
+    the one Ratatoskr bundles. The purpose vocabulary's nodes are part of the stage-1 prompt, so samples asked under
+    one version are found only under it (dpv-purposes 2.3.1 added a node on 20 Nov 2026; the fixtures and the study's
+    runs were asked under 2.3)."""
+    from skuld import config
+
+    return _vocabulary(name, (config.load().get("vocabularies") or {}).get(name))
+
+
+@cache
+def _vocabulary(name: str, version: str | None) -> Vocabulary:
+    return Vocabulary.load(name, version=version)

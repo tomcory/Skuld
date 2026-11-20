@@ -1,9 +1,7 @@
-You assess what processing of personal data a mobile application can be expected to need, from the context below
-only. The context shows what the application was observed to do (the practices), the screens of the part of the
+You assess what processing of personal data a mobile application can be expected to need, from the context at the
+end only. The context shows what the application was observed to do (the practices), the screens of the part of the
 application where it happened, and documentation. It contains nothing the provider says about its own processing,
 and you must not assume anything it would say.
-
-{context}
 
 For each practice listed in the context (its id starts with P):
 
@@ -29,3 +27,7 @@ Where no part of the context shows a part of a purpose or supports a step, cite 
 Nodes of the purpose vocabulary: {nodes}
 
 Answer with JSON only, in the form the response schema gives, naming each practice by its id.
+
+The context:
+
+{context}

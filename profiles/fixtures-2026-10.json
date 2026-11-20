@@ -1,5 +1,5 @@
 {
-  "description": "The setup the three fixtures (cases/: Pilates Workout 1.6.4, NeuroNation 3.8.96, WetterOnline 2026.20) were asked with: config.json until 20 Nov 2026 (gemma4:31b, temperature 0.4 for both stages, 0.2 for the generator, max_tokens 8192, the model's default thinking). Their kept samples are found only under it.",
+  "description": "The setup the three fixtures (workspaces/, cases/ until 20 Nov 2026: Pilates Workout 1.6.4, NeuroNation 3.8.96, WetterOnline 2026.20) were asked with: config.json until 20 Nov 2026 (gemma4:31b, temperature 0.4 for both stages, 0.2 for the generator, max_tokens 8192, the model's default thinking). Their kept samples are found only under it. The purpose vocabulary is dpv-purposes 2.3, whose nodes the stage-1 prompts list (2.3.1, since Ratatoskr 0.32.0, adds one). Its prompts are those it was asked with (versions before 20 Nov 2026, when the context moved to the end; skuld/templates.py); the proposer's are not kept, since its generator 2 also leaves notices out.",
   "model": "gemma4:31b",
   "sampling": {
     "default": {
@@ -26,5 +26,15 @@
   },
   "assessment": {
     "think": null
+  },
+  "vocabularies": {
+    "dpv-purposes": "2.3"
+  },
+  "prompts": {
+    "expectation": "4",
+    "expectation_traffic": "4",
+    "specificity": "1",
+    "compatibility": "1",
+    "minimisation": "2"
   }
 }
