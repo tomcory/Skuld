@@ -20,7 +20,7 @@ skuld review agree reviews/<id> reviews/<id>-a/reviews.json reviews/<id>-b/revie
 skuld review score reviews/<id>                                  # after adjudication: agreement, anchoring, misses
 ```
 
-A unit is one aggregated concern in full: its statement (label, status, tier, uncertainty), its members with their
+A unit is one aggregated concern in full: its statement (label, status, tier, uncertainty: its level and reasons), its members with their
 reasons, E's purposes and alternatives, the evidence they rest on, and the application's documents. The reviewer
 records, in order:
 

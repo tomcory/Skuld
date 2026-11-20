@@ -9,10 +9,13 @@ from ratatoskr.frames import Frame
 from ratatoskr.vocabularies import Vocabulary
 
 from skuld import combine, concerns, select, space
+from skuld.uncertainty import of
 
 DATA = Vocabulary.load("asgard-data")
 PURPOSES = Vocabulary.load("dpv-purposes")
-LOW = {"t": "moderate", "s": "low", "n": "not_applicable"}
+#: A hypothesis from documents, and a premise whose comparison had too few runs
+DOC = of("from_documents")
+RUN = of("few_runs")
 
 
 @pytest.fixture(autouse=True)
@@ -48,7 +51,7 @@ def hypothesis(pid, subject, node, who="user", status="supported"):
         "channels": ["reasoning:e1/s1"],
         "supporting": [],
         "challenging": [],
-        "uncertainty": LOW,
+        "uncertainty": DOC,
         "sufficiency": {"sufficient": True},
     }
 
@@ -67,7 +70,7 @@ def premise(n, kind, status, subject="P-loc", node="ServiceProvision", **fields)
         "status": status,
         "supporting": [f"x{n}"] if status == "supported" else [],
         "challenging": [f"x{n}"] if status == "refuted" else [],
-        "uncertainty": LOW,
+        "uncertainty": RUN,
         "sufficiency": {"sufficient": status in ("supported", "refuted")},
         **({"strength": "run"} if status in ("supported", "refuted") else {}),
         **fields,
@@ -156,7 +159,15 @@ def test_a_demonstrated_alternative_is_a_minimisation_concern():
     assert (c.status, c.observability) == ("supported", "E2")
     assert "forecast:G1 demonstrated" in c.reason
     assert c.channels == ["ex:forecast"] and c.supporting == ["x1"]
-    assert c.uncertainty["t"] == "moderate" and c.uncertainty["n"] == "moderate"
+    # the run's, the purpose's and the judgement of minimal; demonstrated, so no not_demonstrated
+    assert c.uncertainty == {
+        "level": "moderate",
+        "reasons": [
+            {"reason": "few_runs", "level": "moderate"},
+            {"reason": "from_documents", "level": "moderate"},
+            {"reason": "open_judgement", "level": "moderate"},
+        ],
+    }
 
 
 def test_an_experiment_that_cannot_observe_the_purpose_leaves_the_concern_not_assessable():
@@ -291,12 +302,20 @@ def test_what_an_experiment_decided_or_could_not_assess_is_not_asked_again(works
     assert by["claim:P-ads:1"]["kind"] == select.REFUSAL and "could not assess it" in by["claim:P-ads:1"]["reason"]
 
 
-def test_a_combined_claims_uncertainty_ranks_not_applicable_lowest():
-    run = {"t": "moderate", "s": "low", "n": "not_applicable"}
-    model = {"t": "not_applicable", "s": "high", "n": "not_applicable"}
+def test_a_combined_claims_uncertainty_is_either_over_agreeing_members_else_needs_over_all():
+    run = of("few_runs", "runs_not_alternated")
+    model = of("own_knowledge")
     members = [{"uncertainty": run}, {"uncertainty": model}]
-    assert combine._uncertainty(members, minimum=False) == {"t": "moderate", "s": "high", "n": "not_applicable"}
-    assert combine._uncertainty(members, minimum=True) == {"t": "moderate", "s": "low", "n": "not_applicable"}
+    assert combine._uncertainty(members, minimum=False) == {
+        "level": "high",
+        "reasons": [
+            {"reason": "own_knowledge", "level": "high"},
+            {"reason": "few_runs", "level": "moderate"},
+            {"reason": "runs_not_alternated", "level": "moderate"},
+        ],
+    }
+    # the alternative of the lowest level, with its own reasons only
+    assert combine._uncertainty(members, minimum=True) == run
 
 
 def test_an_undecided_combination_gives_the_reason_of_the_claims_that_were_assessed():
@@ -551,7 +570,8 @@ def test_a_preserved_purpose_reaches_its_own_node_only_and_a_broken_one_also_tho
     out = combine.experimental([narrower], [preserved, broken], PURPOSES, combine.Numbers())
     by = {c["alternative"]: c for c in out}
     assert by["forecast:G1"]["basis"] == []
-    assert by["forecast:G0"]["basis"] == ["claim:P-loc:1"] and by["forecast:G0"]["uncertainty"]["s"] == "moderate"
+    assert by["forecast:G0"]["basis"] == ["claim:P-loc:1"]
+    assert by["forecast:G0"]["uncertainty"] == of("aligned_above", "few_runs")
     same = hypothesis("claim:P-loc:1", "P-loc", "ServiceProvision")
     out = combine.experimental([same], [preserved], PURPOSES, combine.Numbers())
     assert out[0]["basis"] == ["claim:P-loc:1"]

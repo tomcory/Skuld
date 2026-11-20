@@ -69,7 +69,7 @@ class Rel:
     condition: str | None = None  # fact or source
     aspect: str | None = None
     text: str | None = None  # the condition's text
-    high: bool = False  # an uncertainty factor is high
+    high: bool = False  # its uncertainty is high
     partial: str | None = None  # for corresponds_partially: broader, related, root_category
     omission: bool = False  # O≠D that reads only the silence of channels not exhaustive for the predicate
 

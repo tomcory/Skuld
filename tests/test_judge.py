@@ -289,10 +289,11 @@ def test_the_assessments_provenance_is_complete_its_rebuild_identical_and_tamper
     assert check_assessment(a, report, rebuilt, members) == []
     assert identity(report) == identity(rebuilt)
 
-    # U_n: low for the rule tier, moderate for a judgement citing the norms; premises read no norm
+    # the rule tier: no open judgement, but a silence on channels not exhaustive for the requirement; a judgement of an
+    # open term citing the norms: from documents and open
     by_step = {c["step"]: c for c in report["concerns"]}
-    assert by_step["information_not_given"]["uncertainty"]["n"] == "low"
-    assert by_step["not_specific"]["uncertainty"]["n"] == "moderate"
+    assert by_step["information_not_given"]["uncertainty"] == uncertainty.of("silence_not_exhaustive")
+    assert by_step["not_specific"]["uncertainty"] == uncertainty.of("from_documents", "open_judgement")
     # a claim's uncertainty is not stored: the header names the function that determines it
     assert not any("uncertainty" in c for c in report["claims"])
     assert report["report"]["claims"]["determined"]["uncertainty"] == uncertainty.CLAIMS

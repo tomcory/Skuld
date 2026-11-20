@@ -8,8 +8,9 @@ from ratatoskr.registry import Registry
 from ratatoskr.schemas import validate
 from ratatoskr.vocabularies import Vocabulary
 
-from skuld import assessment, concerns, correspondence, frame, inputs, relations, transparency
+from skuld import assessment, concerns, correspondence, frame, inputs, relations, transparency, uncertainty
 from skuld.assess import REPORT, assess
+from skuld.uncertainty import of
 from tests.test_assess import ROOT, claim, declared, o_report, workspace
 
 REGISTRY = Registry(
@@ -83,13 +84,35 @@ def test_an_observation_corresponds_to_a_declaration_above_it(tmp_path):
 
 def test_an_o_d_relation_takes_the_uncertainty_of_its_claims_and_ds_leniently(tmp_path):
     o = claim("c1", "personal-info.name", "adco")
-    o["uncertainty"] = {"f": "low", "t": "moderate", "s": "low", "n": "not_applicable"}
+    o["uncertainty"] = of("actor_inferred")
     d = d_claim("declares_collection", "personal-info.name")
-    d["uncertainty"] = {"f": "low", "t": "not_applicable", "s": "high", "n": "not_applicable"}  # a model's placement
+    d["uncertainty"] = of("model_decision", "open_reading")  # a model's placement: high
     built, rel = relate(tmp_path, [o], [d])
     data = [r for r in by_aspect(rel, "data") if r.outcome == correspondence.EXACTLY]
-    # the highest of both per factor, D's semantic uncertainty read as at most moderate until D's model is measured
-    assert data and data[0].uncertainty == {"t": "moderate", "s": "moderate", "n": "not_applicable"}
+    # needs over both, O's and D's reasons passed through, D's every reason read as at most moderate until D's model
+    # is measured
+    assert data and data[0].uncertainty == {
+        "level": "moderate",
+        "reasons": [
+            {"reason": "actor_inferred", "level": "moderate"},
+            {"reason": "model_decision", "level": "moderate"},
+            {"reason": "open_reading", "level": "moderate"},
+        ],
+    }
+
+
+def test_o_and_d_reports_made_before_ratatoskr_0_34_state_no_reason_and_are_read_as_low(tmp_path):
+    o = claim("c1", "personal-info.name", "adco")
+    o["uncertainty"] = {"f": "low", "t": "moderate", "s": "low", "n": "not_applicable"}
+    d = d_claim("declares_collection", "personal-info.name")
+    d["uncertainty"] = {"f": "low", "t": "not_applicable", "s": "high", "n": "not_applicable"}
+    built, rel = relate(tmp_path, [o], [d])
+    data = [r for r in by_aspect(rel, "data") if r.outcome == correspondence.EXACTLY]
+    assert data and data[0].uncertainty == {"level": "low", "reasons": []}
+    assert uncertainty.converted({"evidence": [{"uncertainty": o["uncertainty"]}], "uncertainty": of("inferred")}) == {
+        "evidence": [{"uncertainty": {"level": "low", "reasons": []}}],
+        "uncertainty": of("inferred"),
+    }
 
 
 def test_a_mismatch_that_reads_ds_silence_holds_only_under_its_unread_channels(tmp_path):
@@ -261,7 +284,8 @@ def test_transparency_reads_ds_annotations_on_analysed_documents_only(tmp_path):
     assert not any(c.requirement == "controller_name" for c in stated)
     # D's silence: no channel is exhaustive for a transparency requirement, so "not found" is never certain
     assert by["right_to_restrict"].silent == ["policy"]
-    assert k["right_to_restrict"].uncertainty["s"] == "moderate"
+    # and the condition is open
+    assert k["right_to_restrict"].uncertainty == of("silence_not_exhaustive", "open_condition")
     assert any("not exhaustive" in x for x in k["right_to_restrict"].silence)
     # without the notice at all (absent), the provider gives none: missing, under no condition
     channels[1] = {"channel": "in_app", "status": "absent"}
@@ -295,7 +319,8 @@ def test_an_incomplete_documents_silence_is_missing_only_under_a_condition(tmp_p
     assert "complete:policy" in status["right_to_restrict"]["conditions"]
     assert status["controller_name"]["status"] == "addressed"  # what the acquired part gives still counts
     concern = next(c for c in report["concerns"] if c["requirement"] == "right_to_restrict")
-    assert "complete:policy" in concern["condition"] and concern["uncertainty"]["n"] == "moderate"
+    assert "complete:policy" in concern["condition"]
+    assert concern["uncertainty"] == of("open_condition", "silence_not_exhaustive")
     opened = next(o for o in report["open"] if o["text"].startswith("whether the part of the policy"))
     assert concern["id"] in opened["qualifies"]
     assert report["subjects"]["collection"]["documents"][0]["complete"] is False

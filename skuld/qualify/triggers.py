@@ -7,7 +7,7 @@ calibration (ADR 0004); no decision on them changes this report.
 
     conflicted_claims              a symbol is conflict, or a concern is conflicted       conflict read as ≈ and as ≠;
                                                                                           the concern supported or not
-    high_uncertainty               a relation or concern with t, s or n high              a supported concern read as
+    high_uncertainty               a relation or concern whose uncertainty is high        a supported concern read as
                                                                                           not established; a relation
                                                                                           read as ?
     unresolved_entity              a transmission whose recipient is none or a domain,    each conditional ≠ read as
@@ -22,7 +22,7 @@ from skuld.qualify import symbols
 from skuld.qualify.nextsteps import _concern, _relation, _without_gap
 from skuld.qualify.results import View, result
 
-VERSION = "1"
+VERSION = "2"  # 2: high_uncertainty reads one level (Ratatoskr 0.34.0), before any factor high
 COMPONENT = {"role": "method", "id": "skuld.qualify.triggers", "version": VERSION}
 
 

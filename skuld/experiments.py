@@ -22,7 +22,7 @@ from skuld.comparison import Comparison, compare
 from skuld.inputs import Case, InputError, Workspace, check_frozen, digest
 from skuld.observe import ObservationError, annotators, observe, report_path, source_reads
 from skuld.runs import Run, RunRefused, load
-from skuld.uncertainty import ORDER
+from skuld.uncertainty import needs, of
 from skuld.verify import VERSION as verify_version
 from skuld.verify import Verification, baseline_problem, imposes, settings, verify
 
@@ -364,7 +364,7 @@ class _Report:
                 "kinds": kinds,
                 "premises": premises,
                 "provenance": [],
-                "uncertainty": {**LOW, "t": "moderate" if v.unverifiable else "low"},
+                "uncertainty": of("unverifiable") if v.unverifiable else LOW,
             }
         )
 
@@ -414,7 +414,7 @@ class _Report:
                 "kinds": ["run"],
                 "premises": premises,
                 "provenance": [],
-                "uncertainty": {**LOW, "t": k.technical()},
+                "uncertainty": k.technical(),
             }
         )
         self.comparisons.append(
@@ -601,8 +601,8 @@ class _Report:
         }
 
 
-#: The uncertainty of a record of a run: technique low, a run's records state what they state, no norm read
-LOW = {"t": "low", "s": "low", "n": "not_applicable"}
+#: The uncertainty of a record of a run: low, a run's records state what they state
+LOW = of()
 
 
 def _shared_scope(reports: list[dict]) -> dict:
@@ -770,7 +770,7 @@ def premises(cases: Workspace | None, root: Path, practices: list, item) -> list
                         "case": CASE_REPORT,
                         "premises": [k.id],
                         "method": f"the case report's comparison {k.id} ({k.outcome})",
-                        "uncertainty": {"t": k.technical(), "s": "low", "n": "not_applicable"},
+                        "uncertainty": k.technical(),
                     },
                 )
                 for k in c.comparisons
@@ -802,11 +802,10 @@ def premises(cases: Workspace | None, root: Path, practices: list, item) -> list
                     "broke": any(k.outcome == "breaks" for k in c.comparisons),
                     "supporting": [items[i] for i in c.supporting],
                     "challenging": [items[i] for i in c.challenging],
-                    "uncertainty": {
-                        "t": max((k.technical() for k in c.comparisons), key=ORDER.index, default="not_applicable"),
-                        "s": "low" if purpose.provenance == "feature" else "moderate",
-                        "n": "not_applicable",
-                    },
+                    "uncertainty": needs(
+                        *(k.technical() for k in c.comparisons),
+                        of(*([] if purpose.provenance == "feature" else ["purpose_not_from_feature"])),
+                    ),
                     "sufficiency": {
                         "sufficient": decisive,
                         **({} if decisive else {"reason": c.why, "missing": c.missing}),

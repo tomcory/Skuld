@@ -10,8 +10,9 @@ if every claim is (author, 13 Nov 2026; before, one claim not assessable made th
 a sample with a vague purpose outweighed samples that judged the dependency). One sample of a model that supports a
 claim by documents therefore decides over samples that do not.
 
-A combined claim cites the evidence of its claims that agree with its status, and its uncertainty is, per factor, the
-least over them where the factor applies, or the highest over all of them where none agrees. The combination calls no
+A combined claim cites the evidence of its claims that agree with its status, and its uncertainty is their `either`
+(alternatives that establish the same: the least uncertain, with its own reasons), or `needs` over all of them where
+none agrees (conflicted: every reason of every member). The combination calls no
 model and yields no finding: the claims it combines are kept, in the samples and the case report they are read from.
 
     hypotheses    the expectation stage's claims across its samples: purposes aligned by node and beneficiary within a
@@ -23,17 +24,17 @@ model and yields no finding: the claims it combines are kept, in the samples and
     experimental  the experimental channel's claims with the hypotheses of aligned purposes: a hypothesis purpose of a
                   practice is aligned with the case purpose of the same beneficiary at its own node, and, where the
                   experiment broke the case purpose, also with one at the nearest node above it (≈), which raises its
-                  semantic uncertainty to moderate (C1, author 14 Nov 2026: that a function survives without the data
+                  uncertainty to moderate (`aligned_above`) (C1, author 14 Nov 2026: that a function survives without the data
                   shows nothing for a narrower purpose, while that it breaks holds for every purpose it includes); an
                   experiment's Dependency
                   claim is combined with the hypotheses' on the same component. Where no hypothesis aligns, reasoning
                   is silent on the experimental case's purpose, and the experiment's claim stands combined alone.
 
 A combined claim's uncertainty is used here, to set its concerns', and not stored: the assessment names this function
-(`uncertainty.CLAIMS`). A concern resting on a purpose takes the purpose's semantic uncertainty where it is higher.
+(`uncertainty.CLAIMS`). A concern resting on a purpose `needs` the purpose's uncertainty with its own.
 """
 
-from skuld.uncertainty import FACTORS, ORDER, highest
+from skuld.uncertainty import either, needs, raised
 
 #: The strength of a sample's or an experiment's claim, by which the combination decides; a combined claim states it
 #: only if supported or refuted, and then it is doc or run, since no rule lets own knowledge decide
@@ -41,8 +42,9 @@ STRENGTH = {"own": 0, "doc": 1, "run": 2}
 DECISIVE = ("supported", "refuted")
 #: The combination as a named method of the report: 2 since claims that could not be assessed abstain (13 Nov 2026);
 #: 3 since an alternative demoted by gate (d) takes the uncertainty of the members that agree with it, not of those
-#: that support it (20 Nov 2026)
-VERSION = "3"
+#: that support it (20 Nov 2026); 4: one level with its reasons (Ratatoskr 0.34.0): either over the agreeing members,
+#: needs over all where none agrees, aligned_above for C1
+VERSION = "4"
 COMPONENT = {"role": "method", "id": "skuld.combine", "version": VERSION}
 #: What a combined claim carries over from the claim that decides it
 CARRIED = ("stage", "tier", "case", "scope", "component", "relationship", "alternative", "level")
@@ -135,13 +137,10 @@ def _top(decisive: list[dict]) -> list[dict]:
 
 
 def _uncertainty(members: list[dict], minimum: bool) -> dict:
-    """Per factor, the least level among the members where it applies to any, or the highest."""
-    out = {}
-    for f in FACTORS:
-        levels = [m["uncertainty"][f] for m in members]
-        applying = [x for x in levels if x != "not_applicable"]
-        out[f] = min(applying, key=ORDER.index) if minimum and applying else highest(*levels)
-    return out
+    """The members as alternatives that establish the same (`either`) where they agree, else what all of them rest on
+    together (`needs`)."""
+    uncertainties = [m["uncertainty"] for m in members]
+    return either(*uncertainties) if minimum else needs(*uncertainties)
 
 
 def beneficiary(text: str | None) -> str:
@@ -222,8 +221,8 @@ def alternatives(claims: list[dict], number: Numbers, asked: dict[str, set[str]]
 
 def _without_majority(claim: dict, members: list[dict], supporting: int, samples: int) -> dict:
     """A supported alternative that too few samples support: plausible and not established, with gate (d) as reason.
-    Its uncertainty is a not-established claim's: the least over the members not established, else the highest over
-    all (`combined`), not the supporting members' it would keep otherwise."""
+    Its uncertainty is a not-established claim's: `either` over the members not established, else `needs` over all
+    (`combined`), not the supporting members' it would keep otherwise."""
     claim = {k: v for k, v in claim.items() if k not in ("strength", "overruled")}
     agreeing = [m for m in members if m["status"] == "not_established"]
     claim.update(
@@ -333,6 +332,6 @@ def experimental(hypotheses: list[dict], premises: list[dict], vocabulary, numbe
                 basis=basis,
             )
             if any(by_id[h]["purpose"].get("node") != purposes[k].get("node") for h in basis):
-                claim["uncertainty"]["s"] = highest(claim["uncertainty"]["s"], "moderate")
+                claim["uncertainty"] = raised(claim["uncertainty"], "aligned_above")
             out.append(claim)
     return out

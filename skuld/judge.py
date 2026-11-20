@@ -158,7 +158,7 @@ def attempts(question: str) -> int:
 
 LACKING = ("action", "object", "outcome")
 JUDGED = {"COMPATIBLE": "compatible", "NOT_COMPATIBLE": "not_compatible", "UNDECIDED": "undecided"}
-#: The uncertainty of a stage-2 result from documents, and of one the samples disagree on
+#: The uncertainty of a reasoning-tier claim from documents (one that cites none: expectation.FROM_OWN)
 FROM_DOC = expectation.FROM_DOC
 
 _CITES = {"type": "array", "items": {"type": "string"}}

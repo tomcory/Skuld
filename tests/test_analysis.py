@@ -33,10 +33,13 @@ def claim(made: list, type_: str, purpose: str, **arguments):
     return found[0]
 
 
-def technical(report: dict, alternative: str) -> str:
+def technical(report: dict, alternative: str) -> list[str]:
+    """The reasons of a comparison's uncertainty, which is moderate if any"""
     from skuld.experiments import _comparison
 
-    return _comparison(next(k for k in report["comparisons"] if k["alternative"] == alternative)).technical()
+    u = _comparison(next(k for k in report["comparisons"] if k["alternative"] == alternative)).technical()
+    assert u["level"] == ("moderate" if u["reasons"] else "low")
+    return [r["reason"] for r in u["reasons"]]
 
 
 def test_preserving_removals_show_no_dependency_and_demonstrate_the_alternatives(tmp_path):
@@ -64,7 +67,7 @@ def test_unhooked_identifier_sources_are_unverifiable_and_raise_technical_uncert
     a1 = next(r for r in report["runs"] if r["alternative"] == "A1")
     assert a1["verification"]["status"] == "verified"
     assert any("android-id" in part for part in a1["verification"]["unverifiable"])
-    assert technical(report, "A1") == "moderate" and technical(report, "A2") == "low"
+    assert technical(report, "A1") == ["unverifiable"] and technical(report, "A2") == []
 
 
 def test_connections_without_a_host_leave_a_removed_recipient_partly_unverifiable(tmp_path):
@@ -75,7 +78,7 @@ def test_connections_without_a_host_leave_a_removed_recipient_partly_unverifiabl
     assert any("without a host" in part for part in a2["verification"]["unverifiable"])
     comparison = next(k for k in report["comparisons"] if k["alternative"] == "A2")
     assert any("without a host" in part for part in comparison["unverifiable"])
-    assert technical(report, "A2") == "moderate"
+    assert technical(report, "A2") == ["unverifiable"]
 
 
 def test_counted_quic_flows_with_a_host_are_judged_by_their_host(tmp_path):
@@ -84,7 +87,7 @@ def test_counted_quic_flows_with_a_host_are_judged_by_their_host(tmp_path):
     report, _ = analysed(ws.build(tmp_path, plan))
     a2 = next(r for r in report["runs"] if r["alternative"] == "A2")
     assert not a2["verification"]["unverifiable"]
-    assert technical(report, "A2") == "low"
+    assert technical(report, "A2") == []
 
 
 def test_the_verification_is_derived_from_the_items_it_rests_on(tmp_path):
@@ -154,7 +157,7 @@ def test_runs_that_do_not_alternate_are_compared_at_a_raised_technical_uncertain
     comparison = next(k for k in report["comparisons"] if k["alternative"] == "A2")
     assert comparison["alternating"] is False
     assert claim(made, "alternative", "P1", alternative="A2").status == "supported"
-    assert technical(report, "A2") == "moderate"
+    assert technical(report, "A2") == ["runs_not_alternated"]
 
 
 def test_a_hooked_source_the_application_did_not_read_holds_its_effect(tmp_path):
@@ -298,7 +301,7 @@ def test_the_dry_run_gives_the_worked_examples_experimental_claims():
             assert (dependency.relationship, dependency.status) == ("not_dependent", "supported")
             assert next(c for c in mine if c.type == "alternative").status == "supported"
     assert {c.status for c in by_case["launch"] if c.purpose == "P-L2"} == {"not_assessable"}
-    assert technical(report, "A1") == "moderate"
+    assert technical(report, "A1") == ["unverifiable"]
     assert all(r["verification"]["status"] in ("verified", "not_applicable") for r in report["runs"])
 
 

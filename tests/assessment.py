@@ -5,8 +5,8 @@ import copy
 
 O = "a" * 64  # noqa: E741 (the Observation dimension)
 D = "b" * 64
-LOW = {"t": "low", "s": "low", "n": "not_applicable"}
-HIGH = {"t": "low", "s": "high", "n": "not_applicable"}
+LOW = {"level": "low", "reasons": []}
+HIGH = {"level": "high", "reasons": [{"reason": "samples_disagree", "level": "high"}]}
 
 #: The frame's requirements by the kind of their subject, as qualification reads them
 REQUIREMENTS = {

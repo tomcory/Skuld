@@ -11,9 +11,11 @@ The assessment of one application version: its subjects, built from O's and D's 
                   the expectation stage reads no declaration.
     collection    D's documents with their requirement annotations and completeness; None without D.
 
-A practice's uncertainty is the least of its O claims' per factor (they corroborate one another); a declaration's is
-its D claim's, its semantic part read leniently (D_SEMANTIC_AT_MOST): D rates a value its model placed high while its
-analysis is unmeasured (EV-D1), and E reads that as moderate until it is measured. Which of D's channels is exhaustive
+A practice's uncertainty is its O claims' `either` (they corroborate one another: the least uncertain, with its own
+reasons); a declaration's is its D claim's, every reason read leniently at most D_AT_MOST: D rates a value its model
+placed high while its analysis is unmeasured (EV-D1), and E reads that as moderate until it is measured. O's and D's
+reasons pass through unchanged otherwise; a report made before Ratatoskr 0.34.0, which states factor levels and no
+reason, is read as low (`uncertainty.read`). Which of D's channels is exhaustive
 for a predicate, so that its silence is closed, is D's, as Ratatoskr states its channel types (ratatoskr.channels).
 
 The assessment records whether O's and D's scopes are comparable (Q8): O's installed version and D's store version
@@ -35,11 +37,12 @@ from skuld import parties
 from skuld.configuration import baseline, recipient
 from skuld.inputs import Assessment, ReportRef
 from skuld.observe import claims as o_claims
-from skuld.uncertainty import FACTORS, ORDER, highest
+from skuld.uncertainty import capped, either, read
 
 #: 2: D's marks on the root read from its derived documents (Urda 2.1.0); 3: a practice's recipient is related to the
-#: provider by its owner when it was first observed (`observed`), not today's (20 Nov 2026)
-VERSION = "3"
+#: provider by its owner when it was first observed (`observed`), not today's (20 Nov 2026); 4: one level with its
+#: reasons (Ratatoskr 0.34.0): a practice's is its O claims' `either`, a declaration's D's every reason capped
+VERSION = "4"
 COMPONENT = {"role": "method", "id": "skuld.assessment", "version": VERSION}
 
 
@@ -59,7 +62,7 @@ class Practice:
     jurisdictions: list[str] = field(default_factory=list)  # the recipient's, where O states one
     observed: str | None = None  # when it was first observed: the earliest start of its observations' scopes
     u0: dict = field(default_factory=dict)
-    uncertainty: dict = field(default_factory=dict)  # t, s, n: the least of its O claims' per factor
+    uncertainty: dict = field(default_factory=dict)  # its O claims' either
 
 
 @dataclass
@@ -72,7 +75,7 @@ class Declaration:
     value: object
     polarity: str
     claim: dict
-    uncertainty: dict = field(default_factory=dict)  # t, s, n of the D claim, U_s read leniently
+    uncertainty: dict = field(default_factory=dict)  # the D claim's, every reason at most D_AT_MOST
     # D's marks on the root (Urda 2.1.0): the declaration names no data, so it holds of all data as stated (_no_data);
     # the fields that hold the root only because D could not place their value (_unplaced: category, purpose); and
     # whether D's report marks them at all (`marked`: an unmarked root of an earlier report may mean either)
@@ -124,8 +127,8 @@ def _key(claim: dict) -> tuple[str, str, str | None, str]:
     return claim["type"], claim["datum"]["node"], target, actor(claim)
 
 
-#: The highest semantic uncertainty E reads of a D claim (the lenient reading of an unmeasured model's placement)
-D_SEMANTIC_AT_MOST = "moderate"
+#: The highest level E reads of a reason of a D claim (the lenient reading of an unmeasured model's placement)
+D_AT_MOST = "moderate"
 
 
 def exhaustive(channel: str, predicate: str) -> bool:
@@ -133,26 +136,9 @@ def exhaustive(channel: str, predicate: str) -> bool:
     return channels.exhaustive(channel, predicate)
 
 
-def _tsn(claim: dict) -> dict:
-    u = claim.get("uncertainty") or {}
-    return {f: u.get(f, "not_applicable") for f in FACTORS}
-
-
-def _least(uncertainties: list[dict]) -> dict:
-    """Per factor, the least level among corroborating claims where the factor applies to any (framework)."""
-    out = {}
-    for f in FACTORS:
-        applying = [u[f] for u in uncertainties if u[f] != "not_applicable"]
-        out[f] = min(applying, key=ORDER.index) if applying else "not_applicable"
-    return out
-
-
 def declared_uncertainty(claim: dict) -> dict:
-    """A D claim's uncertainty as E reads it: its semantic part at most D_SEMANTIC_AT_MOST."""
-    u = _tsn(claim)
-    if u["s"] != "not_applicable" and highest(u["s"], D_SEMANTIC_AT_MOST) == u["s"]:
-        u["s"] = D_SEMANTIC_AT_MOST
-    return u
+    """A D claim's uncertainty as E reads it: every reason at most D_AT_MOST."""
+    return capped(read(claim.get("uncertainty")), D_AT_MOST)
 
 
 def _practice_id(key: tuple) -> str:
@@ -197,7 +183,7 @@ def practices(reports: list[ReportRef], registry: Registry | None, provider: par
             claims_of.setdefault(p.id, []).append(claim)
     for p in grouped.values():
         p.u0 = baseline([{"claims": claims_of[p.id]}])
-        p.uncertainty = _least([_tsn(c) for c in claims_of[p.id]])
+        p.uncertainty = either(*(read(c.get("uncertainty")) for c in claims_of[p.id]))
         if p.recipient and p.recipient != "?":
             p.party = asdict(parties.relate(p.recipient, registry, provider, at=at(p.observed)))
     return sorted(grouped.values(), key=lambda p: (p.claim_type, p.data, p.recipient or "", p.actor))

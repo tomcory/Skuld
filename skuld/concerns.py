@@ -4,7 +4,8 @@ E's concerns (E def:concern), by five rules:
     (i)   information not given, for the collection and a transparency requirement (rule tier): supported if its
           status is missing, citing what decides that it applies and D's silence on its label; supported under an
           open condition if missing_if. That no document bears the label is D's analysis not finding it, and no
-          channel of D is exhaustive for a transparency requirement (ratatoskr.channels), so U_s is moderate
+          channel of D is exhaustive for a transparency requirement (ratatoskr.channels), so its uncertainty is
+          moderate (`silence_not_exhaustive`)
     (ii)  not specific, for a declared purpose (reasoning tier): stated where a sample judges it not specific;
           supported if the samples' combined judgement is
     (iii) declaration contradicted, for a declaration O contradicts (rule tier; author, 14 Nov 2026): supported where
@@ -22,11 +23,16 @@ E's concerns (E def:concern), by five rules:
           demonstrated by an experiment for a case purpose ≈ it; not assessable if every premise is
 
 A sample's judgement is combined across samples like any claim (combine.decide): a supported judgement of strength
-doc decides over samples that name no concern, and the disagreement raises the concern's semantic uncertainty.
+doc decides over samples that name no concern, and the disagreement raises the concern's uncertainty to high
+(`samples_disagree`).
 
-A concern's uncertainty is set by its step from its premises: U_t a comparison's where an experiment decides it; U_s
-its purpose's, moderate for a judgement from documents, high where the samples disagree; U_n low for a requirement
-tested by rule, moderate for a judgement of an open term, under an open condition moderate.
+A concern's uncertainty is set by its step from its premises, `needs` over what it rests on: the purpose's, a
+comparison's where an experiment decides it, D's (read leniently) where it reads D's classification, the relations'
+for (iii); with its own reasons, `from_documents` for a judgement from documents, `samples_disagree` where the
+samples disagree, `open_judgement` for a judgement of an open term (reasoning tier), `open_condition` under an open
+condition, `silence_not_exhaustive` where it reads a silence not exhaustive for it, `not_demonstrated` for an
+alternative documented, not demonstrated by a run. A requirement tested by rule on no open condition and no silence
+is low.
 
 A concern never states that a requirement is met: what E assessed and stated no concern for is its coverage
 (`coverage`), relative to the documents D acquired and could access.
@@ -39,15 +45,15 @@ from ratatoskr.frames import Frame
 from skuld import combine
 from skuld.assessment import exhaustive
 from skuld.transparency import INCOMPLETE, MISSING, MISSING_IF, NOT_APPLICABLE, UNREAD, Status
-from skuld.uncertainty import highest
+from skuld.uncertainty import needs, of, raised
 
-VERSION = "12"  # 12: (iv) undecided where D specifies purposes for data it could not place (Urda 2.1.0); 11: concern (i) cites every item that decides it applies; 10: rule (iii), declaration contradicted
+VERSION = "13"  # 13: one level with its reasons (Ratatoskr 0.34.0); 12: (iv) undecided where D specifies purposes for data it could not place (Urda 2.1.0); 11: concern (i) cites every item that decides it applies; 10: rule (iii), declaration contradicted
 COMPONENT = {"role": "method", "id": "skuld.concerns", "version": VERSION}
 
 #: Of a rule-tier concern of information not given: as certain as D's annotations and O's claims it reads
-BY_RULE = {"t": "not_applicable", "s": "low", "n": "low"}
-#: Of a reasoning-tier judgement from documents
-FROM_DOC = {"t": "not_applicable", "s": "moderate", "n": "moderate"}
+BY_RULE = of()
+#: Of a reasoning-tier judgement from documents of an open term
+FROM_DOC = of("from_documents", "open_judgement")
 
 
 @dataclass
@@ -101,9 +107,10 @@ def information_not_given(frame: Frame, statuses: list[Status], evidence_of: dic
         # the silence is closed only on a channel exhaustive for the requirement; D has none for one (D's channel types)
         open_silence = [ch for ch in s.silent if not exhaustive(ch, f"information:{r.id}")]
         unread = any(c.startswith((INCOMPLETE, UNREAD)) for c in s.conditions)
-        uncertainty = {**BY_RULE, "n": "moderate"} if conditional else dict(BY_RULE)
-        if open_silence or unread:
-            uncertainty["s"] = "moderate"
+        uncertainty = of(
+            *(["open_condition"] if conditional else []),
+            *(["silence_not_exhaustive"] if open_silence or unread else []),
+        )
         concerns.append(
             _concern(
                 frame,
@@ -177,7 +184,7 @@ def not_specific(frame: Frame, statements, judgements: list[dict], items, applic
                 step="not_specific",
                 tier="reasoning",
                 status=status,
-                uncertainty=FROM_DOC if agreed else {**FROM_DOC, "s": "high"},
+                uncertainty=FROM_DOC if agreed else raised(FROM_DOC, "samples_disagree"),
                 observability="E2",
                 condition=_condition(applicability, r.id),
                 reason=(
@@ -197,14 +204,13 @@ def purpose_limitation(
 ):
     """Concerns (iv) and coverage per practice and supported inferred purpose (judge.Limitation), from the
     compatibility samples' judgements. Both steps rest on D's classification of the specified purposes and their data,
-    so a concern takes the semantic uncertainty `declared` gives each of them (D's, read leniently); one that rests on
-    there being no specified purpose for the data reads the silence of channels exhaustive for no purpose, so U_s is at
-    least moderate."""
+    so a concern needs the uncertainty `declared` gives each of them (D's, read leniently); one that rests on there
+    being no specified purpose for the data reads the silence of channels exhaustive for no purpose, so it is at least
+    moderate (`silence_not_exhaustive`)."""
     declared = declared or {}
 
-    def of_d(specified) -> str:
-        levels = [declared[d]["s"] for s in specified for d in s.declarations if d in declared]
-        return highest(*levels) if levels else "not_applicable"
+    def of_d(specified) -> dict:
+        return needs(*(declared[d] for s in specified for d in s.declarations if d in declared))
 
     specified_r, compatible_r = frame.requirement("purpose_specified"), frame.requirement("purpose_compatible")
     concerns, covered = [], []
@@ -235,7 +241,7 @@ def purpose_limitation(
                     **common,
                     tier="rule",
                     status="not_established" if unplaced else "supported",
-                    uncertainty={**BY_RULE, "s": highest(h["uncertainty"]["s"], "moderate")},
+                    uncertainty=raised(h["uncertainty"], "silence_not_exhaustive"),
                     observability="E2",
                     reason=f"no purpose is specified for {node}'s data"
                     + (f"; {_unplaced(unplaced)}" if unplaced else ""),
@@ -269,11 +275,9 @@ def purpose_limitation(
                 **common,
                 tier="reasoning",
                 status=status,
-                uncertainty={
-                    "t": "not_applicable",
-                    "s": highest(h["uncertainty"]["s"], "moderate" if agreed else "high", of_d(case.relevant)),
-                    "n": "moderate",
-                },
+                uncertainty=needs(
+                    h["uncertainty"], FROM_DOC if agreed else raised(FROM_DOC, "samples_disagree"), of_d(case.relevant)
+                ),
                 observability="E2",
                 reason=f"not compatible with {incompatible} of the {len(case.relevant)} purposes specified for its data"
                 + (f"; {'; '.join(reasons)}" if reasons else ""),
@@ -339,15 +343,12 @@ def less_invasive_alternative(
             reason = f"{len(docs)} alternatives for {node}, none supported by documents" + (
                 f"; experiments: {', '.join(sorted({x['status'] for x in runs}))}" if runs else ""
             )
-        purpose_s = h["uncertainty"]["s"]
         if best is not None:
-            uncertainty = {
-                "t": best["uncertainty"]["t"],
-                "s": highest(best["uncertainty"]["s"], purpose_s, "low" if shown else "moderate"),
-                "n": "moderate",
-            }
+            uncertainty = needs(
+                best["uncertainty"], h["uncertainty"], of("open_judgement", *([] if shown else ["not_demonstrated"]))
+            )
         else:
-            uncertainty = {**FROM_DOC, "s": highest(purpose_s, "moderate")}
+            uncertainty = needs(h["uncertainty"], FROM_DOC)
         unobservable = status == "not_assessable" and any(
             x["sufficiency"].get("reason") == "oracle_not_observable" for x in runs
         )
@@ -413,7 +414,6 @@ def declaration_contradicted(
             f"contradicted by {len(practices)} observed practice{'s' if len(practices) != 1 else ''}"
             + ("" if unconditional else ", each under an open condition")
         )
-        levels = [(rel.uncertainty or {}).get("s", "moderate") for rel in rels]
         concerns.append(
             _concern(
                 frame,
@@ -422,7 +422,7 @@ def declaration_contradicted(
                 step="declaration_contradicted",
                 tier="rule",
                 status="supported",
-                uncertainty={"t": "not_applicable", "s": highest(*levels), "n": "moderate" if condition else "low"},
+                uncertainty=needs(*(rel.uncertainty for rel in rels), of(*(["open_condition"] if condition else []))),
                 observability="E1",
                 condition=condition,
                 supporting=items_of(d, rels),

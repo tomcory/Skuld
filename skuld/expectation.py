@@ -35,7 +35,7 @@ from ratatoskr import notices as notice_rules
 from ratatoskr.notices import classify, notice_texts
 from ratatoskr.vocabularies import Vocabulary
 
-from skuld import ask, config, templates
+from skuld import ask, config, templates, uncertainty
 from skuld import context as ctx
 from skuld.assessment import Practice, Subjects
 from skuld.common import DATA, OWN, PURPOSES, cited, ref, vocabulary
@@ -133,10 +133,10 @@ ANSWER_SCHEMA = {
         },
     },
 }
-#: The uncertainty of a stage-1 claim: semantic uncertainty moderate from documents, high from the model's own
-#: knowledge; no technique is measured, and a premise claim reads no norm (U_n is its concern's)
-FROM_DOC = {"t": "not_applicable", "s": "moderate", "n": "not_applicable"}
-FROM_OWN = {**FROM_DOC, "s": "high"}
+#: The uncertainty of a stage-1 claim: moderate from documents, high from the model's own knowledge; no technique is
+#: measured, and a premise claim reads no norm (an open judgement is its concern's)
+FROM_DOC = uncertainty.of("from_documents")
+FROM_OWN = uncertainty.of("own_knowledge")
 
 
 @dataclass

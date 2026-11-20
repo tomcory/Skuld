@@ -5,11 +5,12 @@ from ratatoskr.frames import Frame
 from skuld import aggregate as ag
 from skuld import concerns
 from skuld.correspondence import CONTRADICTS, Relation
+from skuld.uncertainty import of
 
 FRAME = Frame.load("gdpr-art5")
 
 
-def relation(n, practice, pointer, condition=None):
+def relation(n, practice, pointer, condition=None, u=None):
     return Relation(
         id=f"relation:{practice}:{n}",
         type="O-D",
@@ -20,7 +21,7 @@ def relation(n, practice, pointer, condition=None):
         subject=practice,
         aspect="recipient",
         condition=condition,
-        uncertainty={"t": "low", "s": "moderate", "n": "not_applicable"},
+        uncertainty=u or of("actor_inferred"),
     )
 
 
@@ -31,12 +32,20 @@ def items(d, rels):
 def test_one_concern_per_declaration_supported_and_conditional_only_if_every_contradiction_is():
     rels = [
         relation(1, "P-a", "policy:/notDisclosed/0"),
-        relation(2, "P-b", "policy:/notDisclosed/0", "the recipient is not a service provider"),
+        relation(
+            2,
+            "P-b",
+            "policy:/notDisclosed/0",
+            "the recipient is not a service provider",
+            of(("model_decision", "moderate")),
+        ),
         relation(3, "P-a", "policy:/notDisclosed/1", "the recipient is not a service provider"),
         relation(4, "P-b", "policy:/notDisclosed/1", "the denial applies to the observation (jurisdiction Utah)"),
     ]
-    of = {"policy:/notDisclosed/0": "D-0", "policy:/notDisclosed/1": "D-1"}
-    stated, covered = concerns.declaration_contradicted(FRAME, rels, of, items, {}, {"D-0": "We do not share data."})
+    declaration_of = {"policy:/notDisclosed/0": "D-0", "policy:/notDisclosed/1": "D-1"}
+    stated, covered = concerns.declaration_contradicted(
+        FRAME, rels, declaration_of, items, {}, {"D-0": "We do not share data."}
+    )
     by = {c.subject: c for c in stated}
     assert set(by) == {"D-0", "D-1"} and {c.subject for c in covered} == {"D-0", "D-1"}
     unconditional, conditional = by["D-0"], by["D-1"]
@@ -47,14 +56,22 @@ def test_one_concern_per_declaration_supported_and_conditional_only_if_every_con
     )
     assert unconditional.principle == "transparency" and unconditional.observability == "E1"
     assert unconditional.status == "supported" and unconditional.condition == []
-    assert unconditional.uncertainty == {"t": "not_applicable", "s": "moderate", "n": "low"}
+    # needs over its relations, O's and D's reasons passed through; no open condition
+    assert unconditional.uncertainty == {
+        "level": "moderate",
+        "reasons": [
+            {"reason": "actor_inferred", "level": "moderate"},
+            {"reason": "model_decision", "level": "moderate"},
+        ],
+    }
     assert unconditional.reason == '"We do not share data.": contradicted by 2 observed practices'
     assert unconditional.supporting == ["item:1", "item:2"]
     # every contradiction conditional: the concern holds if one of the conditions does
     assert conditional.condition == [
         "the denial applies to the observation (jurisdiction Utah) or the recipient is not a service provider"
     ]
-    assert conditional.uncertainty["n"] == "moderate" and conditional.reason.endswith("each under an open condition")
+    assert conditional.uncertainty == of("actor_inferred", "open_condition")
+    assert conditional.reason.endswith("each under an open condition")
 
 
 def test_where_the_requirement_does_not_apply_nothing_is_stated():

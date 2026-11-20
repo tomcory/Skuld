@@ -7,10 +7,12 @@ import pytest
 from ratatoskr.schemas import validate
 
 from skuld import aggregate as ag
+from skuld.uncertainty import of
 
-FROM_DOC = {"t": "not_applicable", "s": "moderate", "n": "moderate"}
-DISAGREED = {"t": "not_applicable", "s": "high", "n": "moderate"}
-BY_RULE = {"t": "not_applicable", "s": "low", "n": "low"}
+FROM_DOC = of("from_documents", "open_judgement")
+DISAGREED = of("from_documents", "open_judgement", "samples_disagree")
+OWN = of("own_knowledge", "open_judgement")
+BY_RULE = of()
 
 
 def practice(pid, data, recipient):
@@ -229,7 +231,37 @@ def test_supported_and_agreeing_findings_come_first():
     a = ag.aggregate(report(concerns, declarations=ds))
     assert [f["key"]["declared"] for f in a["aggregated_concerns"]] == ["B", "C", "A"]
     assert a["aggregated_concerns"][1]["disagreeing"] == 1
-    assert a["aggregated_concerns"][1]["uncertainty"]["s"] == "high"
+    assert a["aggregated_concerns"][1]["uncertainty"] == {
+        "level": "high",
+        "reasons": [
+            {"reason": "samples_disagree", "level": "high"},
+            {"reason": "from_documents", "level": "moderate"},
+            {"reason": "open_judgement", "level": "moderate"},
+        ],
+    }
+
+
+def test_disagreeing_counts_the_samples_that_disagree_not_a_purpose_of_the_models_own_knowledge():
+    ds = [{"id": f"D-{i}", "value": "B"} for i in range(3)]
+    concerns = [
+        not_specific("concern:0", "D-0", "b0", uncertainty=OWN),
+        not_specific("concern:1", "D-1", "b1", uncertainty=DISAGREED),
+        not_specific("concern:2", "D-2", "b2"),
+    ]
+    a = ag.aggregate(report(concerns, declarations=ds))
+    [f] = a["aggregated_concerns"]
+    # high both, but only one member's samples disagreed (before 0.8.0, both counted: s high)
+    assert f["disagreeing"] == 1
+    assert f["uncertainty"]["level"] == "high"
+    assert [r["reason"] for r in f["uncertainty"]["reasons"]] == [
+        "own_knowledge",
+        "samples_disagree",
+        "from_documents",
+        "open_judgement",
+    ]
+    md = ag.markdown(a)
+    assert "U high: own knowledge, samples disagree, from documents (moderate), open judgement (moderate)" in md
+    assert "samples disagreed on 1" in md
 
 
 def test_collection_concerns_keep_their_condition_and_open_conditions_group_by_text():

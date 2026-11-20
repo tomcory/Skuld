@@ -230,7 +230,7 @@
                             <div class="d-flex flex-wrap gap-2 align-items-center">
                                 <span class="badge" :class="statusClass(item.status)" :title="statusTitle(item.status)">E: concern {{ item.status.replace('_', ' ') }}</span>
                                 <span class="badge text-bg-light border" :title="tierTitle(item.tier)">{{ item.tier }} tier</span>
-                                <span class="small text-secondary" title="E's own uncertainty about the concern: semantic (reading the data and purposes), normative (applying the requirement)">E's uncertainty: semantic {{ item.uncertainty.s }}, normative {{ item.uncertainty.n }}</span>
+                                <span class="small text-secondary" title="E's own uncertainty about the concern: its level, the highest of the reasons that raise it (low where none does)">E's uncertainty: {{ uncertaintyText(item.uncertainty) }}</span>
                                 <span v-if="item.disagreeing" class="small text-danger">samples disagreed on {{ item.disagreeing }} member(s)</span>
                             </div>
                             <div class="fw-semibold mt-1">{{ item.label }}</div>
@@ -442,6 +442,11 @@ const app = createApp({
             if (typeof r !== 'object' || r === null) return r;
             const role = r.role ? r.role.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase() : '';
             return r.name || role || (r.categories || []).join(', ') || 'a recipient';
+        },
+        uncertaintyText(u) {
+            if (!u || !u.level) return 'not stated';
+            const reasons = (u.reasons || []).map(r => r.reason.replace(/_/g, ' ') + (r.level !== u.level ? ` (${r.level})` : ''));
+            return u.level + (reasons.length ? ': ' + reasons.join(', ') : '');
         },
         channelText(c) { return {policy: 'privacy policy', data_safety: 'Data safety section', listing: 'store listing'}[c] || c; },
         openVocab(kind, id) { this.browser = {kind, mode: 'view', initial: id, title: TITLES[kind]}; },

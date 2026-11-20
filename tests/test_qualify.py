@@ -19,6 +19,7 @@ from skuld.qualify.results import (
     NOT_ASSESSABLE,
     ORDER,
 )
+from skuld.uncertainty import of
 
 from .assessment import HIGH, REQUIREMENTS, Assessment
 
@@ -392,6 +393,17 @@ def test_a_trigger_weighs_only_if_a_resolution_changes_the_result():
     c = case(qualified(a), p)
     high = next(t for t in c["triggers"] if t["trigger"] == "high_uncertainty")
     assert not high["weighs"]  # the discrepancy stands whatever the concern
+
+
+def test_high_uncertainty_reads_the_level_only():
+    a = Assessment()
+    p = a.practice()
+    a.assessed_for_practice(p)
+    declared(a, p, "corresponds_exactly")
+    # many moderate reasons are still moderate: no trigger
+    a.concern(p, uncertainty=of("from_documents", "open_judgement", "few_runs", "aligned_above"))
+    c = case(qualified(a), p)
+    assert not any(t["trigger"] == "high_uncertainty" for t in c["triggers"])
 
 
 def test_a_concern_resting_on_an_overruled_claim_is_a_model_against_measurement_trigger():

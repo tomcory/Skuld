@@ -14,8 +14,9 @@ from dataclasses import dataclass, field
 
 from skuld.inputs import Oracle
 from skuld.oracles import Decision, worse
+from skuld.uncertainty import of
 
-#: Runs per configuration below which a comparison's technical uncertainty is raised
+#: Runs per configuration below which a comparison's uncertainty is raised (`few_runs`)
 MIN_RUNS = 3
 
 
@@ -50,17 +51,17 @@ class Comparison:
     def evidence(self) -> str:
         return f"k:{self.id}"
 
-    def technical(self) -> str:
+    def technical(self) -> dict:
         """
-        U_t: low only if Unv is empty, the order alternated and each side has enough runs. A run that departed from
-        the recording within the feature's path is no run of the feature; departures after the path are outside it.
+        The uncertainty of its technique: low only if Unv is empty (else `unverifiable`), the order alternated (else
+        `runs_not_alternated`) and each side has enough runs (else `few_runs`). A run that departed from the
+        recording within the feature's path is no run of the feature; departures after the path are outside it.
         """
-        low = (
-            not self.unverifiable
-            and self.alternating
-            and min(len(self.baseline_runs), len(self.alternative_runs)) >= MIN_RUNS
+        return of(
+            *(["unverifiable"] if self.unverifiable else []),
+            *([] if self.alternating else ["runs_not_alternated"]),
+            *(["few_runs"] if min(len(self.baseline_runs), len(self.alternative_runs)) < MIN_RUNS else []),
         )
-        return "low" if low else "moderate"
 
 
 def outcome(baseline: list[Decision], alternative: list[Decision]) -> str:

@@ -37,13 +37,14 @@ from ratatoskr.registry import Registry
 from ratatoskr.vocabularies import Vocabulary
 
 from skuld.assessment import Declaration, Practice, Subjects, at, exhaustive
-from skuld.uncertainty import highest, joined
+from skuld.uncertainty import needs, raised
 
-#: 8: a practice's recipient and a declared one are compared by their owners when the practice was observed (20 Nov
-#: 2026); 7: D's marks on the root (Urda 2.1.0): a denial of no data in particular contradicts under no condition of
+#: 9: one level with its reasons (Ratatoskr 0.34.0): needs over the claims related, o_silence and
+#: silence_not_exhaustive where a relation reads a silence; 8: a practice's recipient and a declared one are compared by
+#: their owners when the practice was observed (20 Nov 2026); 7: D's marks on the root (Urda 2.1.0): a denial of no data in particular contradicts under no condition of
 #: its own, a value D could not place leaves the relation undecided; 6: a denial naming a recipient contradicts only a
 #: transmission to it; 5: denials relate to transmissions only; a root-category denial contradicts under a condition
-VERSION = "8"
+VERSION = "9"
 COMPONENT = {"role": "method", "id": "skuld.correspondence", "version": VERSION}
 
 EXACTLY, HIERARCHICALLY, PARTIALLY = "corresponds_exactly", "corresponds_hierarchically", "corresponds_partially"
@@ -88,7 +89,7 @@ class Relation:
     condition_open: str | None = None  # the open condition that states it
     silence: list[str] = field(default_factory=list)
     reason: str | None = None  # where no claim it relates explains its outcome
-    uncertainty: dict | None = None  # t, s, n: of the claims it relates, or of the claim and the silence it reads
+    uncertainty: dict | None = None  # of the claims it relates, or of the claim and the silence it reads
 
 
 def _data_outcome(kind: str) -> str | None:
@@ -403,30 +404,29 @@ PREDICATE = {"data": "collection", "recipient": "sharing"}
 
 
 def _uncertainty(relations: list[Relation], subjects) -> None:
-    """The uncertainty of each O–D relation that relates claims: per factor the highest of the practice's and the D
-    claims' it names (D's read leniently); where it reads D's silence, U_s at least moderate unless every silent channel
-    is exhaustive for the aspect's predicate (ratatoskr.channels). A relation that relates nothing (not comparable,
-    insufficient evidence) has none."""
+    """The uncertainty of each O–D relation that relates claims: `needs` over the practice's and the D claims' it names
+    (D's read leniently); where it reads D's silence, at least moderate (`silence_not_exhaustive`) unless every silent
+    channel is exhaustive for the aspect's predicate (ratatoskr.channels); where it reads O's silence, at least moderate
+    (`o_silence`). A relation that relates nothing (not comparable, insufficient evidence) has none."""
     practices = {p.id: p for p in subjects.practices}
     declared = {d.claim["claim"]: d for d in subjects.declarations}
     by_id = {d.id: d for d in subjects.declarations}
     for r in relations:
         if r.outcome == DECLARED_ONLY and r.subject in by_id:
             # O's silence about a declared practice holds relative to what the exploration reached
-            u = by_id[r.subject].uncertainty
-            r.uncertainty = {**u, "s": highest(u["s"], "moderate")}
+            r.uncertainty = raised(by_id[r.subject].uncertainty, "o_silence")
             continue
         p = practices.get(r.subject)
         if p is None or not p.uncertainty:
             continue
         if r.to:
-            r.uncertainty = joined(
+            r.uncertainty = needs(
                 p.uncertainty, *(declared[t["claim"]].uncertainty for t in r.to if t["claim"] in declared)
             )
         elif r.outcome == OBSERVED_ONLY:
             silent = [c for line in r.silence for c in line.removeprefix("D: ").split(", ")]
             closed = silent and all(exhaustive(c, PREDICATE[r.aspect]) for c in silent)
-            r.uncertainty = {**p.uncertainty, "s": highest(p.uncertainty["s"], "low" if closed else "moderate")}
+            r.uncertainty = needs(p.uncertainty) if closed else raised(p.uncertainty, "silence_not_exhaustive")
 
 
 def number(relations: list[Relation]) -> None:

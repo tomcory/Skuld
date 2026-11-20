@@ -19,6 +19,7 @@ cases, and an application has no qualified result of its own. Rebuilding the ass
 from skuld.qualify import attributes, conditions, nextsteps, placement, results, symbols, triggers
 from skuld.qualify.placement import Holding, Index
 from skuld.qualify.results import Con, Gap, Rel, Unassessed, View
+from skuld.uncertainty import is_high
 
 VERSION = "2"  # 2: only a declared purpose's specificity is set aside, not concern (iii)
 COMPONENT = {"role": "method", "id": "skuld.qualify", "version": VERSION}
@@ -41,10 +42,6 @@ LIMITATION_FLOWS = (
     "Practices stand in for the framework's processing flows: one per claim type, data node, recipient and actor, "
     "aggregated over the version's runs (Q13)."
 )
-
-
-def _high(u: dict | None) -> bool:
-    return bool(u) and any(u.get(f) == "high" for f in ("t", "s", "n"))
 
 
 class _Coverage:
@@ -130,7 +127,7 @@ def _view(index: Index, holding: Holding, assessed: list, missing: list, inappli
                 conditions.of_relation(r),
                 r.get("aspect"),
                 r.get("condition"),
-                _high(r.get("uncertainty")),
+                is_high(r.get("uncertainty")),
                 r.get("partial"),
                 _omission(r),
             )
@@ -152,7 +149,7 @@ def _view(index: Index, holding: Holding, assessed: list, missing: list, inappli
                 conditions.of_concern(c, getattr(index, "applicability", frozenset())),
                 list(c.get("condition") or []),
                 c.get("observability", "E2"),
-                _high(c.get("uncertainty")),
+                is_high(c.get("uncertainty")),
                 list(c.get("basis") or []),
                 attributes.evidence(c, index.claims),
             )

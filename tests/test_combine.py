@@ -2,9 +2,10 @@
 conflict, the reason of a claim that cannot assess), and the claims a purpose's claims rest on."""
 
 from skuld import combine
+from skuld.uncertainty import of
 
 
-def claim(cid, status, strength=None, supporting=(), challenging=(), s="low", value="essential"):
+def claim(cid, status, strength=None, supporting=(), challenging=(), u=None, value="essential"):
     c = {
         "id": cid,
         "type": "dependency",
@@ -16,7 +17,7 @@ def claim(cid, status, strength=None, supporting=(), challenging=(), s="low", va
         "status": status,
         "supporting": list(supporting),
         "challenging": list(challenging),
-        "uncertainty": {"t": "low", "s": s, "n": "not_applicable"},
+        "uncertainty": u or of(),
         "sufficiency": {"sufficient": status in ("supported", "refuted")},
     }
     if strength:
@@ -26,10 +27,31 @@ def claim(cid, status, strength=None, supporting=(), challenging=(), s="low", va
 
 def test_agreeing_claims_are_corroborated_at_the_lowest_uncertainty():
     c = combine.combined(
-        "C", [claim("a", "supported", "doc", ["x"], s="high"), claim("b", "supported", "doc", ["y"], s="moderate")]
+        "C",
+        [
+            claim("a", "supported", "doc", ["x"], u=of("own_knowledge", "few_runs")),
+            claim("b", "supported", "doc", ["y"], u=of("from_documents")),
+        ],
     )
     assert c["status"] == "supported" and c["of"] == ["a", "b"] and c["supporting"] == ["x", "y"]
-    assert c["uncertainty"]["s"] == "moderate"
+    # either: the least uncertain alternative, with its own reasons only
+    assert c["uncertainty"] == {"level": "moderate", "reasons": [{"reason": "from_documents", "level": "moderate"}]}
+
+
+def test_a_conflicted_claim_needs_every_members_uncertainty():
+    c = combine.combined(
+        "C",
+        [
+            claim("a", "supported", "doc", ["x"], u=of("from_documents")),
+            claim("b", "refuted", "doc", challenging=["y"], u=of("samples_disagree")),
+        ],
+    )
+    assert c["status"] == "conflicted"
+    assert c["uncertainty"] == of("samples_disagree", "from_documents")
+    assert c["uncertainty"]["level"] == "high" and [r["reason"] for r in c["uncertainty"]["reasons"]] == [
+        "samples_disagree",
+        "from_documents",
+    ]
 
 
 def test_the_strongest_claim_decides_a_disagreement_and_its_value():
@@ -75,7 +97,7 @@ def test_a_claim_that_could_not_be_assessed_abstains_where_none_decides():
         "sufficiency": {"sufficient": False, "reason": "purpose_vague"},
     }
     judged = {
-        **claim("rs", "not_established", s="high"),
+        **claim("rs", "not_established", u=of("own_knowledge")),
         "reason": "a step does not cite the context",
         "sufficiency": {"sufficient": False, "reason": "own_knowledge"},
     }
@@ -126,7 +148,7 @@ def _alternative(sample: str, status: str) -> dict:
         "supporting": ["item:1"] if status == "supported" else [],
         "challenging": [],
         "strength": "doc",
-        "uncertainty": {"t": "not_applicable", "s": "moderate", "n": "moderate"},
+        "uncertainty": of("from_documents"),
         "sufficiency": {"sufficient": status == "supported"},
     }
 
@@ -148,12 +170,18 @@ def test_gate_d_a_documented_alternative_needs_a_majority_of_its_questions_sampl
 def test_gate_d_an_alternative_it_demotes_takes_the_uncertainty_of_the_members_not_established():
     asked = {"P-1": {"m/P-1/s1", "m/P-1/s2", "m/P-1/s3"}}
     supported, held = _alternative("m/P-1/s1", "supported"), _alternative("m/P-1/s2", "not_established")
-    supported["uncertainty"] = {"t": "not_applicable", "s": "low", "n": "low"}
-    held["uncertainty"] = {"t": "not_applicable", "s": "high", "n": "moderate"}
+    supported["uncertainty"] = of()
+    held["uncertainty"] = of("own_knowledge")
     claim = combine.alternatives([supported, held], combine.Numbers(), asked)[0]
-    assert claim["status"] == "not_established" and claim["uncertainty"] == held["uncertainty"]
-    # with no member not established, the highest over all of them, never the supporting members' least
-    other = {**supported, "id": "m/P-1/s2:a0", "uncertainty": {"t": "not_applicable", "s": "moderate", "n": "low"}}
+    assert claim["status"] == "not_established" and claim["uncertainty"] == {
+        "level": "high",
+        "reasons": [{"reason": "own_knowledge", "level": "high"}],
+    }
+    # with no member not established, needs over all of them, never the supporting members' either
+    other = {**supported, "id": "m/P-1/s2:a0", "uncertainty": of("from_documents")}
     asked = {"P-1": {"m/P-1/s1", "m/P-1/s2", "m/P-1/s3", "m/P-1/s4", "m/P-1/s5"}}
     claim = combine.alternatives([supported, other], combine.Numbers(), asked)[0]
-    assert claim["status"] == "not_established" and claim["uncertainty"]["s"] == "moderate"
+    assert claim["status"] == "not_established" and claim["uncertainty"] == {
+        "level": "moderate",
+        "reasons": [{"reason": "from_documents", "level": "moderate"}],
+    }

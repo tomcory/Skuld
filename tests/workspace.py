@@ -81,7 +81,7 @@ ORACLE = {
     ],
 }
 
-LOW = {"f": "low", "t": "low", "s": "low", "n": "not_applicable"}
+LOW = {"level": "low", "reasons": []}
 
 
 def run_folder(

@@ -42,9 +42,12 @@ from ratatoskr.schemas import validate
 import skuld
 from skuld import inputs
 from skuld.common import PURPOSES, vocabulary
-from skuld.uncertainty import highest
+from skuld.uncertainty import has, needs, text
 
-VERSION = "1"
+#: 2: one level with its reasons (Ratatoskr 0.34.0): an aggregated concern's is needs over its members', and
+#: `disagreeing` counts the members with the reason samples_disagree (before, those with s high, which counted a purpose
+#: from the model's own knowledge as disagreeing samples)
+VERSION = "2"
 COMPONENT = {"role": "method", "id": "skuld.aggregate", "version": VERSION}
 REPORT = "aggregate.json"
 MARKDOWN = "aggregate.md"
@@ -216,8 +219,8 @@ def aggregate(report: dict, assessment_meta: dict | None = None) -> dict:
         f["members"].sort(
             key=lambda m: (m.get("data", ""), m.get("recipient") or "", m.get("purpose") or "", m["concern"])
         )
-        f["uncertainty"] = {d: highest(*(m["uncertainty"][d] for m in f["members"])) for d in ("t", "s", "n")}
-        f["disagreeing"] = sum(m["uncertainty"]["s"] == "high" for m in f["members"])
+        f["uncertainty"] = needs(*(m["uncertainty"] for m in f["members"]))
+        f["disagreeing"] = sum(has(m["uncertainty"], "samples_disagree") for m in f["members"])
         f["condition"] = sorted(f["condition"])
         f["label"] = _label(f)
         out.append(f)
@@ -398,9 +401,8 @@ def markdown(a: dict, shown: int = 12) -> str:
         lines += ["", f"### {t['label']}", ""]
         for fid in t["aggregated_concerns"]:
             f = aggregated[fid]
-            u = f["uncertainty"]
             note = f"; samples disagreed on {f['disagreeing']}" if f["disagreeing"] else ""
-            lines.append(f"- **{f['label']}** ({f['tier']}; U s {u['s']}, n {u['n']}{note}; {fid})")
+            lines.append(f"- **{f['label']}** ({f['tier']}; U {text(f['uncertainty'])}{note}; {fid})")
             rows = _rows(f["members"])
             lines += [f"  - {r}" for r in rows[:shown]]
             if len(rows) > shown:

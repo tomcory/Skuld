@@ -14,6 +14,7 @@ import jsonschema
 from ratatoskr import claims as claim_views
 from ratatoskr.schemas import validate
 
+from skuld import uncertainty
 from skuld.configuration import recipient as recipient_of
 
 REPORT = "observation_report.json"
@@ -73,6 +74,8 @@ def observe(
         raise ObservationError(
             f"{run_id}: the observation report is no JSON ({e}); delete it to analyse again"
         ) from None
+    # a report Verðandi made before Ratatoskr 0.34.0 states factor levels, which name no reason: read as low
+    report = uncertainty.converted(report)
     try:
         validate("observation_report", report)
     except jsonschema.ValidationError as e:
