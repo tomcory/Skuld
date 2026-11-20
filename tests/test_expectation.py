@@ -156,6 +156,23 @@ def test_a_batch_per_episode_and_notice_screens_are_left_out(workspace):
     assert launch.left_out[1] == {"screen": "s-signup", "kind": "privacy_notice", "terms": ["privacy"], "whole": False}
 
 
+def test_with_a_batch_size_an_episode_is_split_into_batches_of_at_most_that_many_practices(workspace, monkeypatch):
+    """expectation.batch_size, off by default: qwen answered only the first practice of 27 of the study's 72 batches."""
+    from skuld import config
+
+    a, built = workspace
+    whole = {b.key: b for b in expectation.batches(a, built)}
+    loaded = config.load()
+    monkeypatch.setattr(config, "load", lambda: {**loaded, "expectation": {**loaded["expectation"], "batch_size": 1}})
+    split = expectation.batches(a, built)
+    for key, batch in whole.items():
+        mine = [b for b in split if b.key == key or b.key.startswith(key + ".")]
+        assert [p for b in mine for p in b.practices] == batch.practices
+        assert all(len(b.practices) == 1 and b.screens == batch.screens for b in mine)
+        if len(batch.practices) > 1:
+            assert [b.key for b in mine] == [f"{key}.{n}" for n in range(1, len(batch.practices) + 1)]
+
+
 def test_the_stage_1_context_refuses_d_and_notices(workspace, tmp_path):
     a, built = workspace
     batch = expectation.batches(a, built)[-1]

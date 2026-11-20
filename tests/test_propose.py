@@ -422,3 +422,16 @@ def test_a_path_cannot_start_after_its_last_action(tmp_path):
     (root / "cases" / "start.yaml").write_text(yaml.safe_dump(case))
     with pytest.raises(inputs.InputError, match="starts after its last action"):
         inputs.load(root)
+
+
+def test_the_proposer_sees_no_notice_as_the_expectation_stage_does(tmp_path):
+    """C3: generator 2 leaves out what Ratatoskr's notice definition takes for a notice, a consent dialog's texts and a
+    privacy notice's texts that speak of data, and keeps the rest of the screen."""
+    consent = ["We value your privacy", "We and our partners store cookies and personal data.", "Accept all"]
+    assert propose.without_notices(consent) == []
+    forecast = ["Weather Berlin", "12°", "We use your location data to show the forecast. Read our privacy policy."]
+    assert propose.without_notices(forecast) == ["Weather Berlin", "12°"]
+    assert propose.without_notices(["Weather Berlin", "12°"]) == ["Weather Berlin", "12°"]
+    flow = propose.read(exploration(tmp_path / RUN)).flows[0]
+    flow.screens[-1].texts = consent
+    assert "(a notice, left out)" in propose.render_flow(flow) and "Accept all" not in propose.render_flow(flow)

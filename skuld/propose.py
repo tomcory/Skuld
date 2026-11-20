@@ -16,7 +16,7 @@ proposals/e<episode>/a<attempt>/
   record.json    the episode, the generator's version, prompt, model and options, the catalogue's digest
   prompt.txt     the prompt as sent
   answer.json    the model's answer as received
-proposals/summary.json   per episode: the case written, or why none was
+proposals/summary.json   per episode: the experimental case written, or why none was
 ```
 
 and asked again only when the prompt, the model or its options change (the prompt holds the episode and the families
@@ -29,18 +29,24 @@ import json
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from importlib import resources
 from pathlib import Path
 
 import yaml
+from ratatoskr import notices as notice_rules
+from ratatoskr.notices import classify, notice_texts
 from ratatoskr.vocabularies import Vocabulary
 
-from skuld import ask, config, inputs, parties, select, space
+from skuld import ask, config, inputs, parties, select, space, templates
 from skuld import catalogue as cat
 from skuld.common import DATA, PURPOSES, vocabulary
 from skuld.observe import observe
 
-VERSION = "1"
+#: 2 (20 Nov 2026): the flow's screens without what Ratatoskr's notice definition takes for notices, as the
+#: expectation stage's (C3: the proposer saw consent dialogs and privacy notices), and the prompt's version 2 (the
+#: flow last). Changes the experimental cases' digests
+VERSION = "2"
+#: The version of Ratatoskr's notice definition the flow's screens leave notices out by
+NOTICES = notice_rules.VERSION
 PROMPT = "propose"
 ATTEMPTS = 2
 #: Characters of a screen's texts shown to the model
@@ -127,7 +133,7 @@ ANSWER_SCHEMA = {
     "required": ["features"],
     "properties": {"features": {"type": "array", "items": _FEATURE_SCHEMA}},
 }
-#: The family whose cases are filled by rule, not asked of the model
+#: The family whose experimental cases are filled by rule, not asked of the model
 RULE_FILLED = "launch"
 #: Features of one flow at most: a first run, say, whose onboarding ends at the app's main feature
 MAX_FEATURES = 3
@@ -263,7 +269,7 @@ def read(directory: str | Path) -> Exploration:
 
 
 def prompt_template() -> str:
-    return (resources.files("skuld") / "prompts" / f"{PROMPT}.md").read_text(encoding="utf-8")
+    return templates.text(PROMPT)
 
 
 def render_flow(flow: Flow) -> str:
@@ -283,9 +289,18 @@ def render_flow(flow: Flow) -> str:
             lines.append("  …")
             continue
         mark = " FIRST" if s.after == flow.start else " LAST" if s.after == flow.end else ""
-        text = " | ".join(s.texts)[:SCREEN_TEXT]
+        text = " | ".join(without_notices(s.texts))[:SCREEN_TEXT] or "(a notice, left out)"
         lines.append(f"- after={s.after}{mark} key={s.key} activity={s.activity.rsplit('.', 1)[-1]}: {text}")
     return "\n".join(lines)
+
+
+def without_notices(texts: list[str], notices: str = NOTICES) -> list[str]:
+    """A screen's texts without a notice (Ratatoskr's notice definition in version `notices`), as the expectation
+    stage leaves them out: none of a consent dialog's, a privacy notice's texts that speak of data."""
+    if not classify(texts, notices):
+        return texts
+    declared = set(notice_texts(texts, notices))
+    return [t for t in texts if t not in declared]
 
 
 def render_catalogue(families: list[cat.Family]) -> str:
@@ -506,7 +521,7 @@ def propose(
     (root / "workspace.yaml").write_text(yaml.safe_dump(settings, sort_keys=False), encoding="utf-8", newline="\n")
     report = observe(root, exp.run_id, exp.directory, verdandi)
     template = prompt_template()
-    generator = {"id": "skuld.propose", "version": VERSION, "prompt_sha256": _sha(template)}
+    generator = {"id": "skuld.propose", "version": VERSION, "prompt_sha256": _sha(template), "notices": NOTICES}
     summary: dict = {"generator": generator, "recording": exp.run_id, "catalogue": catalogue.sha256, "episodes": {}}
     authors: dict[str, dict] = {}
     wanted, keep = (None, None) if selection is None else select.keeps(selection, data)
@@ -558,8 +573,8 @@ def propose(
             ANSWER_SCHEMA,
             lambda asked, flow=flow: {
                 "episode": flow.episode,
-                "generator": {"id": "skuld.propose", "version": VERSION},
-                "prompt": {"id": PROMPT, "sha256": ask.sha256(asked)},
+                "generator": {"id": "skuld.propose", "version": VERSION, "notices": NOTICES},
+                "prompt": {"id": PROMPT, "version": templates.version(PROMPT), "sha256": ask.sha256(asked)},
                 "catalogue": catalogue.sha256,
             },
             ("prompt",),
@@ -640,8 +655,10 @@ def _feature_case(
     keep=None,
     own=None,
 ) -> dict | None:
-    """Writes the case of one feature of an answer, with a new family added to the catalogue where it gives one; None
-    where a selection keeps no component of it."""
+    """
+    Writes the experimental case of one feature of an answer, with a new family added to the catalogue where it gives
+    one; None where a selection keeps no component of it.
+    """
     if answer["family"] == "new":
         prompt_record = json.loads((folder / "record.json").read_text(encoding="utf-8"))
         family = catalogue.add(
@@ -654,8 +671,8 @@ def _feature_case(
                     "kind": "model",
                     "name": model,
                     "prompt": f"skuld.propose {VERSION}",
-                    # a new family's author: the digest of the prompt as asked, for this episode (a case's
-                    # author, _author, names the template's instead)
+                    # a new family's author: the digest of the prompt as asked, for this episode (an experimental
+                    # case's author, _author, names the template's instead)
                     "sha256": prompt_record["prompt"]["sha256"],
                 },
             )
@@ -703,8 +720,8 @@ def _feature_case(
 def _write_case(
     root, case_id, feature, family, bindings, report, episodes, package, data, authors, author, keep=None, own=None
 ) -> list[str] | None:
-    """Writes a case and its oracles; returns the requirements that name a datum of its search space (kept, reported),
-    or None, writing nothing, where `keep` keeps no component of it."""
+    """Writes an experimental case and its oracles; returns the requirements that name a datum of its search space
+    (kept, reported), or None, writing nothing, where `keep` keeps no component of it."""
     components, alternatives = space.derive(report, episodes, package, keep, own)
     if keep is not None and not components:
         return None
@@ -761,7 +778,8 @@ def _write_case(
 
 
 def _titles(components: list[dict], data: Vocabulary) -> list[str]:
-    """The names of the data a case's search space varies: its nodes' titles and those above them, but the top ones."""
+    """The names of the data an experimental case's search space varies: its nodes' titles and those above them, but the
+    top ones."""
     titles = []
     for c in components:
         node = c.get("node")
@@ -775,12 +793,13 @@ def _titles(components: list[dict], data: Vocabulary) -> list[str]:
 
 def _author(generator: dict, model: dict | None, family: cat.Family, answer: str | None = None) -> dict:
     """
-    The author of a generated input: the generator's model, or for a case filled by rule alone, the family's author;
-    with the generator and the family.
+    The author of a generated input: the generator's model, or for an experimental case filled by rule alone, the
+    family's author; with the generator and the family.
     """
     if model:
         author = {"kind": "model", "name": model["name"], "prompt": f"skuld.propose {VERSION}"}
-        author["sha256"] = generator["prompt_sha256"]  # the template's digest, alike for every case it made
+        # the template's digest, alike for every experimental case it made
+        author["sha256"] = generator["prompt_sha256"]
     else:
         author = {k: v for k, v in (family.data.get("author") or {"kind": "person", "name": "?"}).items()}
     author |= {

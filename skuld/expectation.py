@@ -29,14 +29,13 @@ import re
 import urllib.parse
 import zlib
 from dataclasses import dataclass, field
-from importlib import resources
 from pathlib import Path
 
 from ratatoskr import notices as notice_rules
 from ratatoskr.notices import classify, notice_texts
 from ratatoskr.vocabularies import Vocabulary
 
-from skuld import ask, config
+from skuld import ask, config, templates
 from skuld import context as ctx
 from skuld.assessment import Practice, Subjects
 from skuld.common import DATA, OWN, PURPOSES, cited, ref, vocabulary
@@ -52,8 +51,11 @@ from skuld.runs import RunRefused, load
 #: which re-asks nothing)
 VERSION = "4"
 PROMPT = "expectation"
-PROMPT_VERSION = "4"
 PROCEDURE = {"id": "skuld.expectation", "version": VERSION}
+#: How the samples' answers are read, apart from VERSION (which identifies the kept samples): 2 since a purpose at no
+#: node of the vocabulary has the gap reason purpose_not_in_vocabulary, not purpose_vague (20 Nov 2026)
+READING = "2"
+READING_COMPONENT = {"role": "method", "id": "skuld.expectation.reading", "version": READING}
 #: The kinds of part a stage-1 context may hold, each with the origins its provenance may have; never D's report
 KINDS = {
     "application": ("input",),
@@ -234,8 +236,21 @@ def batches(a: Assessment, subjects: Subjects, notices: str | None = None) -> li
             left_out.append({"screen": sid, "kind": notice[0], "terms": notice[1], "whole": not rest})
             if rest:
                 kept.append((sid, " | ".join(rest)))
-        out.append(Batch(LAUNCH if key == "?" else f"e{key}", practices, run_id, kept[:MAX_SCREENS], left_out))
+        base = LAUNCH if key == "?" else f"e{key}"
+        size = batch_size()
+        chunks = [practices[i : i + size] for i in range(0, len(practices), size)] if size else [practices]
+        for n, chunk in enumerate(chunks, 1):
+            name = base if len(chunks) == 1 else f"{base}.{n}"
+            out.append(Batch(name, chunk, run_id, kept[:MAX_SCREENS], left_out))
     return out
+
+
+def batch_size() -> int | None:
+    """config.json's `expectation.batch_size`: at most this many practices per batch, an episode's practices split in
+    order into batches `e<episode>.<n>` with the same screens; unset (the default), one batch per episode. qwen3.8
+    answered only the first practice of 27 of the study's 72 batches; smaller batches are one remedy to measure."""
+    size = config.load()["expectation"].get("batch_size")
+    return int(size) if size else None
 
 
 def _describe(p: Practice, data: Vocabulary, names: dict[str, str]) -> str:
@@ -324,7 +339,7 @@ class _Traffic:
     def of(self, practice: Practice, batch: str) -> list[tuple[str, str]]:
         """Up to TRAFFIC_MESSAGES (text, provenance) of a practice, its batch's episode first, one per endpoint and
         path; the connections whose content could not be read, in one line."""
-        episode = batch.removeprefix("e")
+        episode = batch.removeprefix("e").split(".")[0]  # e3.2: the second batch of episode 3
         found, unreadable = [], {}
         for ref_ in practice.claims:
             claim = self._claims.get(ref_.get("report"), {}).get(ref_.get("claim"))
@@ -450,7 +465,7 @@ def prompt_id() -> str:
 
 
 def prompt_template() -> str:
-    return (resources.files("skuld") / "prompts" / f"{prompt_id()}.md").read_text(encoding="utf-8")
+    return templates.text(prompt_id())
 
 
 def topup_enabled() -> bool:
@@ -558,7 +573,7 @@ def expect(
                 "run": batch.run,
                 "left_out": batch.left_out,
                 "procedure": PROCEDURE,
-                "prompt": {"id": prompt_id(), "version": PROMPT_VERSION, "sha256": ask.sha256(prompt)},
+                "prompt": {"id": prompt_id(), "version": templates.version(prompt_id()), "sha256": ask.sha256(prompt)},
                 "corpus": {"sha256": corpus.sha256},
                 "context": {"sha256": context.sha256},
             }
@@ -629,7 +644,7 @@ def _topups(
                 "run": batch.run,
                 "left_out": batch.left_out,
                 "procedure": PROCEDURE,
-                "prompt": {"id": prompt_id(), "version": PROMPT_VERSION, "sha256": ask.sha256(prompt)},
+                "prompt": {"id": prompt_id(), "version": templates.version(prompt_id()), "sha256": ask.sha256(prompt)},
                 "corpus": {"sha256": corpus.sha256},
                 "context": {"sha256": context.sha256},
             }
@@ -769,9 +784,13 @@ def read(answer: dict, sample: str, context: Context, practices: dict[str, Pract
         if not specific:
             status, why, prose = "not_established", "purpose_vague", "too vague"
         elif purpose["node"] not in vocabulary(PURPOSES):
-            # a node the model made up (e.g. "Profiling") can't be related to D's purposes, so the purpose is not
-            # stated in terms the assessment can use (study 11 Nov 2026; the schema's gap reasons have no closer one)
-            status, why, prose = "not_established", "purpose_vague", f"{purpose['node']} is not a purpose node"
+            # a node the model made up (e.g. "Profiling") that the purpose map does not place can't be related to D's
+            # purposes (study 11 Nov 2026); its gap reason since Ratatoskr 0.32.0 (before: purpose_vague)
+            status, why, prose = (
+                "not_established",
+                "purpose_not_in_vocabulary",
+                f"{purpose['node']} is not a purpose node",
+            )
         elif not shown:
             status, why = "not_established", "own_knowledge"
             prose = "no screen or passage shows its outcome"
