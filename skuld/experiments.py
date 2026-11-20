@@ -23,6 +23,7 @@ from skuld.inputs import Case, InputError, Workspace, check_frozen, digest
 from skuld.observe import ObservationError, annotators, observe, report_path, source_reads
 from skuld.runs import Run, RunRefused, load
 from skuld.uncertainty import ORDER
+from skuld.verify import VERSION as verify_version
 from skuld.verify import Verification, baseline_problem, imposes, settings, verify
 
 BASELINE = "baseline"
@@ -108,7 +109,7 @@ def _refuse_other_annotators(states: dict) -> None:
 
 
 def unqualified(root: Path) -> dict[str, list[str]]:
-    """The cases a qualifying replay did not qualify, with why (`skuld run --qualify`)."""
+    """The experimental cases a qualifying replay did not qualify, with why (`skuld run --qualify`)."""
     path = root / "qualification.json"
     if not path.is_file():
         return {}
@@ -120,8 +121,8 @@ def unqualified(root: Path) -> dict[str, list[str]]:
 
 
 def runs_of(case: Case, state: RunState) -> bool:
-    """Whether a run is meant as a run of the case's feature: a replay of the recording its path is taken from, and,
-    for a replay of a prefix of it (`skuld run --case`), one that went as far as the path's last action."""
+    """Whether a run is meant as a run of the experimental case's feature: a replay of the recording its path is taken
+    from, and, for a replay of a prefix of it (`skuld run --case`), one that went as far as the path's last action."""
     feature = case.feature
     run = state.run
     until = ((run.meta.get("replay") or {}) if run is not None else {}).get("until_action")
@@ -223,8 +224,8 @@ class _Report:
                     excluded[s.id] = f"no baseline: {problem}"
                 else:
                     baseline.append(s)
-        # u_0 from the baseline runs of this case's path: a component none of them shows (no read of its source, no
-        # transmission to its recipient) is no component of it, and no comparison varies it (C2)
+        # u_0 from the baseline runs of this experimental case's path: a component none of them shows (no read of its
+        # source, no transmission to its recipient) is no component of it, and no comparison varies it (C2)
         u0 = configuration.baseline([s.report for s in baseline])
         present = {c.id: configuration.present(c, u0, self.vocabulary) for c in case.components}
         alternatives_ok, missing_why = [], {}
@@ -316,6 +317,7 @@ class _Report:
                         for s in [*valid_baseline, *valid]
                         if _diverged(self.states[s].run)
                     ],
+                    [n for s in valid for n in self.verifications[(case.id, s)].substitutes],
                 )
                 comparisons[(purpose.id, alt.id)] = k
                 self._comparison(k, case)
@@ -352,7 +354,13 @@ class _Report:
             {
                 "id": f"v:{case.id}:{s.id}",
                 "channel": f"ex:{case.id}",
-                "proposition": {"kind": "observation", "about": "verification", "run": s.id, "status": v.status},
+                "proposition": {
+                    "kind": "observation",
+                    "about": "verification",
+                    "run": s.id,
+                    "status": v.status,
+                    **({"substitutes": v.substitutes} if v.substitutes else {}),
+                },
                 "kinds": kinds,
                 "premises": premises,
                 "provenance": [],
@@ -426,6 +434,7 @@ class _Report:
                 "divergence": k.divergence,
                 "alternating": k.alternating,
                 "unverifiable": k.unverifiable,
+                **({"substitutes": k.substitutes} if k.substitutes else {}),
                 "evidence": k.evidence,
             }
         )
@@ -474,7 +483,8 @@ class _Report:
                     sources.append(source)
         scope = _shared_scope([s.report for s in usable])
         if accepted := self.accepted_versions.get(case.id):
-            # runs of another version taken into the case's scope by the author's statement (assessment.yaml)
+            # runs of another version taken into the experimental case's scope by the author's statement
+            # (assessment.yaml)
             scope["compatible_versions"] = accepted
         self.cases.append(
             {
@@ -538,6 +548,7 @@ class _Report:
                             "status": v.status,
                             "effect": v.effect,
                             "substitution": v.substitution,
+                            **({"substitutes": v.substitutes} if v.substitutes else {}),
                             "unverifiable": v.unverifiable,
                         }
                     ),
@@ -570,7 +581,7 @@ class _Report:
                 "tools": {"verdandi": ", ".join(verdandi)} if verdandi else {},
                 "components": [
                     {"role": "oracle_predicates", "id": "skuld.oracles", "version": oracles.VERSION},
-                    {"role": "method", "id": "skuld.verify", "version": skuld.__version__},
+                    {"role": "method", "id": "skuld.verify", "version": verify_version},
                     {"role": "method", "id": "verdandi", "version": ", ".join(verdandi) or "?"},
                     {"role": "vocabulary", **data.reference()},
                     {"role": "vocabulary", **purposes.reference()},
@@ -702,6 +713,7 @@ def _comparison(k: dict) -> Comparison:
         worse={n: m.get("worse", "none") for n, m in measured.items()},
         unverifiable=k.get("unverifiable") or [],
         alternating=k.get("alternating", True),
+        substitutes=k.get("substitutes") or [],
     )
 
 
@@ -732,10 +744,10 @@ def case_claims(cases: Workspace, report: dict) -> dict[str, list[rules.Claim]]:
 
 def premises(cases: Workspace | None, root: Path, practices: list, item) -> list[dict]:
     """
-    The experimental channel's claims as premises of the assessment stage: each claim of a case's experimental channel
-    (`ex:<case>`), once per practice whose component the case's component varies (`space.varies`), with the case's
-    purpose (provenance `case`) and the requirements its oracle reaches. `item(key, fields)` gives the evidence item
-    of a comparison, of kind run, which points into the case report.
+    The experimental channel's claims as premises of the assessment stage: each claim of an experimental case's
+    experimental channel (`ex:<case>`), once per practice whose component the case's component varies (`space.varies`),
+    with the case's purpose (provenance `case`) and the requirements its oracle reaches. `item(key, fields)` gives the
+    evidence item of a comparison, of kind run, which points into the case report.
     """
     report = case_report(cases, root)
     if report is None:
@@ -821,7 +833,7 @@ def device_seconds(cases: Workspace | None, root: Path) -> float:
 
 def _compatible(root: Path, version: str) -> dict[str, dict]:
     """
-    The versions the author states compatible with the case's (`compatible_versions` of the workspace's
+    The versions the author states compatible with the experimental case's (`compatible_versions` of the workspace's
     assessment.yaml, where the workspace is also an assessment workspace), each with its statement: a run of such a
     version is in the case's scope.
     """

@@ -6,7 +6,8 @@ was verified. It preserves the purpose if the oracle decides `met` for every run
 for every baseline run and `unmet` for every run under the alternative, and is undecided otherwise.
 Its trade-off is the difference of the oracle's measurements and of the runs' costs, reported, not
 judged; a measurement is worse in a run if it is worse than in every baseline run by more than its
-tolerance.
+tolerance. A comparison names the substitutes of its runs under the alternative, the identifiers the application fell
+back to (`verify`): an outcome of its own, reported beside the oracle's, which does not change it (20 Nov 2026).
 """
 
 from dataclasses import dataclass, field
@@ -27,6 +28,7 @@ class Comparison:
         divergence: Per run, the replay's divergences, repairs and skipped actions where any occurred: after the
             feature's path, since a run that departed within it is no run of the feature
         alternating: Whether runs of the two configurations alternate in the sequence of runs
+        substitutes: The data nodes the application fell back to in a run under the alternative
     """
 
     id: str
@@ -42,6 +44,7 @@ class Comparison:
     unverifiable: list[str] = field(default_factory=list)
     divergence: list[dict] = field(default_factory=list)
     alternating: bool = True
+    substitutes: list[str] = field(default_factory=list)
 
     @property
     def evidence(self) -> str:
@@ -80,6 +83,7 @@ def compare(
     costs: dict[str, dict],
     unverifiable: list[str],
     divergence: list[dict],
+    substitutes: list[str] = (),
 ) -> Comparison:
     """A comparison of valid, verified runs, given as {run id: the oracle's decision}."""
     measurements, worse_in = {}, {}
@@ -105,4 +109,5 @@ def compare(
         unverifiable=sorted(set(unverifiable)),
         divergence=divergence,
         alternating=switches > 1 or min(len(baseline), len(under)) < 2,
+        substitutes=sorted(set(substitutes)),
     )

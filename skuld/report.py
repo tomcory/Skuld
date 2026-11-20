@@ -34,9 +34,12 @@ def markdown(report: dict) -> str:
         decisions = ", ".join(f"{d['case']}/{d['purpose']} {d['decision']}" for d in r["decisions"])
         parts = r["verification"].get("unverifiable") or ()
         unv = f"{len(parts)} part(s)" if parts else "–"
+        status = r["verification"]["status"]
+        if r["verification"].get("substitutes"):
+            status += f" (substitute: {', '.join(r['verification']['substitutes'])})"
         lines.append(
             f"| {r['id'][-6:]} | {r['alternative'] or 'baseline'} | {', '.join(r['cases'])} "
-            f"| {r['verification']['status']} | {unv} | {decisions} |"
+            f"| {status} | {unv} | {decisions} |"
         )
     lines += [
         "",
@@ -48,7 +51,8 @@ def markdown(report: dict) -> str:
     for k in report["comparisons"]:
         worse = ", ".join(f"{n}: {m['worse']}" for n, m in k["tradeoff"]["measurements"].items()) or "–"
         runs = f"{len(k['baseline_runs'])} + {len(k['alternative_runs'])}"
-        lines.append(f"| {k['case']} | {k['purpose']} | {k['alternative']} | {runs} | {k['outcome']} | {worse} |")
+        outcome = k["outcome"] + (f" (substitute: {', '.join(k['substitutes'])})" if k.get("substitutes") else "")
+        lines.append(f"| {k['case']} | {k['purpose']} | {k['alternative']} | {runs} | {outcome} | {worse} |")
     lines += ["", "## Not compared", ""]
     untested = [
         f"- {c['id']}: {u['alternative']} for {u['purpose']}: {u['reason']}"

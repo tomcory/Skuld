@@ -4,12 +4,15 @@ The verification of an intervention, on the run it changes.
 An intervention is verified if the run's records establish (i) its effect, for each changed
 component (no read of a hooked source handed the application another value than the imposed one,
 which holds also if the application did not read the source; no transmission of any data to a
-removed recipient, every connection to its hosts dropped), and (ii) no substitution, for each
-changed datum (every platform source of data of its kind is hooked and read no more often than in
-the baseline runs). It failed if (i) or (ii) fails. What no instrument of the run covers is an
-unverifiable part, which does not fail the run but is reported with it: an identifier source not
-hooked, or connections the capture recorded without a host. A run's effect may hold because the
-application never read the source; it then decides nothing unless the case's baseline runs show the
+removed recipient, every connection to its hosts dropped). It failed if (i) fails. For each changed
+datum, (ii) the substitution check asks whether the application read another platform source of data
+of its kind more often than in the baseline runs: a source it did is a substitute, the identifier the
+application fell back to, which is an outcome of the run of its own (`Verification.substitutes`), not a
+failure of the intervention (20 Nov 2026; before, a substitute failed the run, so that two of Remini's
+three runs were refused when the application fell back to the App Set ID). What no instrument of the
+run covers is an unverifiable part, which does not fail the run but is reported with it: an identifier
+source not hooked, or connections the capture recorded without a host. A run's effect may hold because the
+application never read the source; it then decides nothing unless the experimental case's baseline runs show the
 component (read its source, or transmit to its recipient): otherwise the analysis compares nothing
 for it (`experiments`, C2).
 
@@ -55,13 +58,20 @@ CLOSED_FROM = {"device-or-other-ids.hardware-ids": 29, "device-or-other-ids.sim-
 
 NODE_SOURCES = {node: source for source, node in SOURCE_NODES.items()}
 
+#: The verification as a named method of the case report: 2 since a substitute is an outcome of the run
+#: (`Verification.substitutes`) and no longer fails its verification (20 Nov 2026); 1 was recorded as Skuld's version
+VERSION = "2"
+
 
 @dataclass
 class Verification:
     """
     Attributes:
         status: 'verified', 'failed', or 'not_applicable' for a baseline run
-        effect, substitution: Checks, each {component or node, holds, note}
+        effect, substitution: Checks, each {component or node, holds, note}; a substitution check that does not
+            hold names a substitute (`substitute: true`)
+        substitutes: The data nodes of the substitutes, the identifiers the application fell back to: read more
+            often than in the baseline runs once the changed datum was replaced or removed
         unverifiable: Unv, the parts no instrument of the run covers
         items: What the checks rest on: O's items and claims of the run, and Loki's and Heimdall's records,
             each with its kinds and a pointer
@@ -70,6 +80,7 @@ class Verification:
     status: str
     effect: list[dict] = field(default_factory=list)
     substitution: list[dict] = field(default_factory=list)
+    substitutes: list[str] = field(default_factory=list)
     unverifiable: list[str] = field(default_factory=list)
     items: list[dict] = field(default_factory=list)
 
@@ -154,7 +165,7 @@ def verify(
 
     Args:
         report: O's report of the run
-        baseline_reads: Per hooked source, the number of reads of it in each baseline run of the case
+        baseline_reads: Per hooked source, the number of reads of it in each baseline run of the experimental case
     """
     v = Verification(status="verified")
     hooked = settings(report)
@@ -186,7 +197,9 @@ def verify(
         v.effect.append(_source_imposed(v, report, component.id, source, wanted[source]))
         _substitution(v, run, report, component.node, hooked, baseline_reads)
 
-    if any(c["holds"] is not True for c in v.effect) or any(c["holds"] is False for c in v.substitution):
+    # a substitute is the run's outcome, not a fault of its intervention: it does not fail the verification
+    v.substitutes = sorted({c["node"] for c in v.substitution if c["holds"] is False})
+    if any(c["holds"] is not True for c in v.effect):
         v.status = "failed"
     return v
 
@@ -301,7 +314,8 @@ def _substitution(
     """
     Whether the app read a substitute of the replaced or removed datum more than without the alternative: at most the
     baseline runs' maximum plus their range (max - min), the variation the baselines show themselves. Identical
-    baselines leave no tolerance.
+    baselines leave no tolerance. A check that does not hold names a substitute (`verify` collects them); a source
+    that is not hooked or whose hook could not be installed is an unverifiable part.
     """
     sdk = int(((run.meta.get("device") or {}).get("ro.build.version.sdk")) or 0)
     for substitute in SUBSTITUTES.get(node, ()):
@@ -320,13 +334,14 @@ def _substitution(
         reads = len(found)
         counts = baseline_reads.get(source) or [0]
         most, tolerance = max(counts), max(counts) - min(counts)
-        v.substitution.append(
-            {
-                "node": substitute,
-                "holds": reads <= most + tolerance,
-                "note": f"{reads} read(s), at most {most} in a baseline run, tolerance {tolerance} (the baselines' range)",
-            }
-        )
+        holds = reads <= most + tolerance
+        note = f"{reads} read(s), at most {most} in a baseline run, tolerance {tolerance} (the baselines' range)"
+        check = {"node": substitute, "holds": holds, "note": note}
+        if not holds:
+            check["substitute"] = True
+            check["note"] = f"{note}: the application fell back to it"
+            check["evidence"] = [r["id"] for r in found]
+        v.substitution.append(check)
 
 
 def _replaced(proposition: dict, source: str, argument: str) -> bool:

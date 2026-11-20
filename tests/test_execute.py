@@ -26,6 +26,12 @@ print(json.dumps({"run_dir": str(out), "stop_reason": "max_flows"}))
 """
 
 
+@pytest.fixture(autouse=True)
+def installed(monkeypatch):
+    """No device: the installed version is the workspace's (tests/test_version_drift.py checks the drift)."""
+    monkeypatch.setattr(execute, "installed_version", lambda device, package: "1.0")
+
+
 def fake(tmp_path: Path) -> list[str]:
     script = tmp_path / "loki.py"
     script.write_text(FAKE_LOKI)
