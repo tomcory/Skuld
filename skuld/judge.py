@@ -40,14 +40,13 @@ concerns:
 import json
 import re
 from dataclasses import dataclass, field
-from importlib import resources
 from pathlib import Path
 
 from ratatoskr import align
 from ratatoskr import claims as claim_views
 from ratatoskr.vocabularies import Vocabulary
 
-from skuld import ask, combine, config, correspondence, expectation
+from skuld import ask, combine, config, correspondence, expectation, templates
 from skuld import context as ctx
 from skuld.assessment import Practice, Subjects
 from skuld.common import DATA, OWN, PURPOSES, RECIPIENT_TYPES, cited, ref, vocabulary
@@ -58,17 +57,22 @@ from skuld.inputs import Assessment
 
 SPECIFICITY, COMPATIBILITY, MINIMISATION = "specificity", "compatibility", "minimisation"
 QUESTIONS = (SPECIFICITY, COMPATIBILITY, MINIMISATION)
-#: The context procedure's and the prompt's version per question
-VERSIONS = {SPECIFICITY: "1", COMPATIBILITY: "1", MINIMISATION: "2"}
-#: The readings' own version, apart from the prompts' (VERSIONS identify the kept samples, so a change of reading must
+#: The context procedure's and the prompt's version per question is the prompt's in force (templates.version; current:
+#: specificity 2, compatibility 2, minimisation 3)
+#: The readings' own version, apart from the prompts' (the prompts' versions identify the kept samples, so a change of reading must
 #: not change them). 1: a minimisation entry whose alternative names none is not an alternative (15 Nov 2026).
 #: 2 (18 Nov 2026): specificity first, a declared purpose judged not specific specifies nothing; a documented alternative
 #: passes gates (a) to (c) here and (d) in the combination (combine.alternatives). A report names its reading, and a rebuild
 #: (`skuld check`) reads with the one it names, so that reports made before a reading changed still rebuild.
 #: 3 (20 Nov 2026): a minimisation alternative has the strength and uncertainty of documents only where its steps
 #: cite a passage of documentation, not wherever every step cites some part of the context.
-READING = "3"
-READINGS = ("1", "2", "3")
+#: 4 (20 Nov 2026, the review of 19 Nov): a removal must remove the component and not only shorten its retention
+#: ("remove it after the request"), "dropdown" and "without the data … would not work" are none (REMOVAL_4); "no
+#: alternatives", "None needed", "No change", "Not applicable – …" and "No alternative is needed; …" name no
+#: alternative (_NO_ALTERNATIVE_4); a declared purpose judged not specific specifies nothing only where
+#: purpose_specific applies (vague_declarations).
+READING = "4"
+READINGS = ("1", "2", "3", "4")
 
 
 def reading_component(reading: str = READING) -> dict:
@@ -107,10 +111,23 @@ _NO_ALTERNATIVE = re.compile(
 )
 
 
-def names_alternative(text) -> bool:
-    """Whether a minimisation entry's alternative names one (see _NO_ALTERNATIVE)."""
+#: Reading 4 adds what the review of 19 Nov found besides: "no alternatives", "None needed", "No change", "Not
+#: applicable – the data is required" and "No alternative is needed; the identifier is essential".
+_NO_ALTERNATIVE_4 = re.compile(
+    r"\s*(?:none(?: (?:needed|required|necessary))?|n/?a|nothing|no changes?(?: (?:needed|required|necessary))?"
+    r"|(?:not applicable|n/?a)(?:\s*[-–—:,;(].*)?"
+    r"|no (?:less invasive |suitable |viable |other |further )?alternatives?"
+    r"(?: (?:is|are) (?:needed|required|necessary|possible|available|known)\b.*|\b[^.;]*)"
+    r"|there (?:is|are) no (?:less invasive )?alternatives?\b[^.;]*)\s*[.;]?\s*",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def names_alternative(text, reading: str = READING) -> bool:
+    """Whether a minimisation entry's alternative names one (see _NO_ALTERNATIVE, from reading 4 _NO_ALTERNATIVE_4)."""
     text = str(text or "")
-    return bool(text.strip()) and not _NO_ALTERNATIVE.fullmatch(text)
+    pattern = _NO_ALTERNATIVE_4 if int(reading) >= 4 else _NO_ALTERNATIVE
+    return bool(text.strip()) and not pattern.fullmatch(text)
 
 
 REQUIREMENT = {
@@ -528,7 +545,7 @@ def questions(
 
 
 def procedure(question: str) -> dict:
-    return {"id": "skuld.judge", "version": VERSIONS[question]}
+    return {"id": "skuld.judge", "version": templates.version(question)}
 
 
 def _checked(parts: list[dict]) -> Context:
@@ -556,7 +573,7 @@ def render(context: Context) -> str:
 
 
 def prompt(question: Question, factors: list[str]) -> str:
-    template = (resources.files("skuld") / "prompts" / f"{question.question}.md").read_text(encoding="utf-8")
+    template = templates.text(question.question)
     return template.replace("{context}", render(question.context)).replace("{factors}", ", ".join(factors))
 
 
@@ -672,9 +689,12 @@ def _name(a: Assessment, sample) -> str:
     return sample.folder.relative_to(a.root).as_posix()
 
 
-def vague_declarations(judgements: list[dict]) -> frozenset:
+def vague_declarations(judgements: list[dict], applies: bool = True) -> frozenset:
     """The declarations of the statements whose specificity judgements combine to a supported concern that they are
-    not specific (combine.decide, the combination's rule)."""
+    not specific (combine.decide, the combination's rule); none where purpose_specific does not apply (`applies`
+    False, from reading 4), as concerns.not_specific then states no concern."""
+    if not applies:
+        return frozenset()
     by_statement: dict[str, list[dict]] = {}
     for j in judgements:
         by_statement.setdefault(j["statement"], []).append(j)
@@ -694,7 +714,7 @@ def _samples(a, qs, factors, seeds, think, model, api, offline, provider, corpus
                 "subject": q.subject,
                 **q.record,
                 "procedure": procedure(q.question),
-                "prompt": {"id": q.question, "version": VERSIONS[q.question], "sha256": ask.sha256(text)},
+                "prompt": {"id": q.question, "version": templates.version(q.question), "sha256": ask.sha256(text)},
                 "corpus": {"sha256": corpus.sha256},
                 "norms": {"sha256": norms.sha256},
                 "context": {"sha256": q.context.sha256},
@@ -865,6 +885,34 @@ REMOVAL = re.compile(
     r"|without (?:the |this |that |any |an? )?(?:\w+ )?(?:id|identifier|data|datum|location)s?)\b",
     re.IGNORECASE,
 )
+#: Reading 4's removal: "drop" but not "dropdown"
+REMOVAL_4 = re.compile(
+    r"\b(?:remov\w*|omit\w*|drop(?:s|ped|ping)?\b|block\w*|disabl\w*|exclud\w*"
+    r"|(?:do not|don't|never|stop|no longer|not|without) (?:send|collect|share|transmit|use|read|access|request)\w*"
+    r"|without (?:the |this |that |any |an? )?(?:\w+ )?(?:id|identifier|data|datum|location)s?)\b",
+    re.IGNORECASE,
+)
+#: After a removal, what makes it a shorter retention ("remove it after the request", "drop the stored identifier
+#: after 30 days"), not a removal of the component
+_RETENTION = re.compile(
+    r"\b(?:after|within|once|upon|until|at the end of|older than|expir\w*|when (?:the|a|an|it|they|no)\b"
+    r"|\d+\s*(?:hours?|days?|weeks?|months?|years?))",
+    re.IGNORECASE,
+)
+#: After "without the data", what makes it a statement that the feature needs the data, not an alternative
+_UNWORKABLE = re.compile(
+    r"\b(?:would(?:n't| not)|could(?:n't| not)|cannot|can't|can not|will not|won't|does not|doesn't|is not possible"
+    r"|fails?|breaks?|impossible)\b",
+    re.IGNORECASE,
+)
+#: Words by which a removal names a recipient rather than a datum (gate a, reading 4)
+_RECIPIENT = re.compile(
+    r"\b(?:sdks?|librar(?:y|ies)|recipients?|third[- ]part(?:y|ies)|vendors?|partners?|networks?|services?|"
+    r"providers?|trackers?|endpoints?|servers?|integrations?)\b",
+    re.IGNORECASE,
+)
+#: Words by which a removal names data in general
+_DATUM = re.compile(r"\b(?:ids?|identifiers?|data|datum|location|information)\b", re.IGNORECASE)
 #: Names an alternative may give a datum besides the vocabulary's titles (gate a)
 ALIASES = {
     "device-or-other-ids.installation-id": (
@@ -887,12 +935,12 @@ ALIASES = {
 }
 
 
-def recognised(text, kind: str, value: str, data) -> tuple[str, set[str]] | None:
+def recognised(text, kind: str, value: str, data, reading: str = READING) -> tuple[str, set[str]] | None:
     """
     The change an alternative's text names for its component (gate a): ("replace", nodes) where it names nodes of the
     component's family of the data vocabulary other than the component's own and those above it, by title or alias;
     else ("remove", set()) where it names a removal; else None. A recipient is only removed, never replaced: replacing
-    it by another changes no inclusion.
+    it by another changes no inclusion. From reading 4 a removal is one of the component (`_removes`).
     """
     t = str(text or "")
     if kind == "D" and data is not None and value in data:
@@ -907,7 +955,42 @@ def recognised(text, kind: str, value: str, data) -> tuple[str, set[str]] | None
                 named.add(node.id)
         if named:
             return "replace", named
+    if int(reading) >= 4:
+        return ("remove", set()) if _removes(t, kind, value, data) else None
     return ("remove", set()) if REMOVAL.search(t) else None
+
+
+def _removes(text: str, kind: str, value: str, data) -> bool:
+    """Reading 4: whether a clause of the text removes the component. The clause names a removal (REMOVAL_4) that no
+    retention period follows ("after the request", "after 30 days") and, for "without the data", no statement that
+    the feature would then not work; and it names the component: a recipient by its name or as a recipient (an SDK, a
+    third party, a service), a datum by its title or alias, one of the nodes above it, or as data. A removal of the
+    datum is no removal of the recipient, nor the reverse."""
+    if kind == "R":
+        general = _RECIPIENT
+        words = [w for w in re.split(r"[^a-z0-9]+", str(value).lower()) if len(w) >= 3 and w not in ("domain", "com")]
+    else:
+        general, words = _DATUM, []
+        if data is not None and value in data:
+            for node in (value, *data.ancestors(value)):
+                if node != data.root:
+                    words += [data[node].title, *ALIASES.get(node, ())]
+
+    def names(clause: str) -> bool:
+        return bool(general.search(clause)) or any(
+            re.search(r"(?<![\w-])" + re.escape(w) + r"(?![\w-])", clause, re.IGNORECASE) for w in words if w
+        )
+
+    for clause in re.split(r"[.;]\s|[.;]$|\n", text):
+        for m in REMOVAL_4.finditer(clause):
+            after = clause[m.end() :]
+            if _RETENTION.search(after):
+                continue
+            if m.group(0).lower().startswith("without") and _UNWORKABLE.search(after):
+                continue
+            if names(clause):
+                return True
+    return False
 
 
 def less_invasive(change, value: str, data) -> bool:
@@ -923,13 +1006,13 @@ def less_invasive(change, value: str, data) -> bool:
     return all(n != value and coarser(n, value, data) for n in nodes)
 
 
-def gate_a(text, kind: str | None, value, data) -> str | None:
+def gate_a(text, kind: str | None, value, data, reading: str = READING) -> str | None:
     """Gate (a) for a documented alternative: None if passed, else why it failed."""
     if kind is None or not value or (kind == "D" and (data is None or value == data.root or value not in data)):
         return "gate_a_component"
     if kind == "R" and str(value).startswith("domain:"):
         return "gate_a_component"
-    return None if less_invasive(recognised(text, kind, value, data), value, data) else "gate_a_change"
+    return None if less_invasive(recognised(text, kind, value, data, reading), value, data) else "gate_a_change"
 
 
 def gate(citations: set[str], context: Context, kind: str, value, categories, corpus: Corpus | None, data, types):
@@ -979,7 +1062,7 @@ def minimisation(
         component = ref(item.get("component"))
         if basis is None or component not in q.record["components"]:
             continue
-        if not names_alternative(item.get("alternative")):  # "none": the sample states no alternative (READING 1)
+        if not names_alternative(item.get("alternative"), reading):  # "none": no alternative (READING 1, 4)
             continue
         steps, dropped = [], []
         for i, s in enumerate(item.get("steps") or ()):
@@ -997,7 +1080,7 @@ def minimisation(
         if documented and gates:
             kind, value = parts_of.get(component, (None, None))
             categories = practice.recipient_categories if practice is not None else ()
-            failed = gate_a(item.get("alternative"), kind, value, data) or gate(
+            failed = gate_a(item.get("alternative"), kind, value, data, reading) or gate(
                 cites & documentation, q.context, kind, value, categories, corpus, data, types
             )
             documented = failed is None

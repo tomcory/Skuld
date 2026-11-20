@@ -221,7 +221,7 @@ def test_reading_1_has_no_gates_and_an_unknown_reading_is_an_error():
     out = judge.minimisation({"alternatives": [entry]}, "s", _question(), HYPOTHESES, "1")
     assert out[0]["status"] == "supported"
     with pytest.raises(ValueError):
-        judge.minimisation({"alternatives": [entry]}, "s", _question(), HYPOTHESES, "4")
+        judge.minimisation({"alternatives": [entry]}, "s", _question(), HYPOTHESES, "99")
 
 
 def test_from_reading_3_only_cited_documentation_gives_an_alternative_the_strength_of_documents():
@@ -231,3 +231,81 @@ def test_from_reading_3_only_cited_documentation_gives_an_alternative_the_streng
     for reading, strength in (("2", "doc"), ("3", "own")):
         [claim] = judge.minimisation({"alternatives": [entry]}, "s", _question(), HYPOTHESES, reading, _practice())
         assert claim["strength"] == strength, reading
+
+
+# -- READING 4: removals of the component, more texts that name no alternative (the review of 19 Nov) ---------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "no alternatives",
+        "None needed",
+        "None needed.",
+        "No change",
+        "No change needed.",
+        "Not applicable – the identifier is required for the account.",
+        "No alternative is needed; the data is essential to the feature.",
+    ],
+)
+def test_reading_4_texts_that_name_no_alternative(text):
+    assert not judge.names_alternative(text, "4")
+    assert judge.names_alternative(text, "3")  # read as alternatives before
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "No recipient — perform the consent-state check entirely on-device.",
+        "No persistent storage; read the Advertising ID from the system on demand.",
+        "an app-generated installation ID",
+        "Nonetheless an app-scoped identifier",
+    ],
+)
+def test_reading_4_still_reads_texts_that_name_an_alternative(text):
+    assert judge.names_alternative(text, "4")
+
+
+def _read4(alternative, practice=None, component="P-1.data", reading="4"):
+    entry = {**_entry(alternative, "TECHNICALLY_SUPPORTED"), "component": component}
+    q = _question()
+    q.record["components"] = ["P-1.data", "P-1.recipient"]
+    corpus = Corpus((_passage(nodes=["device-or-other-ids"], entities=["adco"]),), "0" * 64)
+    out = judge.minimisation({"alternatives": [entry]}, "s", q, HYPOTHESES, reading, practice or _practice(), corpus)
+    return out[0]["status"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Remove it after the request is completed.",
+        "Drop the stored identifier after 30 days.",
+        "Use a dropdown instead of a free-text field.",
+        "Without the identifier the attribution would not work.",
+    ],
+)
+def test_reading_4_a_retention_a_dropdown_or_an_unworkable_feature_is_no_removal(text):
+    assert _read4(text) == "not_established"
+    assert _read4(text, reading="3") == "supported"  # each passed gate (a) as a removal before
+
+
+def test_reading_4_a_removal_must_remove_the_component_it_is_for():
+    adco = _practice(recipient="adco")
+    # the datum's removal is no removal of the recipient, nor the reverse
+    assert _read4("Remove the advertising ID.", adco, "P-1.recipient") == "not_established"
+    assert _read4("Remove the advertising ID.", adco, "P-1.recipient", reading="3") == "supported"
+    assert _read4("Remove the AdCo SDK.", adco, "P-1.recipient") == "supported"
+    assert _read4("Do not share it with the third party.", adco, "P-1.recipient") == "supported"
+    assert _read4("Remove the AdCo SDK.", adco) == "not_established"
+    # still removals of the datum
+    assert _read4("Do not send the advertising ID to the partner.") == "supported"
+    assert _read4("match installs without the identifier") == "supported"
+    assert _read4("Remove the advertising ID; attribute installs on the server.") == "supported"
+
+
+def test_reading_4_a_statement_is_vague_only_where_purpose_specific_applies():
+    judgements = [
+        {"statement": "S1", "declarations": ["D-1"], "status": "supported", "uncertainty": {}, "specific": False}
+    ]
+    assert judge.vague_declarations(judgements) == {"D-1"}
+    assert judge.vague_declarations(judgements, applies=False) == frozenset()

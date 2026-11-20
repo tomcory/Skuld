@@ -143,3 +143,17 @@ def test_gate_d_a_documented_alternative_needs_a_majority_of_its_questions_sampl
     assert combine.alternatives(two, combine.Numbers(), asked)[0]["status"] == "supported"
     # reading 1 has no gate (d): one sample decides
     assert combine.alternatives(one, combine.Numbers())[0]["status"] == "supported"
+
+
+def test_gate_d_an_alternative_it_demotes_takes_the_uncertainty_of_the_members_not_established():
+    asked = {"P-1": {"m/P-1/s1", "m/P-1/s2", "m/P-1/s3"}}
+    supported, held = _alternative("m/P-1/s1", "supported"), _alternative("m/P-1/s2", "not_established")
+    supported["uncertainty"] = {"t": "not_applicable", "s": "low", "n": "low"}
+    held["uncertainty"] = {"t": "not_applicable", "s": "high", "n": "moderate"}
+    claim = combine.alternatives([supported, held], combine.Numbers(), asked)[0]
+    assert claim["status"] == "not_established" and claim["uncertainty"] == held["uncertainty"]
+    # with no member not established, the highest over all of them, never the supporting members' least
+    other = {**supported, "id": "m/P-1/s2:a0", "uncertainty": {"t": "not_applicable", "s": "moderate", "n": "low"}}
+    asked = {"P-1": {"m/P-1/s1", "m/P-1/s2", "m/P-1/s3", "m/P-1/s4", "m/P-1/s5"}}
+    claim = combine.alternatives([supported, other], combine.Numbers(), asked)[0]
+    assert claim["status"] == "not_established" and claim["uncertainty"]["s"] == "moderate"

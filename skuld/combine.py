@@ -27,7 +27,7 @@ model and yields no finding: the claims it combines are kept, in the samples and
                   shows nothing for a narrower purpose, while that it breaks holds for every purpose it includes); an
                   experiment's Dependency
                   claim is combined with the hypotheses' on the same component. Where no hypothesis aligns, reasoning
-                  is silent on the case's purpose, and the experiment's claim stands combined alone.
+                  is silent on the experimental case's purpose, and the experiment's claim stands combined alone.
 
 A combined claim's uncertainty is used here, to set its concerns', and not stored: the assessment names this function
 (`uncertainty.CLAIMS`). A concern resting on a purpose takes the purpose's semantic uncertainty where it is higher.
@@ -39,8 +39,10 @@ from skuld.uncertainty import FACTORS, ORDER, highest
 #: only if supported or refuted, and then it is doc or run, since no rule lets own knowledge decide
 STRENGTH = {"own": 0, "doc": 1, "run": 2}
 DECISIVE = ("supported", "refuted")
-#: The combination as a named method of the report: 2 since claims that could not be assessed abstain (13 Nov 2026)
-VERSION = "2"
+#: The combination as a named method of the report: 2 since claims that could not be assessed abstain (13 Nov 2026);
+#: 3 since an alternative demoted by gate (d) takes the uncertainty of the members that agree with it, not of those
+#: that support it (20 Nov 2026)
+VERSION = "3"
 COMPONENT = {"role": "method", "id": "skuld.combine", "version": VERSION}
 #: What a combined claim carries over from the claim that decides it
 CARRIED = ("stage", "tier", "case", "scope", "component", "relationship", "alternative", "level")
@@ -213,15 +215,19 @@ def alternatives(claims: list[dict], number: Numbers, asked: dict[str, set[str]]
                 ch.removeprefix("reasoning:") for m in members if m["status"] == "supported" for ch in m["channels"]
             }
             if samples and 2 * len(supporting & samples) <= len(samples):
-                claim = _without_majority(claim, len(supporting & samples), len(samples))
+                claim = _without_majority(claim, members, len(supporting & samples), len(samples))
         out.append(claim)
     return out
 
 
-def _without_majority(claim: dict, supporting: int, samples: int) -> dict:
-    """A supported alternative that too few samples support: plausible and not established, with gate (d) as reason."""
+def _without_majority(claim: dict, members: list[dict], supporting: int, samples: int) -> dict:
+    """A supported alternative that too few samples support: plausible and not established, with gate (d) as reason.
+    Its uncertainty is a not-established claim's: the least over the members not established, else the highest over
+    all (`combined`), not the supporting members' it would keep otherwise."""
     claim = {k: v for k, v in claim.items() if k not in ("strength", "overruled")}
+    agreeing = [m for m in members if m["status"] == "not_established"]
     claim.update(
+        uncertainty=_uncertainty(agreeing or members, minimum=bool(agreeing)),
         status="not_established",
         level="plausible",
         supporting=[],

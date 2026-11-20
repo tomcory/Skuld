@@ -10,8 +10,8 @@ is asked here (`skuld expect` and `skuld judge` ask).
     expectation     stage 1's claims from its kept samples (expectation.py), combined across samples into the
                     assessment stage's hypotheses (combine.hypotheses)
     experiments     the experimental channel's claims, read by the status rule (rules.py) from the case report's
-                    measurements, per practice whose component a case varies (experiments.premises), combined with
-                    the hypotheses of aligned purposes (combine.experimental)
+                    measurements, per practice whose component an experimental case varies (experiments.premises),
+                    combined with the hypotheses of aligned purposes (combine.experimental)
     reasoning tier  the judgements of its kept samples (judge.py), combined across samples: concerns (ii), (iv)
                     and (v) (concerns.py), the reasoning tier's Alternative claims (combine.alternatives)
     relations       O–E and D–E (relations.py), which concern (v) cites; pass-through and open conditions
@@ -309,6 +309,7 @@ def build(
                 *_declaration_analysis(a),
                 {"role": "frame", "id": a.frame.id, "version": a.frame.version, "sha256": a.frame.digest()},
                 {"role": "vocabulary", "id": DATA, "version": data.version},
+                {"role": "vocabulary", "id": PURPOSES, "version": purposes.version},
                 {"role": "vocabulary", "id": RECIPIENT_TYPES, "version": vocabulary(RECIPIENT_TYPES).version},
                 *components,
             ],
@@ -431,6 +432,7 @@ def _expectation(
                 c["supporting"] = [i for x in cited for i in _part_items(item, name, parts[x])]
             claims.append(c)
     components["procedure"] = {"role": "method", **expectation.PROCEDURE, "stage": "expectation"}
+    components["reading"] = {**expectation.READING_COMPONENT, "stage": "expectation"}
     return claims, list(components.values()) if claims else []
 
 
@@ -510,7 +512,8 @@ def _record_components(components: dict, record: dict, stage: str) -> None:
     model = record["model"]
     # the reasoning setting the sample was asked with (ask.py records it where it was set): the same model with
     # reasoning off and on is two configurations, which the report must tell apart
-    think = record["options"].get("think")
+    # unset in the options, the sample may say it was the model's default (asked from 20 Nov 2026), else nothing
+    think = record["options"].get("think", record["model"].get("think"))
     components[f"model:{stage}:{model['name']}:{record['options']['seed']}:{think}"] = {
         "role": "model",
         "id": model["name"],
@@ -569,7 +572,9 @@ def _reasoning_tier(
             c["supporting"] = items(c["channels"][0].removeprefix("reasoning:"), cited)
     said = judge.statements(a, built) if a.declaration else []
     # from reading 2, a declared purpose judged not specific specifies nothing (E 0.9, def:concern)
-    vague = judge.vague_declarations(specific) if judge.gated(reading) else frozenset()
+    # from reading 4, only where purpose_specific applies (concerns.not_specific states no concern otherwise)
+    applies = concerns._applies(applicability, "purpose_specific") if int(reading) >= 4 else True
+    vague = judge.vague_declarations(specific, applies) if judge.gated(reading) else frozenset()
     stated, covered = concerns.not_specific(a.frame, said, specific, items, applicability)
     if a.declaration is not None and built.comparability.get("comparable") is not False:
         more, cover = concerns.purpose_limitation(
@@ -603,6 +608,7 @@ NEXT = {
     "applicability_unknown": "ask the provider, or an expert reading the documents and the processing",
     "own_knowledge": "documentation of the feature or the component in the corpus, and the stage asked again",
     "purpose_vague": "state the purpose's action, object and outcome",
+    "purpose_not_in_vocabulary": "place the node in the purpose map (skuld purposes map), or ask the stage again",
     "needs_run": "an experiment that removes the component (skuld select)",
     "search_space_not_run": "run the alternative's condition",
     "intervention_not_verified": "repeat the runs with an intervention that verifies",
