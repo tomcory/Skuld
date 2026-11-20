@@ -1,0 +1,52 @@
+{
+  "description": "The Expectation paper's final run of gemma4:31b (13 Nov 2026): vendor sampling (temperature 1.0, top_p 0.95, top_k 64), reasoning low (as the gateway then served it: thinking without a limit), max_tokens 32768, traffic and top-up in stage 1, known data only, the study's purpose map. Was expectation-paper/study-2026-11/skuld_config_vllm_gemma_vendor.json. Self-contained since 20 Nov 2026, when config.json took gemma's recommended sampling and thinking xhigh: it states every value the run had from config.json then. Since 20 Nov 2026 03:26 the gateway caps gemma4's thinking by level (low: 1,024 tokens; xhigh: no limit; docs/INFERENCE_GUIDE.md); before then every level was thinking without a limit. The profile keeps \"low\": a sample's options (think among them) identify it, so the run's samples are kept only under \"low\". A question asked anew under it today gets thinking capped at 1,024 tokens, unlike the run.",
+  "model": "gemma4:31b",
+  "sampling": {
+    "default": {
+      "temperature": 0.0,
+      "top_p": null,
+      "top_k": null,
+      "max_tokens": 32768
+    },
+    "tasks": {
+      "propose": {
+        "temperature": 0.2,
+        "seed": 1
+      },
+      "expect": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64
+      },
+      "judge": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64
+      }
+    }
+  },
+  "client": {
+    "timeout": 1800.0,
+    "limits": {
+      "default": 4,
+      "models": {
+        "gemma4:31b": 8,
+        "qwen3.8:27b": 8
+      },
+      "prefixes": {}
+    }
+  },
+  "expectation": {
+    "think": "low",
+    "traffic": true,
+    "topup": true
+  },
+  "assessment": {
+    "think": "low",
+    "known_data_only": true
+  },
+  "purpose_map": {
+    "path": "purpose-maps/study-2026-11.json",
+    "sha256": "2c8e24b1ddb8e20e0aaf216ff635ffa4d9b32f3c89fe1b26a565561ede8cc252"
+  }
+}

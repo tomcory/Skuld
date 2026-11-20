@@ -24,7 +24,7 @@ A case holds its declared purposes and their concerns as references; the require
 
 from dataclasses import dataclass, field
 
-VERSION = "2"
+VERSION = "3"  # 3: legal bases are no declared-purpose rows
 COMPONENT = {"role": "method", "id": "skuld.qualify.placement", "version": VERSION}
 
 
@@ -142,8 +142,13 @@ def place(index: Index) -> tuple[list[Holding], list[Holding], list[Holding]]:
         held |= set(h.declarations)
         cases.append(h)
     purposes: list[Holding] = []
+    # a declared purpose's row holds purposes only: a legal basis is information the collection's rows assess
+    # (Art. 13(1)(c)), not a purpose the reasoning tier judges (POST_PAPER_FIXES 3: 209 per family filed as purposes)
     justifications = [
-        d for d in sorted(index.declarations, key=_order) if index.declarations[d].get("kind") == "justification"
+        d
+        for d in sorted(index.declarations, key=_order)
+        if index.declarations[d].get("kind") == "justification"
+        and index.declarations[d].get("type") == "declares_purpose"
     ]
     statements: dict[str, list[str]] = {}
     for did in justifications:
@@ -151,11 +156,8 @@ def place(index: Index) -> tuple[list[Holding], list[Holding], list[Holding]]:
             statements.setdefault(index.declarations[did]["statement"], []).append(did)
     rows = {ds[0]: ds for ds in statements.values()}
     for d in justifications:
-        # a purpose said in no words of the provider (a category of a form) is a row of its own; a legal basis only
-        # where no case holds it
-        if not index.declarations[d].get("statement") and (
-            index.declarations[d].get("type") == "declares_purpose" or d not in held
-        ):
+        # a purpose said in no words of the provider (a category of a form) is a row of its own
+        if not index.declarations[d].get("statement"):
             rows[d] = [d]
     for first in sorted(rows, key=_order):
         h = Holding(f"row:{first}", "declared_purpose", first)
@@ -245,4 +247,9 @@ def _why(index: Index, kind: str, item: dict) -> str:
     if kind == "open":
         return f"it qualifies {', '.join(item['qualifies'])}, none of which a case or section holds"
     subject = item.get("subject")
+    if (index.declarations.get(subject) or {}).get("type") == "declares_legal_basis":
+        return (
+            f"its subject {subject} is a declared legal basis, which the collection's rows assess as information "
+            "given, not a declared purpose"
+        )
     return f"its subject {subject} is in no case or section" if subject else "it names no subject"

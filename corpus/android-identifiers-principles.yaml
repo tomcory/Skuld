@@ -1,0 +1,25 @@
+id: android-identifiers-principles
+title: Best practices for unique identifiers, general rules (Android Developers)
+source: https://developer.android.com/identity/user-data-ids
+retrieved: 2026-11-18
+verified: {by: Thomas Cory, date: 2026-11-18}
+kind: platform
+about:
+  nodes: [device-or-other-ids.advertising-id, device-or-other-ids.android-id, device-or-other-ids.installation-id,
+          device-or-other-ids.hardware-ids]
+  entities: []
+# Verbatim from the section "Best practices for working with Android identifiers" (page last updated 2026-10-30);
+# omissions marked […]. Replaces android-unique-identifiers, which paraphrased the page: it turned "user profiling or
+# ads use cases" into "advertising and user-analytics use cases that require it", and it left out the page's ads use
+# cases, for which the Advertising ID is mandatory (android-identifiers-ads). Tagged with the identifiers the excerpt names (Advertising ID, FID as the
+# installation ID, hardware identifiers) and with the Android ID, which it does not name: the Android ID falls under
+# its general rules ("the most restrictive identifier", "an FID or GUID ... for all other use cases"), and no other
+# passage concerns it. Not tagged with the App set ID, which the excerpt does not mention.
+text: >-
+  To protect the privacy of your users, use the most restrictive identifier that satisfies your app's use case. […]
+  Choose user-resettable identifiers whenever possible. Your app can achieve most of its use cases even when it uses
+  identifiers other than non-resettable hardware IDs. Avoid using hardware identifiers. In most use cases, you can
+  avoid using hardware identifiers, such as International Mobile Equipment Identity (IMEI), without limiting required
+  functionality. […] Only use an Advertising ID for user profiling or ads use cases. […] Use a Firebase installation
+  ID (FID) or a privately stored GUID whenever possible for all other use cases, except for payment fraud prevention
+  and telephony. For the vast majority of non-ads use cases, an FID or GUID should be sufficient.

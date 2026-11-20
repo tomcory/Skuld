@@ -1,12 +1,24 @@
 id: appsflyer
-title: AppsFlyer, a mobile measurement partner
-source: https://www.appsflyer.com/glossary/mobile-measurement-partner/
-retrieved: 2026-10-21
+title: What is a mobile measurement partner (MMP)? (AppsFlyer glossary)
+source: https://www.appsflyer.com/glossary/mmp/
+retrieved: 2026-11-18
+verified: {by: Thomas Cory, date: 2026-11-18}
 kind: component
 about:
   nodes: []
   entities: [appsflyer]
-# In our own words.
+  recipient_types: [analytics, advertising]
+# Verbatim from AppsFlyer's glossary entry; omissions marked […]. The earlier source,
+# /glossary/mobile-measurement-partner/, returns "Page not found". The page states no licence: a short quotation
+# for analysis (§ 51 UrhG), to confirm. Not tagged with a data node: a tag on device-or-other-ids would give this
+# passage to every identifier practice, whatever its recipient. "post-intall" is the page's spelling.
 text: >-
-  AppsFlyer is a mobile measurement partner: a service that attributes application installs and in-app events to the
-  marketing campaigns that led to them, and reports these to the application's provider and its advertising partners.
+  A mobile measurement partner, or MMP, is a company that helps apps measure campaign performance across advertising
+  marketing channels, media sources, and ad networks. […] A mobile measurement partner is a platform provider that
+  attributes, collects, and organizes app data to deliver a uniform assessment of campaign performance metrics. […]
+  In basic terms, an MMP matches campaign engagements with installs and post-intall in-app actions. This is done
+  using a combination of device IDs for user level attribution, probabilistic modeling, or SKAdNetwork in
+  iOS 14 for deterministic aggregated level attribution. By implementing a software development kit (SDK), which is a
+  piece of code that collects measurement and attribution data, the app enables the MMP to associate ad engagements
+  with app installs and in-app events (such as game levels, registrations completed in a FinTech app, placed purchases
+  etc).

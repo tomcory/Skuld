@@ -155,6 +155,15 @@ def test_an_instrumentation_that_failed_to_start_is_no_verification(tmp_path):
     assert run.instrumentation["error"] == "server_unreachable" and not run.verified
 
 
+def test_a_run_loki_stopped_on_an_error_is_refused(tmp_path):
+    """A replay in which Frida found no process of the app imposed no condition: it is refused, not read as unmet."""
+    stop = "error: InstrumentationFailed('the app was not instrumented: app_not_instrumented: no process of a.b')"
+    events = [{"seq": 1, "ts": "t1", "type": "action"}, {"seq": 2, "ts": "t2", "type": "run_end", "stop_reason": stop}]
+    assert refused(write_run(tmp_path / "failed", events=events)) == "failed"
+    events[-1]["stop_reason"] = "replay complete"
+    load(write_run(tmp_path / "ended", events=events))
+
+
 def test_the_capture_can_be_left_out(tmp_path):
     folder = write_run(tmp_path / "run", meta={"capture": None})
     run = load(folder, capture=False)

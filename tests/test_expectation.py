@@ -191,7 +191,12 @@ def test_samples_are_kept_and_the_consent_screen_never_reaches_the_model(workspa
     assert len(samples) == 4 and len(model.prompts) == 4
     assert all(PURPOSE_TEXT not in p for p in model.prompts)
     record = json.loads((samples[0].folder / "record.json").read_text(encoding="utf-8"))
-    assert record["model"]["name"] == "fake" and record["options"]["temperature"] == 0.4
+    from ratatoskr.llm import options_for
+
+    from skuld import config
+
+    expected = options_for(config.load(), "expect").temperature  # the configuration's, whatever it is
+    assert record["model"]["name"] == "fake" and record["options"]["temperature"] == expected
     expectation.expect(a, built, load_corpus(a.corpus), seeds=[1, 2], provider=model)
     assert len(model.prompts) == 4  # kept, not asked again
 
@@ -201,6 +206,11 @@ def test_a_sample_records_the_thinking_switch_only_where_it_is_set(workspace, tm
 
     a, built = workspace
     model = FakeModel()
+    unset = json.loads(config.CONFIG.read_text(encoding="utf-8"))
+    unset["expectation"]["think"] = None
+    (tmp_path / "unset.json").write_text(json.dumps(unset))
+    monkeypatch.setenv("SKULD_CONFIG", str(tmp_path / "unset.json"))
+    config.load.cache_clear()
     expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=model)
     record = json.loads((a.root / "expectation" / "launch" / "s1" / "record.json").read_text(encoding="utf-8"))
     assert "think" not in record["options"] and "thinking_chars" in record["cost"]
@@ -347,3 +357,86 @@ def test_a_batch_no_longer_asked_moves_to_superseded_on_an_online_run(workspace)
     expectation.expect(a, built, load_corpus(a.corpus), seeds=[2], provider=FakeModel())
     assert not stale.exists() and list((a.root / "superseded").glob("*/expectation/e9/s1/record.json"))
     assert (a.root / "expectation" / "launch" / "s1").is_dir()  # another seed of a current batch stays
+
+
+def test_a_practice_a_batch_left_without_a_purpose_is_topped_up_alone(workspace, monkeypatch):
+    """13 Nov 2026: qwen answered only the first practice of a batch, also when asked again; with expectation.topup
+    each practice left without a purpose is asked alone, below the batch's sample, and read like any sample."""
+    from skuld import config
+
+    a, built = workspace
+    loaded = config.load()
+    monkeypatch.setattr(config, "load", lambda: {**loaded, "expectation": {**loaded["expectation"], "topup": True}})
+
+    class FirstSilent(FakeModel):
+        """Gives no purpose on a batch's two attempts (4 requests: two batches), answers from then on."""
+
+        async def complete(self, model, prompt, *args, **kwargs):
+            if len(self.prompts) < 4:
+                self.prompts.append(prompt.messages[0]["content"])
+                return LLMResponse(text=json.dumps({"purposes": [], "dependencies": []}))
+            return await super().complete(model, prompt, *args, **kwargs)
+
+    model = FirstSilent()
+    expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=model)
+    assert len(model.prompts) == 6  # two batches asked twice, then a top-up per practice
+    names = [n for n, _, _ in expectation.kept(a, built, load_corpus(a.corpus))]
+    topups = [n for n in names if "/topup/" in n]
+    assert topups and all(n.split("/")[2] == "topup" for n in topups)
+    batch_practices = {b.key: {p.id for p in b.practices} for b in expectation.batches(a, built)}
+    for key, practices in batch_practices.items():
+        covered = set()
+        for name, _, answer in expectation.kept(a, built, load_corpus(a.corpus)):
+            if name.split("/")[0] == key:
+                covered |= {x["practice"] for x in answer.get("purposes", [])}
+        assert covered == practices
+    record = json.loads((a.root / "expectation" / topups[0] / "record.json").read_text())
+    assert record["topup_of"] == "/".join(topups[0].split("/")[:2]) and len(record["practices"]) == 1
+    asked = len(model.prompts)
+    expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=model)
+    assert len(model.prompts) == asked  # everything kept: nothing asked again
+
+
+def test_without_the_topup_setting_nothing_is_topped_up(workspace):
+    a, built = workspace
+    expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=FakeModel())
+    assert not any("/topup/" in n for n, _, _ in expectation.kept(a, built, load_corpus(a.corpus)))
+
+
+def test_the_notice_definition_is_versioned(workspace):
+    """A report names the notice definition its stage-1 contexts were made with; one that names none was made with
+    1.1.0, under which "Start tracking your run" spoke of data (Ratatoskr's notices 1.2.0 no longer)."""
+    from ratatoskr import notices
+
+    assert expectation.NOTICES == notices.VERSION
+    assert expectation.notices_of({"report": {"components": []}}) == "1.1.0"
+    named = {"report": {"components": [notices.component("1.2.0")]}}
+    assert expectation.notices_of(named) == "1.2.0"
+    run = {
+        "id": "S9",
+        "kind": "screen",
+        "text": "Start tracking your run | Privacy",
+        "provenance": [{"origin": "run", "record": "x"}],
+    }
+    a, built = workspace
+    context = expectation.assemble(
+        expectation.batches(a, built)[-1],
+        a,
+        load_corpus(a.corpus),
+        __import__("ratatoskr.vocabularies").vocabularies.Vocabulary.load("asgard-data"),
+    )
+    expectation.check(Context(context.parts + (run,)))  # 1.2.0: no notice
+    with pytest.raises(ContextError, match="notice"):
+        expectation.check(Context(context.parts + (run,)), "1.1.0")
+
+
+def test_a_dependency_names_its_purpose_by_id_or_by_a_node_only_one_purpose_of_its_practice_has():
+    purposes = [
+        {"practice": "[P-1]", "id": "P-1.purpose.1", "node": "Advertising"},
+        {"practice": "P-1", "id": "P-1.purpose.2", "node": "ServiceProvision"},
+        {"practice": "P-1", "id": "P-1.purpose.3", "node": "ServiceProvision"},
+    ]
+    keys = expectation._purpose_keys(purposes)
+    assert keys[("P-1", "P-1.purpose.2")] == ("P-1", "P-1.purpose.2")
+    assert keys[("P-1", "Advertising")] == ("P-1", "P-1.purpose.1")
+    assert ("P-1", "ServiceProvision") not in keys  # two purposes have it: which one is meant is not known

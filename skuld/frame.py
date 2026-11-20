@@ -64,10 +64,13 @@ def _transmits(e: Evidence) -> list:
 
 
 def _absent(e: Evidence, claim_type: str, node: str = "data") -> list[dict]:
+    """O's established absences of a cell, for every recipient: a cell that lists hosts of payloads it could not
+    search (`not_found_for`, Observation report 0.7) establishes no absence for those, so it decides no condition."""
     return [
         s
         for s in e.o_statuses
         if (s["claim_type"], s["node"], s["status"]) == (claim_type, node, "absence_established")
+        and not s.get("not_found_for")
     ]
 
 

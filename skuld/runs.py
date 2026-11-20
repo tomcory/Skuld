@@ -35,7 +35,7 @@ class RunRefused(Exception):
     A run folder that Skuld does not use.
 
     Attributes:
-        reason: A short identifier: 'not_a_run', 'unsupported_version', 'unfinished', 'no_capture',
+        reason: A short identifier: 'not_a_run', 'unsupported_version', 'unfinished', 'failed', 'no_capture',
             'capture_failed', 'export_not_validated', 'incomplete_export' or 'invalid_record'
         detail: Further information
     """
@@ -127,7 +127,7 @@ def load(run_dir: str | Path, capture: bool = True) -> Run:
     directory = Path(run_dir)
     meta = _json(directory / "run.json")
     if not isinstance(meta, dict) or not (directory / "events.jsonl").is_file():
-        raise RunRefused("not_a_run", f"{directory} has no run.json and events.jsonl")
+        raise RunRefused("not_a_run", f"{directory} has no run.json or no events.jsonl")
     if meta.get("schema_version") not in SCHEMA_VERSIONS:
         raise RunRefused(
             "unsupported_version", f"run record version {meta.get('schema_version')}, read: {SCHEMA_VERSIONS}"
@@ -136,6 +136,11 @@ def load(run_dir: str | Path, capture: bool = True) -> Run:
         raise RunRefused("unfinished", f"status {meta.get('status')!r}: the run did not end in order")
 
     events = tuple(_lines(directory / "events.jsonl"))
+    ended = next((e for e in reversed(events) if e.get("type") == "run_end"), None)
+    if ended is not None and str(ended.get("stop_reason") or "").startswith("error"):
+        # Loki stopped the run on an error (exit 1), e.g. the app was not instrumented: what the run shows is not the
+        # condition it was asked to impose (12 Nov 2026: 'no process of <app> started within 30 s' in replays)
+        raise RunRefused("failed", f"Loki stopped the run: {ended['stop_reason']}"[:300])
     instrumentation = meta.get("instrumentation")
     source_reads = tuple(e for e in events if e.get("type") == "source_read")
     _check_instrumentation(instrumentation, source_reads)

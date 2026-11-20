@@ -2,27 +2,32 @@
   "model": "gemma4:31b",
   "sampling": {
     "default": {
-      "max_tokens": 8192
+      "max_tokens": 8192,
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "top_k": 64
     },
     "tasks": {
       "propose": {
-        "temperature": 0.2,
         "seed": 1
-      },
-      "expect": {
-        "temperature": 0.4
-      },
-      "judge": {
-        "temperature": 0.4
       }
     }
   },
   "client": {
     "api": "ollama",
-    "timeout": 1800.0,
+    "timeout": 5400.0,
+    "limits": {
+      "default": 4,
+      "models": {
+        "gemma4:31b": 128,
+        "qwen3.8:27b": 256
+      },
+      "prefixes": {}
+    },
     "cache": {
       "enabled": false
-    }
+    },
+    "max_tokens_cap": 32768
   },
   "expectation": {
     "seeds": [
@@ -30,7 +35,7 @@
       2,
       3
     ],
-    "think": null
+    "think": "xhigh"
   },
   "experiments": {
     "budget_seconds": 0,
@@ -43,7 +48,7 @@
       2,
       3
     ],
-    "think": null
+    "think": "xhigh"
   },
   "calibration": {
     "per_stratum": 10,

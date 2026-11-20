@@ -117,7 +117,7 @@ def changes(view: View, variants: list[View]) -> bool:
 # -- candidates per holding -------------------------------------------------------------------------------------------
 
 
-def _gap_step(index, holding, g: dict) -> dict:
+def _gap_step(index, g: dict) -> dict:
     reason, of = g["reason"], g.get("of")
     target: dict = {}
     if reason == "own_knowledge":
@@ -141,7 +141,8 @@ def _gap_step(index, holding, g: dict) -> dict:
         kind, by = "experiment", "skuld"
         concern, claim = index.concerns.get(of or ""), index.claims.get(of or "")
         if reason == "not_admitted" and not (
-            (concern and concern["requirement"] in EXPERIMENTAL) or (claim and claim["type"] in ("dependency", "alternative"))
+            (concern and concern["requirement"] in EXPERIMENTAL)
+            or (claim and claim["type"] in ("dependency", "alternative"))
         ):
             kind = "re-analyse"  # no experiment decides a purpose's specificity or compatibility
         subject = (concern or claim or {}).get("subject")
@@ -177,7 +178,7 @@ def _gap_variants(index, holding, view: View, g: dict) -> list[View]:
     return variants
 
 
-def _open_step(index, view: View, o: dict) -> dict:
+def _open_step(index, o: dict) -> dict:
     source = o.get("kind") == SOURCE
     if source:
         channels = sorted(
@@ -220,7 +221,11 @@ def _experiment_step(view: View, c: dict) -> tuple[dict, list[View]]:
     step = {
         "kind": "experiment",
         "by": "skuld",
-        "target": {"practice": c["practice"], "purpose": c["purpose"], **({"concern": c["concern"]} if c["concern"] else {})},
+        "target": {
+            "practice": c["practice"],
+            "purpose": c["purpose"],
+            **({"concern": c["concern"]} if c["concern"] else {}),
+        },
         "decides": f"whether {c['node'] or 'the purpose'} is achieved with less ({', '.join(alternatives)})",
         "from": [c["concern"] or c["purpose"]],
     }
@@ -240,13 +245,13 @@ def candidates(index, holding, view: View) -> list[tuple[dict, list[View]]]:
     out = []
     for gid in holding.gaps:
         g = index.gaps[gid]
-        out.append((_gap_step(index, holding, g), _gap_variants(index, holding, view, g)))
+        out.append((_gap_step(index, g), _gap_variants(index, holding, view, g)))
     if holding.kind == "practice":
         for c in getattr(index, "experiments", {}).get(holding.subject, []):
             out.append(_experiment_step(view, c))
     for oid in holding.open:
         o = index.open[oid]
-        out.append((_open_step(index, view, o), _open_variants(view, o)))
+        out.append((_open_step(index, o), _open_variants(view, o)))
     for r in view.relations:
         if r.type == "O-D" and index.relations[r.id].get("partial") == "broader":
             step = {

@@ -1,5 +1,5 @@
 """Tests of the assessment stage's reasoning tier: stage hypotheses, stage-2 contexts (gate 1), readings (gate 2),
-concerns (ii)–(iv) and gate 3, end to end."""
+concerns (ii), (iv) and (v) and gate 3, end to end."""
 
 import json
 import re
@@ -66,6 +66,15 @@ def workspace(tmp_path):
         json.dumps({"passages": [{"passage": "We use Your Personal data to provide and improve the Service."}]})
     )
     docs = corpus_folder(tmp_path)
+    # the passage speaks of the advertising ID and was checked against its source, as gates (b) and (c) require
+    passage = (docs / "a.yaml").read_text()
+    (docs / "a.yaml").write_text(
+        passage.replace(
+            "about: {entities: [adco]}",
+            "about: {entities: [adco], nodes: [device-or-other-ids.advertising-id]}\n"
+            "verified: {by: assessor, date: 2026-11-18}",
+        )
+    )
     (docs / "norms").mkdir()
     norm(docs / "norms", "specific", ["purpose_specific"], "A purpose must say what processing it includes.")
     norm(docs / "norms", "compatible", ["purpose_compatible"], "Compatibility is judged by the link and the context.")
@@ -226,14 +235,15 @@ def test_the_assessment_states_concerns_ii_to_iv_and_gate_3_holds(workspace):
     assert ("not_specific", "D-2") not in stated
     assessed = {(x, e["requirement"]) for e in report["coverage"] for x in e["assessed"]}
     assert ("D-2", "purpose_specific") in assessed and (identifier, "purpose_specified") in assessed
-    # specified purposes for its data, none covering it, both judged not compatible: one concern
+    # specified purposes for its data, none covering it, judged not compatible: one concern. D-1's statement is judged
+    # not specific, so from reading 2 it specifies nothing, and one specified purpose remains (E 0.9, author 18 Nov)
     limited = stated[("no_specified_purpose", interactions)]
     assert (limited["status"], limited["tier"], limited["requirement"]) == (
         "supported",
         "reasoning",
         "purpose_compatible",
     )
-    assert len(limited["specified"]) == 2
+    assert len(limited["specified"]) == 1
     minimised = stated[("less_invasive_alternative", identifier)]
     assert minimised["status"] == "supported" and minimised["purpose"].startswith("claim:")
     assert all(items[x]["claim"]["dimension"] == "O" for x in minimised["supporting"] if items[x]["kind"] == "claim")
@@ -287,6 +297,18 @@ def test_the_assessments_provenance_is_complete_its_rebuild_identical_and_tamper
     assert not any("uncertainty" in c for c in report["claims"])
     assert report["report"]["claims"]["determined"]["uncertainty"] == uncertainty.CLAIMS
 
+    # a traffic part's citation names the O claim it shows (as JSON): it resolves like an O claim pointer
+    o_ref = next(e["claim"] for e in report["evidence"] if e["kind"] == "claim" and e["claim"]["dimension"] == "O")
+    shown = json.loads(json.dumps(report))
+    for n, ref_ in enumerate((o_ref, {**o_ref, "claim": "c998"})):
+        cid = json.dumps(ref_, sort_keys=True)
+        shown["evidence"].append(
+            {"id": f"item:t{n}", "kind": "doc", "channel": "rule", "citation": {"id": cid, "at": cid}}
+        )
+    problems = check_assessment(a, shown)
+    assert not any("item:t0" in p for p in problems)
+    assert any("item:t1: O claim c998 is unknown" in p for p in problems)
+
     tampered = json.loads(json.dumps(report))
     o_item = next(e for e in tampered["evidence"] if e["kind"] == "claim" and e["claim"]["dimension"] == "O")
     o_item["claim"]["claim"] = "c999"
@@ -328,3 +350,73 @@ def test_the_same_words_on_two_channels_are_one_statement(tmp_path):
     found = judge.statements(a, assessment.build(a, None))
     (shared,) = [s for s in found if s.text == "provide and improve the Service"]
     assert shared.channels == ["policy", "in_app"] and len(shared.declarations) == 2
+
+
+def test_a_report_of_earlier_components_is_noted_not_failed(workspace):
+    """The study's runs under combination rule A (skuld.combine 1) no longer rebuild identically (POST_PAPER_FIXES 3)."""
+    import copy
+
+    from skuld.assess import build
+    from skuld.provenance import check_assessment, component_changes
+
+    a, built = workspace
+    found, norms, hypotheses = tools(a, built)
+    judge.judge(a, built, found, norms, hypotheses, FACTORS, seeds=[1], provider=FakeJudge())
+    report = assess(a.root)
+    rebuilt, members = build(a.root, write=False)
+    earlier = copy.deepcopy(report)
+    combine_ = next(c for c in earlier["report"]["components"] if c["id"] == "skuld.combine")
+    combine_["version"] = "1"
+    earlier["claims"] = earlier["claims"][1:]  # what the earlier rule gave differs
+    assert component_changes(earlier, rebuilt) == [f"skuld.combine 1, now {combine.VERSION}"]
+    notes: list[str] = []
+    problems = check_assessment(a, earlier, rebuilt, members, notes)
+    assert not any("rebuilt" in p for p in problems)
+    assert notes == [
+        f"assessed under earlier components (skuld.combine 1, now {combine.VERSION}): not rebuilt with the current ones"
+    ]
+    # with the same components, a difference stays a problem
+    same = copy.deepcopy(report)
+    same["claims"] = same["claims"][1:]
+    assert any("rebuilt from the same inputs" in p for p in check_assessment(a, same, rebuilt, members, []))
+
+
+def test_check_notes_a_report_of_other_versions_and_rebuilds_one_without_a_notice_definition(workspace):
+    """A report that names no notice definition was made with 1.1.0 and rebuilds with it identically; one made by
+    another Skuld or Ratatoskr is noted, not refused."""
+    from skuld.assess import build
+    from skuld.provenance import check_assessment
+
+    a, built = workspace
+    found, norms, hypotheses = tools(a, built)
+    judge.judge(a, built, found, norms, hypotheses, FACTORS, seeds=[1], provider=FakeJudge())
+    report = assess(a.root)
+    unnamed = json.loads(json.dumps(report))
+    unnamed["report"]["components"] = [c for c in unnamed["report"]["components"] if c["id"] != "ratatoskr.notices"]
+    rebuilt, members = build(a.root, write=False, notices="1.1.0")
+    notes: list[str] = []
+    assert check_assessment(a, unnamed, rebuilt, members, notes) == [] and notes == []
+
+    older = json.loads(json.dumps(report))
+    older["report"]["skuld"] = "0.0.1"
+    rebuilt, members = build(a.root, write=False)
+    assert check_assessment(a, older, rebuilt, members, notes) == []
+    assert notes and "skuld 0.0.1, now" in notes[0]
+
+
+def test_readings_compare_as_numbers():
+    assert judge.gated("2") and not judge.gated("1")
+    with pytest.raises(ValueError):
+        judge.gated("10")  # not a known reading; were it one, it would be gated, which "10" >= "2" is not
+
+
+def test_check_reports_a_folder_with_nothing_to_check_and_an_assessment_not_yet_made(workspace, tmp_path, capsys):
+    from skuld import cli
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert cli.main(["check", str(empty)]) == 1
+    assert "nothing to check" in capsys.readouterr().err
+    a, _ = workspace
+    assert cli.main(["check", str(a.root)]) == 1  # assessment.yaml, but no assessment.json yet
+    assert "assessment.json: absent" in capsys.readouterr().out

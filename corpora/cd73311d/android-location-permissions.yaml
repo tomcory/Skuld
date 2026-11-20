@@ -1,0 +1,14 @@
+id: android-location-permissions
+title: Request location permissions (Android Developers)
+source: https://developer.android.com/develop/sensors-and-location/location/permissions
+retrieved: 2026-10-22
+kind: platform
+about:
+  nodes: [location.precise-location, location.approximate-location]
+  entities: []
+text: >-
+  Approximate location (ACCESS_COARSE_LOCATION) gives an estimate of the device's location accurate to within about
+  3 square kilometres; precise location (ACCESS_FINE_LOCATION) is usually accurate to within about 50 metres. An app
+  should always declare approximate location and declare precise location only if it benefits from it; if the user
+  grants only approximate location, the app has only approximate location whatever it declares, and it should still
+  work.

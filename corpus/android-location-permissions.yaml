@@ -1,14 +1,22 @@
 id: android-location-permissions
 title: Request location permissions (Android Developers)
 source: https://developer.android.com/develop/sensors-and-location/location/permissions
-retrieved: 2026-10-22
+retrieved: 2026-11-18
+verified: {by: Thomas Cory, date: 2026-11-18}
 kind: platform
 about:
   nodes: [location.precise-location, location.approximate-location]
   entities: []
+# Verbatim from the section "Accuracy" and the manifest example's comments (page last updated 2026-10-28);
+# omissions marked […]. location.coordinates lies below location.precise-location, so the tag covers it.
 text: >-
-  Approximate location (ACCESS_COARSE_LOCATION) gives an estimate of the device's location accurate to within about
-  3 square kilometres; precise location (ACCESS_FINE_LOCATION) is usually accurate to within about 50 metres. An app
-  should always declare approximate location and declare precise location only if it benefits from it; if the user
-  grants only approximate location, the app has only approximate location whatever it declares, and it should still
-  work.
+  Approximate. Provides a device location estimate. If this location estimate is from the LocationManagerService or
+  FusedLocationProvider, this estimate is accurate to within about 3 square kilometers (about 1.2 square miles). […]
+  Precise. Provides a device location estimate that is as accurate as possible. If the location estimate is from
+  LocationManagerService or FusedLocationProvider, this estimate is usually within about 50 meters (160 feet) and is
+  sometimes as accurate as within a few meters (10 feet) or better. […] If the user grants the approximate location
+  permission, your app only has access to approximate location, regardless of which location permissions your app
+  declares. Your app should still work when the user grants only approximate location access. If a feature in your
+  app absolutely requires access to precise location using the ACCESS_FINE_LOCATION permission, you can ask the user
+  to allow your app to access precise location. […] ACCESS_COARSE_LOCATION: Always include this permission […]
+  ACCESS_FINE_LOCATION: Include only if your app benefits from precise location access.

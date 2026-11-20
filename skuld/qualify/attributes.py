@@ -10,9 +10,13 @@ can select from reports alone. They describe a case; no rule of qualification re
     actor             the component that sent or accessed, or ?; practices only
     declared_in       per declaration of practice the case holds: its channel and the O–D outcome relating it
     o_d               the case's O–D outcomes by aspect, with their conditions
+    concerns          per concern of the case: its step, status and the strength of its evidence: `rule` for the rule
+                      tier (O's and D's reports), `documented` for the reasoning tier, and for a concern of
+                      minimisation `demonstrated` where an alternative it rests on was measured by a run (Expectation
+                      report 0.9, option C); since version 2
 """
 
-VERSION = "1"
+VERSION = "2"
 COMPONENT = {"role": "method", "id": "skuld.qualify.attributes", "version": VERSION}
 
 SPECIAL = "special-category"
@@ -81,7 +85,8 @@ def of_case(index, holding, data, registry) -> dict:
             "recipient": _recipient(d.get("recipient"), registry),
             "party": None,
             "actor": None,
-            "declared_in": [_declared(d, r) for r in od] or [{"declaration": d["id"], "channel": d.get("channel", "?")}],
+            "declared_in": [_declared(d, r) for r in od]
+            or [{"declaration": d["id"], "channel": d.get("channel", "?")}],
         }
     out["o_d"] = [
         {
@@ -93,6 +98,28 @@ def of_case(index, holding, data, registry) -> dict:
         }
         for r in od
     ]
+    out["concerns"] = _concerns(index, holding)
+    return out
+
+
+def evidence(concern: dict, claims: dict) -> str:
+    """The strength of a concern's evidence: rule, documented, or demonstrated by a run."""
+    if concern.get("tier") == "rule":
+        return "rule"
+    if concern.get("step") == "less_invasive_alternative":
+        premises = [claims[b] for b in concern.get("basis") or () if b in claims]
+        if any(p.get("strength") == "run" or p.get("level") == "demonstrated" for p in premises):
+            return "demonstrated"
+    return "documented"
+
+
+def _concerns(index, holding) -> list[dict]:
+    out = []
+    for cid in holding.concerns:
+        c = index.concerns[cid]
+        if c["status"] == "not_applicable":
+            continue
+        out.append({"concern": cid, "step": c["step"], "status": c["status"], "evidence": evidence(c, index.claims)})
     return out
 
 

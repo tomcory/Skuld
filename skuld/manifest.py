@@ -5,7 +5,8 @@ settings, whether it succeeded, and what it cost, written into the workspace the
     <workspace>/manifests/<command>_<UTC time>.json
 
 It is Ratatoskr's run manifest (the run, its settings, Skuld's commit and whether the repository was dirty, start and
-end), with the models asked and their digests, the status (`ok`, or `failed` with the error), and `calls`: the keys
+end), the configuration (its file, the profile, the digest of what was in force), with the models asked and their
+digests, the status (`ok`, or `failed` with the error), and `calls`: the keys
 of Ratatoskr's client statistics (`calls` asked, `cached` for samples kept and reused, `failed`, `retries`, tokens,
 seconds) and Skuld's `missing` (offline, without a kept sample) and `thinking_chars`. A run that fails writes its
 manifest too, with what it had spent by then.
@@ -18,7 +19,7 @@ from pathlib import Path
 from ratatoskr.llm.manifest import RunManifest
 
 import skuld
-from skuld import ask
+from skuld import ask, config
 
 ROOT = Path(__file__).resolve().parents[1]
 FOLDER = "manifests"
@@ -31,6 +32,7 @@ class Run:
         self.command, self.folder = command, folder
         self.manifest = RunManifest(command, settings, root=ROOT)
         self.manifest.data["skuld"] = skuld.__version__
+        self.manifest.data["configuration"] = config.provenance()
         self.path: Path | None = None
 
     def write(self, error: BaseException | None) -> Path | None:

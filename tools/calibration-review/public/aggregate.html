@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Review of aggregated concerns</title>
+    <link rel="stylesheet" href="/vendor/bootstrap.css">
+    <link rel="stylesheet" href="/vendor/icons/bootstrap-icons.min.css">
+    <style>
+        body { background: #f6f7f9; }
+        mark { background: #ffe58a; padding: 0 .1em; }
+        .ask { font-size: 1.1rem; font-weight: 600; }
+        .document { max-height: 80vh; overflow-y: auto; }
+        .passage { margin-bottom: .6rem; }
+        .heading-line { color: #6c757d; font-size: .8rem; }
+        .headline { font-weight: 600; margin-top: .8rem; }
+        .members { max-height: 42vh; overflow-y: auto; }
+        .evidence { max-height: 32vh; overflow-y: auto; }
+        .member { border-bottom: 1px solid #eee; padding: .35rem 0; }
+        .member:last-child { border-bottom: 0; }
+        .alt { background: #f8f9fa; border-radius: .25rem; padding: .15rem .4rem; margin-top: .2rem; }
+        .statement { background: #fffbe6; border-left: 3px solid #f0c000; padding: .5rem .75rem; }
+        .decide { position: sticky; bottom: 0; background: #fff; margin-top: 1rem; padding: .75rem 0 .25rem; border-top: 1px solid #dee2e6; z-index: 5; }
+        mark.datum { background: #ffd166; font-weight: 600; padding: 0 .15em; }
+        .crit-label { font-size: .85rem; color: #495057; min-width: 11rem; }
+        kbd { font-size: .72rem; }
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body>
+<div id="app" class="container-fluid py-3" v-cloak>
+    <nav class="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <h1 class="h5 m-0">Review of aggregated concerns</h1>
+        <span class="text-secondary small" v-if="progress">{{ progress.calibration }} · {{ progress.reviewed }}/{{ progress.total }} judged
+            ({{ progress.counts.agree }} agree, <span v-if="progress.counts.partly">{{ progress.counts.partly }} partly, </span>{{ progress.counts.disagree }} disagree, {{ progress.counts.unsure }} unsure)</span>
+        <div class="flex-grow-1" style="min-width: 160px">
+            <div class="progress" style="height: .5rem" v-if="progress">
+                <div class="progress-bar" :style="{width: (100 * progress.reviewed / progress.total) + '%'}"></div>
+            </div>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" @click="help = !help"><i class="bi bi-question-circle"></i> Help</button>
+    </nav>
+
+    <div class="alert alert-info small" v-if="help">
+        <p class="mb-1"><b>What you judge.</b> Each unit is one <i>aggregated concern</i>: concerns E raised that share a
+            requirement, a step, a status and a key (a data type and purpose, a declared purpose, a declaration the
+            processing contradicts, or a requirement on the documents). You see E's statement, its members, what it rests on and the provider's documents, and judge whether
+            E is right <i>as it states it</i>. Which model produced the unit is not shown.</p>
+        <ul class="mb-1">
+            <li><b>Evidence</b> (<kbd>1</kbd>–<kbd>4</kbd>): the evidence exists and is cited correctly: yes, partly, no, or none cited.
+                Each evidence item names its source (the practice as observed, traffic as captured, a screen of the app, the
+                provider's documents, documentation or a legal norm from E's corpus, E's expectation stage); a text several
+                members cite is shown once, with how many cite it.
+                <i>Yes</i>: every item exists and says what E takes it to say. <i>Partly</i>: some items do not, or one
+                sentence is cut into fragments that are counted as separate evidence. <i>No</i>: the items the conclusion
+                rests on do not exist or do not say it.</li>
+            <li><b>Follows</b> (<kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd>): E's conclusion follows from that evidence: yes, partly, no.
+                <i>Partly</i>: it follows for some members and not for others, or the conclusion is right but one step
+                to it is wrong. A proposed alternative (data minimisation) counts only if it would still serve the purpose
+                as stated: an identifier that cannot do what the purpose needs is no alternative, however narrow it is.</li>
+            <li><b>Phrases</b>, for declared purposes: mark each phrase specific, not specific or unsure; <kbd>N</kbd> marks all not
+                specific. Where E holds the phrases not specific, your verdict is derived from them (all as E says: agree; none:
+                disagree; some: partly), and you save with <b>Save</b> (<kbd>S</kbd>).
+                Read a phrase with the sentence or table row it stands in, and with what that sentence directly introduces
+                or illustrates (the list after it, the example that follows) or explicitly refers to; not with explanations
+                found elsewhere in the policy. Fragments of one sentence get the same answer as the sentence. A phrase that
+                is not a purpose at all (a heading, a feature name, a negation, a definition): <i>unsure</i>, and say so in
+                the note.</li>
+            <li><b>Your verdict</b> on the concern as stated (every unit but declared purposes E holds not specific), after the
+                criteria, which explain it: <b>Agree</b> (<kbd>A</kbd>), <b>Disagree</b> (<kbd>D</kbd>), <b>Unsure</b>
+                (<kbd>U</kbd>, left out of the rates; say why in the note). A status "not established" is E saying it could not
+                establish the concern: agree if that is the right call.
+                <ul>
+                    <li><b>Several members</b>: agree if the concern holds for at least half of them; name the others in the
+                        note.</li>
+                    <li><b>Not established</b> is the right call unless the unit itself shows what E needed (e.g. a cited
+                        passage that documents the alternative). If other units seem to decide the same question
+                        differently, say so in the note; do not let it change this verdict.</li>
+                    <li><b>Conditional concerns</b> (e.g. "if a DPO is designated", "if automated decisions are made"): take
+                        the condition as given and judge whether the documents lack what the concern says. If you think the
+                        condition does not apply to this app, say so in the note.</li>
+                    <li><b>Contradicted declarations</b> (a declaration in which the provider denies something, and practices
+                        observed that E holds contradict it): agree if at least one practice listed is something the
+                        declaration, read with its own sentence, denies. Judge the provider's sentence, not the label D
+                        gave it (its data type or recipient may be wrong): if the sentence denies nothing the practices
+                        do, disagree, and say so in the note. A denial of collecting or sharing is not contradicted by
+                        processing that stays on the device. Under a condition (e.g. "the recipient is not a service
+                        provider"), take it as given.</li>
+                    <li><b>Incomplete documents</b>: where a document is visibly incomplete (e.g. a policy captured only as its
+                        headings) and the concern rests on what it does not say, answer <i>unsure</i>.</li>
+                </ul></li>
+            <li>Some units are shown <b>blind first</b>: subject and question only. Decide <b>Fails</b> (<kbd>F</kbd>),
+                <b>Holds</b> (<kbd>H</kbd>) or <b>Unsure</b> (<kbd>U</kbd>) before E's output is revealed; the blind decision
+                cannot be changed afterwards.</li>
+            <li><b>Recall pass</b> (<kbd>R</kbd>): once every unit of an application is judged, note what E should have raised
+                for it and did not.</li>
+            <li><kbd>←</kbd> <kbd>→</kbd> previous and next unit, <kbd>O</kbd> next open unit, <kbd>V</kbd> show or hide the
+                evidence, <kbd>/</kbd> search the document.</li>
+            <li>Values in <code>code type</code> (a data type, a purpose node) open their vocabulary when clicked: the tree with
+                the value selected, its description, the broader node, the nodes alongside it and the narrower ones.</li>
+        </ul>
+    </div>
+
+    <div class="alert alert-warning d-flex align-items-center gap-2 small" v-if="recallDue && !recallOpen">
+        <i class="bi bi-search"></i> Every unit of <b>{{ item.application }}</b> is judged: the recall pass for it is open.
+        <button class="btn btn-sm btn-warning ms-auto" @click="openRecall()">Recall pass <kbd>R</kbd></button>
+    </div>
+
+    <div class="card shadow-sm mb-3" v-if="recallOpen && recall">
+        <div class="card-body">
+            <div class="d-flex justify-content-between">
+                <h2 class="h6">Recall pass: {{ recall.application }}</h2>
+                <button class="btn-close" @click="recallOpen = false"></button>
+            </div>
+            <p class="small text-secondary mb-2">What should E have raised for this application and did not? Scan its practices and
+                declared purposes against the frame; add one line per miss. {{ recall.units_decided }}/{{ recall.units }} of its units judged.</p>
+            <div class="row g-3">
+                <div class="col-md-6 small">
+                    <b>Practices observed</b>
+                    <div class="members border rounded p-2 mt-1">
+                        <div v-for="p in recall.practices" class="d-flex gap-2">
+                            <vocab-term kind="data" :id="p.data"></vocab-term><span class="text-secondary">{{ p.type }}</span><span>{{ p.recipient || 'on the device' }}</span>
+                            <button class="btn btn-sm btn-link p-0 ms-auto" @click="addMiss(p.id + ' ' + p.data + ' → ' + (p.recipient || 'device'))">miss</button>
+                        </div>
+                    </div>
+                    <b class="d-block mt-2">Declared purposes (D's nodes)</b>
+                    <div class="mt-1">{{ recall.declared_nodes.join(', ') }}</div>
+                </div>
+                <div class="col-md-6 small">
+                    <b>Misses</b>
+                    <div v-for="(m, i) in recall.recall.missed" class="row g-1 mb-1">
+                        <div class="col-4"><select class="form-select form-select-sm" v-model="m.requirement">
+                            <option value="">requirement…</option><option v-for="r in requirementsList" :value="r">{{ r }}</option></select></div>
+                        <div class="col-3"><input class="form-control form-control-sm" v-model="m.subject" placeholder="subject" @keydown.stop></div>
+                        <div class="col-4"><input class="form-control form-control-sm" v-model="m.note" placeholder="what E missed" @keydown.stop></div>
+                        <div class="col-1"><button class="btn btn-sm btn-outline-danger" @click="recall.recall.missed.splice(i, 1)"><i class="bi bi-x"></i></button></div>
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary" @click="addMiss('')"><i class="bi bi-plus"></i> Add a miss</button>
+                    <textarea class="form-control form-control-sm mt-2" rows="2" v-model="recall.recall.note" placeholder="Note on the pass (optional)" @keydown.stop></textarea>
+                    <div class="d-flex gap-2 mt-2">
+                        <button class="btn btn-sm btn-outline-primary" @click="saveRecall(false)">Save</button>
+                        <button class="btn btn-sm btn-primary" @click="saveRecall(true)">Save, pass done</button>
+                        <span v-if="recall.recall.done" class="badge text-bg-success align-self-center">done</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3" v-if="item">
+        <div class="col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="text-secondary small">unit {{ item.index + 1 }} of {{ item.total }} · {{ item.id }} · {{ item.application }}</span>
+                        <span>
+                            <span v-if="item.blind_first" class="badge text-bg-info me-1">blind first</span>
+                            <span v-if="item.review && item.review.overall" class="badge" :class="overallClass(item.review.overall)">{{ item.review.overall }}</span>
+                        </span>
+                    </div>
+                    <div class="mt-2"><b>{{ item.requirement.title }}</b></div>
+                    <div class="small text-secondary">{{ item.requirement.principle.replace('_', ' ') }} · {{ item.requirement.provisions.join(', ') }}</div>
+                    <div class="small mt-2" v-if="item.question"><span class="text-secondary">The frame's question:</span> {{ item.question }}</div>
+
+                    <!-- blind first: the subject only -->
+                    <template v-if="item.blind_now">
+                        <div class="alert alert-info small mt-3 mb-2">Shown blind first: decide from the subject and the documents, before E's output is revealed.</div>
+                        <div class="members">
+                            <div v-for="m in item.members" class="member small">
+                                <template v-if="m.statement"><span class="statement d-block">“{{ m.statement }}”</span></template>
+                                <template v-else-if="m.data"><vocab-term kind="data" :id="m.data"></vocab-term> → {{ m.recipient || 'on the device' }} <span v-if="m.purpose" class="text-secondary">for <vocab-term kind="purpose" :id="m.purpose"></vocab-term></span></template>
+                                <template v-else-if="m.subject === 'collection'">The subject is the app's collection of documents (right): its privacy policy, Data safety section and store listing, as acquired.</template>
+                                <template v-else>{{ m.subject }}</template>
+                            </div>
+                        </div>
+                        <div class="decide">
+                            <textarea class="form-control form-control-sm" rows="2" placeholder="Note on the blind decision (optional)" v-model="blindNote" @keydown.stop></textarea>
+                            <div class="d-flex gap-2 mt-2">
+                                <button class="btn btn-danger" @click="saveBlind('fails')">Fails <kbd>F</kbd></button>
+                                <button class="btn btn-success" @click="saveBlind('holds')">Holds <kbd>H</kbd></button>
+                                <button class="btn btn-outline-secondary" @click="saveBlind('unsure')">Unsure <kbd>U</kbd></button>
+                            </div>
+                            <div class="d-flex gap-2 mt-2">
+                                <button class="btn btn-sm btn-outline-dark" @click="go(item.index - 1)" :disabled="item.index === 0"><i class="bi bi-arrow-left"></i></button>
+                                <button class="btn btn-sm btn-outline-dark" @click="go(item.index + 1)" :disabled="item.index + 1 >= item.total"><i class="bi bi-arrow-right"></i></button>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template v-else>
+                        <div class="ask mt-3">{{ item.ask }}</div>
+                        <div class="border rounded p-2 mt-2">
+                            <div class="d-flex flex-wrap gap-2 align-items-center">
+                                <span class="badge" :class="statusClass(item.status)" :title="statusTitle(item.status)">E: concern {{ item.status.replace('_', ' ') }}</span>
+                                <span class="badge text-bg-light border" :title="tierTitle(item.tier)">{{ item.tier }} tier</span>
+                                <span class="small text-secondary" title="E's own uncertainty about the concern: semantic (reading the data and purposes), normative (applying the requirement)">E's uncertainty: semantic {{ item.uncertainty.s }}, normative {{ item.uncertainty.n }}</span>
+                                <span v-if="item.disagreeing" class="small text-danger">samples disagreed on {{ item.disagreeing }} member(s)</span>
+                            </div>
+                            <div class="fw-semibold mt-1">{{ item.label }}</div>
+                            <div v-if="item.condition && item.condition.length" class="small text-secondary">only if: {{ item.condition.join(', ') }}</div>
+                            <div v-if="item.blind_first && item.review && item.review.blind" class="small mt-1 text-secondary">Your blind decision: <b>{{ item.review.blind.decision }}</b></div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <b class="small">{{ item.members.length }} {{ item.members.length === 1 ? 'member' : 'members' }}<span class="fw-normal text-secondary"> (the concerns this unit aggregates)</span></b>
+                            <button v-if="item.kind === 'declared'" class="btn btn-sm btn-outline-secondary" @click="allNotSpecific()">all not specific <kbd>N</kbd></button>
+                        </div>
+                        <div class="members mt-1">
+                            <div v-for="m in item.members" class="member small" :key="m.concern">
+                                <template v-if="item.kind === 'declared'">
+                                    <div class="d-flex gap-2 align-items-start">
+                                        <span class="statement flex-grow-1" @click="query = m.statement" role="button" title="search the documents for it">“{{ m.statement }}”</span>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn" :class="phrases[m.concern] === 'specific' ? 'btn-success' : 'btn-outline-success'" @click="setPhrase(m.concern, 'specific')">specific</button>
+                                            <button class="btn" :class="phrases[m.concern] === 'not_specific' ? 'btn-danger' : 'btn-outline-danger'" @click="setPhrase(m.concern, 'not_specific')">not specific</button>
+                                            <button class="btn" :class="phrases[m.concern] === 'unsure' ? 'btn-secondary' : 'btn-outline-secondary'" @click="setPhrase(m.concern, 'unsure')">unsure</button>
+                                        </div>
+                                    </div>
+                                    <div class="text-secondary">{{ m.reason }}</div>
+                                </template>
+                                <template v-else-if="item.kind === 'contradicted'">
+                                    <span v-if="m.statement" class="statement d-block" @click="query = m.statement" role="button" title="search the documents for it">“{{ m.statement }}”</span>
+                                    <div v-if="m.declaration" class="text-secondary">D read it as: {{ m.declaration.polarity === '-' ? 'denies' : 'declares' }}
+                                        <vocab-term v-if="m.declaration.data" kind="data" :id="m.declaration.data"></vocab-term><span v-if="m.declaration.recipient"> → {{ recipientText(m.declaration.recipient) }}</span>
+                                        <span class="ms-1">(in the {{ channelText(m.declaration.channel) }}<span v-if="!m.statement">, which gives no sentence for it: read it on the right</span>)</span></div>
+                                    <div class="mt-1">{{ m.reason.replace(/^".*": /s, '') }}:</div>
+                                    <div class="members border rounded p-1" style="max-height: 14rem">
+                                        <div v-for="p in (m.contradicted_by || [])" class="ps-1">
+                                            <vocab-term kind="data" :id="p.data"></vocab-term> → <b>{{ p.recipient || 'on the device' }}</b>
+                                            <span class="text-secondary ms-1">({{ (p.type || '').replace('_', ' ') }}; contradicts it on the {{ p.aspect }})</span>
+                                            <div v-if="p.condition" class="text-secondary ps-3">if {{ p.condition }}</div>
+                                        </div>
+                                    </div>
+                                </template>
+                                <template v-else-if="m.data">
+                                    <div><vocab-term kind="data" :id="m.data"></vocab-term> → <b>{{ m.recipient || 'on the device' }}</b> for <vocab-term kind="purpose" :id="m.purpose"></vocab-term>
+                                        <span class="text-secondary ms-2 text-nowrap" style="font-size: .72rem" title="the practice's id">{{ m.subject }}</span></div>
+                                    <div v-if="m.purpose_stated" class="text-secondary">E's purpose: {{ m.purpose_stated.action }} {{ m.purpose_stated.object }}<span v-if="m.purpose_stated.outcome">, to {{ m.purpose_stated.outcome }}</span></div>
+                                    <div v-for="a in (m.alternatives || [])" class="alt">
+                                        <i class="bi bi-arrow-return-right"></i> less invasive alternative: {{ a.alternative }}
+                                        <span class="text-secondary">· E: {{ a.status.replace('_', ' ') }}<span v-if="a.level">, {{ a.level.replace('_', ' ') }}</span><span v-if="a.component">; it would change the {{ a.component }}</span></span>
+                                        <div v-if="a.reason" class="text-secondary">{{ a.reason }}</div>
+                                    </div>
+                                    <div v-if="m.specified" class="text-secondary">purposes the provider specifies for its data: {{ m.specified.join(', ') || 'none' }}</div>
+                                    <div>{{ m.reason }}</div>
+                                </template>
+                                <template v-else>
+                                    <div>{{ m.reason }}</div>
+                                    <div v-if="(m.silence || []).length" class="text-secondary mt-1">What the analysis of the documents (D) found:</div>
+                                    <div v-for="s in (m.silence || [])" class="text-secondary ps-2">· {{ s.replace(/^D: /, '') }}</div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="mt-2">
+                            <div v-if="!item.evidence.length && item.kind === 'contradicted'" class="small text-secondary">The concern rests on
+                                D's reading of the declaration and O's observation of the practices listed above; the declaration has no
+                                sentence of its own to show here, so read it in the documents (right).</div>
+                            <div v-else-if="!item.evidence.length" class="small text-secondary">E cites no evidence item for this concern: it rests
+                                on the documents' silence (above) and the documents themselves (right).</div>
+                            <template v-else>
+                            <button class="btn btn-sm btn-outline-secondary" @click="evidenceShown = !evidenceShown">
+                                <i class="bi" :class="evidenceShown ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                                What E's members rest on: {{ item.evidence.length }} evidence {{ item.evidence.length === 1 ? 'item' : 'items' }} <kbd>V</kbd>
+                            </button>
+                            <div v-if="evidenceShown" class="evidence mt-2">
+                                <div v-for="e in item.evidence" class="border-start border-3 ps-2 mb-2 small">
+                                    <div class="text-secondary"><b>{{ e.source || e.kind }}</b><span v-if="item.members.length > 1"> · cited by {{ e.members.length }} of {{ item.members.length }} members</span></div>
+                                    <div class="text-break" v-html="e.source === 'traffic as captured' ? traffic(e.text) : escapeHtml(e.text)"></div>
+                                </div>
+                            </div>
+                            </template>
+                        </div>
+
+                        <div class="decide">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <span class="crit-label">Evidence exists, cited correctly</span>
+                                <div class="btn-group btn-group-sm">
+                                    <button v-for="(v, i) in EVIDENCE" class="btn" :class="evidence === v ? 'btn-primary' : 'btn-outline-primary'" @click="evidence = v">{{ v.replace('_', ' ') }} <kbd>{{ i + 1 }}</kbd></button>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="crit-label">E's conclusion follows from that evidence</span>
+                                <div class="btn-group btn-group-sm">
+                                    <button v-for="(v, i) in FOLLOWS" class="btn" :class="follows === v ? 'btn-primary' : 'btn-outline-primary'" @click="follows = v">{{ v }} <kbd>{{ 'QWE'[i] }}</kbd></button>
+                                </div>
+                            </div>
+                            <textarea class="form-control form-control-sm" rows="2" placeholder="Note (say why if you disagree or are unsure)" v-model="note" @keydown.stop></textarea>
+                            <div v-if="derived" class="small text-secondary mt-2">For declared purposes your verdict is your judgment of the
+                                phrases: it agrees with E where you marked a phrase not specific, and is derived from them when you save.</div>
+                            <div v-else class="mt-2"><b class="small">Your verdict on the concern as stated</b>
+                                <span class="small text-secondary"> (its status, label and members; the criteria above explain your verdict, they do not replace it)</span></div>
+                            <div class="d-flex flex-wrap gap-2 mt-1 align-items-center">
+                                <template v-if="derived">
+                                    <button class="btn btn-primary" :disabled="!ready" @click="save(null)"><i class="bi bi-check-lg"></i> Save <kbd>S</kbd></button>
+                                    <span v-if="ready" class="small">verdict from the phrases: <span class="badge" :class="overallClass(derivedVerdict)">{{ derivedVerdict }}</span></span>
+                                </template>
+                                <template v-else>
+                                    <button class="btn btn-success" :disabled="!ready" @click="save('agree')"><i class="bi bi-check-lg"></i> Agree <kbd>A</kbd></button>
+                                    <button class="btn btn-danger" :disabled="!ready" @click="save('disagree')"><i class="bi bi-x-lg"></i> Disagree <kbd>D</kbd></button>
+                                    <button class="btn btn-outline-secondary" :disabled="!ready" @click="save('unsure')">Unsure <kbd>U</kbd></button>
+                                </template>
+                                <span v-if="!ready" class="small text-secondary">{{ missing }}</span>
+                                <button class="btn btn-outline-secondary ms-auto" v-if="item.review && item.review.overall" @click="reset()" title="Remove the judgment"><i class="bi bi-arrow-counterclockwise"></i></button>
+                            </div>
+                            <div class="d-flex gap-2 mt-2">
+                                <button class="btn btn-sm btn-outline-dark" @click="go(item.index - 1)" :disabled="item.index === 0"><i class="bi bi-arrow-left"></i></button>
+                                <button class="btn btn-sm btn-outline-dark" @click="go(item.index + 1)" :disabled="item.index + 1 >= item.total"><i class="bi bi-arrow-right"></i></button>
+                                <button class="btn btn-sm btn-outline-dark" @click="nextOpen()">Next open <kbd>O</kbd></button>
+                                <button class="btn btn-sm btn-outline-dark" @click="openRecall()">Recall pass <kbd>R</kbd></button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div v-if="!item.documents.length" class="text-secondary">No documents were acquired for this application.</div>
+                    <template v-else>
+                        <ul class="nav nav-tabs mb-2">
+                            <li class="nav-item" v-for="d in item.documents" :key="d.file">
+                                <a class="nav-link" :class="{active: d.file === shown}" href="#" @click.prevent="show(d.file)">
+                                    {{ titles[d.channel] || d.channel }}
+                                    <span v-if="d.status !== 'analysed'" class="badge text-bg-warning ms-1" :title="'D: ' + d.status">{{ d.status.replace('_', ' ') }}</span>
+                                </a>
+                            </li>
+                        </ul>
+                        <input ref="search" class="form-control form-control-sm mb-2" placeholder="Search the document (/)" v-model="query" @keydown.esc="$event.target.blur()" @keydown.stop>
+                        <div class="document" ref="document">
+                            <template v-if="kind === 'passages'">
+                                <div v-for="(p, i) in document.passages" class="passage" :class="{headline: p.type === 'headline'}">
+                                    <div class="heading-line" v-if="p.type !== 'headline' && crumb(p) && crumb(p) !== crumb(document.passages[i - 1])">{{ crumb(p) }}</div>
+                                    <div v-html="mark(p.passage)"></div>
+                                </div>
+                            </template>
+                            <template v-else-if="kind === 'data_safety'">
+                                <p v-if="!document.provided">The developer provides no Data safety section.</p>
+                                <template v-for="part in ['collected', 'shared']">
+                                    <h2 class="h6 mt-2">Data {{ part }}</h2>
+                                    <p v-if="document[part] && document[part].none" class="small">No data {{ part }}.</p>
+                                    <table v-else-if="document[part]" class="table table-sm small">
+                                        <thead><tr><th>Category</th><th>Type</th><th>Purposes</th><th>Optional</th></tr></thead>
+                                        <tbody><tr v-for="x in document[part].items"><td>{{ x.category }}</td><td v-html="mark(x.type)"></td><td>{{ (x.purposes || []).join(', ') }}</td><td>{{ x.optional ? 'yes' : '' }}</td></tr></tbody>
+                                    </table>
+                                </template>
+                            </template>
+                            <pre v-else class="small" v-html="mark(JSON.stringify(document, null, 1))"></pre>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div v-else-if="progress" class="text-secondary">Loading…</div>
+    <vocab-browser v-if="browser" :vocab="vocabs[browser.kind]" :mode="browser.mode" :initial="browser.initial" :title="browser.title"
+                   @close="browser = null"></vocab-browser>
+</div>
+<script type="module">
+import {createApp, nextTick} from '/vendor/vue.js';
+import {useVocabularies, loadVocabularies, TITLES} from '/vocab.js';
+const titles = {policy: 'Privacy policy', data_safety: 'Data safety', listing: 'Store listing', in_app: 'In-app notices'};
+const EVIDENCE = ['yes', 'partly', 'no', 'none_cited'];
+const FOLLOWS = ['yes', 'partly', 'no'];
+const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
+const app = createApp({
+    provide() { return {openVocab: (kind, id) => this.openVocab(kind, id)}; },
+    data: () => ({vocabs: {purpose: [], data: []}, browser: null, progress: null, item: null, help: false, shown: null, document: {}, query: '', titles, EVIDENCE, FOLLOWS,
+                  evidence: null, follows: null, phrases: {}, note: '', blindNote: '', evidenceShown: true,
+                  recall: null, recallOpen: false, recallDue: false}),
+    computed: {
+        kind() {
+            if (this.document.passages) return 'passages';
+            if ('collected' in this.document || 'provided' in this.document) return 'data_safety';
+            return 'other';
+        },
+        // the criteria come before the overall judgment; for declared purposes, every phrase too
+        missing() {
+            if (!this.item || this.item.blind_now) return '';
+            const left = [];
+            if (!this.evidence) left.push('evidence exists');
+            if (!this.follows) left.push("E's conclusion follows");
+            if (this.item.kind === 'declared' && this.item.members.some(m => !this.phrases[m.concern])) left.push('each phrase');
+            return left.length ? 'To decide, first answer: ' + left.join(', ') : '';
+        },
+        ready() { return !this.missing; },
+        // declared purposes that E holds not specific: the verdict is the phrases' (agree, disagree, partly, unsure)
+        derived() { return !!this.item && this.item.kind === 'declared' && this.item.status === 'supported'; },
+        derivedVerdict() {
+            if (!this.derived) return null;
+            const judged = this.item.members.map(m => this.phrases[m.concern]).filter(v => v === 'specific' || v === 'not_specific');
+            if (!judged.length) return 'unsure';
+            const agree = judged.filter(v => v === 'not_specific').length;
+            return agree === judged.length ? 'agree' : agree === 0 ? 'disagree' : 'partly';
+        },
+        requirementsList() {
+            return ['information_not_given (documents)', 'not_specific (declared purpose)', 'no_specified_purpose (practice)', 'less_invasive_alternative (practice)', 'declaration_contradicted (declaration)', 'other'];
+        },
+    },
+    methods: {
+        recipientText(r) {
+            if (typeof r !== 'object' || r === null) return r;
+            const role = r.role ? r.role.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase() : '';
+            return r.name || role || (r.categories || []).join(', ') || 'a recipient';
+        },
+        channelText(c) { return {policy: 'privacy policy', data_safety: 'Data safety section', listing: 'store listing'}[c] || c; },
+        openVocab(kind, id) { this.browser = {kind, mode: 'view', initial: id, title: TITLES[kind]}; },
+        async api(path, options) {
+            const response = await fetch('/api' + path, options);
+            if (!response.ok) { const t = await response.text(); alert(t); throw new Error(t); }
+            return response.json();
+        },
+        async go(index) {
+            if (!this.progress || index < 0 || index >= this.progress.total) return;
+            this.item = await this.api(`/items/${index}`);
+            const r = this.item.review || {};
+            this.evidence = r.evidence || null;
+            this.follows = r.follows || null;
+            this.phrases = {...(r.phrases || {})};
+            this.note = r.note || '';
+            this.blindNote = '';
+            this.query = this.item.kind === 'declared' && this.item.members.length ? (this.item.members[0].statement || '') : '';
+            const policy = this.item.documents.find(d => d.channel === 'policy') || this.item.documents[0];
+            if (policy) await this.show(policy.file);
+            await this.checkRecall();
+        },
+        async show(file) {
+            this.shown = file;
+            const response = await fetch('/' + file);
+            this.document = response.ok ? await response.json() : {};
+            nextTick(() => {
+                const first = this.$refs.document && this.$refs.document.querySelector('mark');
+                if (first) first.scrollIntoView({block: 'center'});
+                else if (this.$refs.document) this.$refs.document.scrollTop = 0;
+            });
+        },
+        crumb: p => (p && p.context ? p.context.map(c => c.text).join(' › ') : ''),
+        mark(text) {
+            const html = escape(text);
+            const q = this.query.trim();
+            if (q.length < 3) return html;
+            const pattern = new RegExp(escape(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+            return html.replace(pattern, m => `<mark>${m}</mark>`);
+        },
+        escapeHtml: t => escape(t),
+        traffic: t => escape(t).replace(/«([^»]*)»/g, '<mark class="datum">$1</mark>'),
+        setPhrase(concern, value) { this.phrases = {...this.phrases, [concern]: value}; },
+        allNotSpecific() {
+            if (this.item.kind !== 'declared') return;
+            this.phrases = Object.fromEntries(this.item.members.map(m => [m.concern, 'not_specific']));
+        },
+        async saveBlind(decision) {
+            this.progress = await this.api(`/reviews/${this.item.id}`, {
+                method: 'PUT', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({blind: {decision, note: this.blindNote}}),
+            });
+            await this.go(this.item.index);  // now with E's output
+        },
+        async save(overall) {
+            if (!this.ready) return;
+            if (this.derived) overall = undefined;  // the server derives it from the phrases
+            else if (!overall) return;
+            const body = {overall, evidence: this.evidence, follows: this.follows, note: this.note};
+            if (this.item.kind === 'declared') body.phrases = this.phrases;
+            this.progress = await this.api(`/reviews/${this.item.id}`, {
+                method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+            });
+            await this.checkRecall();
+            if (this.recallDue) { await this.go(this.item.index); return; }
+            await this.nextOpen();
+        },
+        async reset() {
+            this.progress = await this.api(`/reviews/${this.item.id}`, {method: 'DELETE'});
+            await this.go(this.item.index);
+        },
+        async nextOpen() {
+            const {index} = await this.api(`/next-open?after=${this.item ? this.item.index : -1}`);
+            if (index === null) { alert('Every unit has a judgment.'); return; }
+            await this.go(index);
+        },
+        async checkRecall() {
+            if (!this.item) return;
+            const r = await this.api(`/recall/${encodeURIComponent(this.item.application)}`);
+            this.recallDue = r.units_decided === r.units && !r.recall.done;
+            if (this.recallOpen) this.recall = r;
+        },
+        async openRecall() {
+            this.recall = await this.api(`/recall/${encodeURIComponent(this.item.application)}`);
+            this.recallOpen = true;
+        },
+        addMiss(subject) { this.recall.recall.missed.push({requirement: '', subject, note: ''}); },
+        async saveRecall(done) {
+            const r = this.recall.recall;
+            const missed = r.missed.filter(m => m.note.trim());
+            r.missed = missed;
+            this.recall.recall = await this.api(`/recall/${encodeURIComponent(this.recall.application)}`, {
+                method: 'PUT', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({missed, done, note: r.note || ''}),
+            });
+            if (done) { this.recallOpen = false; this.recallDue = false; await this.nextOpen(); }
+        },
+        statusTitle: s => ({supported: 'E raises the concern: its evidence shows the requirement is not met',
+                            not_established: 'E could not establish the concern from its evidence; agree if that is the right call',
+                            not_assessable: 'E could not judge the requirement'})[s] || s,
+        tierTitle: t => ({rule: 'decided by a fixed rule over the documents and observations, without a model',
+                          reasoning: "judged by E's model from the documents, the observations and the corpus"})[t] || t,
+        statusClass: s => ({supported: 'text-bg-danger', not_established: 'text-bg-warning', not_assessable: 'text-bg-secondary'})[s] || 'text-bg-secondary',
+        overallClass: d => ({agree: 'text-bg-success', disagree: 'text-bg-danger', partly: 'text-bg-warning', unsure: 'text-bg-secondary'})[d],
+        key(event) {
+            if (this.browser) { if (event.key === 'Escape') this.browser = null; return; }  // a vocabulary is open: no shortcuts
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') return;
+            if (!this.item) return;
+            const k = event.key;
+            let action;
+            if (this.item.blind_now) {
+                action = {f: () => this.saveBlind('fails'), h: () => this.saveBlind('holds'), u: () => this.saveBlind('unsure')}[k];
+            } else {
+                const evidence = {1: 0, 2: 1, 3: 2, 4: 3}[k];
+                const follows = {q: 0, w: 1, e: 2}[k];
+                if (evidence !== undefined) action = () => (this.evidence = EVIDENCE[evidence]);
+                else if (follows !== undefined) action = () => (this.follows = FOLLOWS[follows]);
+                else if (this.derived) action = {s: () => this.save(null), n: () => this.allNotSpecific(),
+                               v: () => (this.evidenceShown = !this.evidenceShown), r: () => this.openRecall(), o: () => this.nextOpen()}[k];
+                else action = {a: () => this.save('agree'), d: () => this.save('disagree'), u: () => this.save('unsure'),
+                               n: () => this.allNotSpecific(), v: () => (this.evidenceShown = !this.evidenceShown),
+                               r: () => this.openRecall(), o: () => this.nextOpen()}[k];
+            }
+            action = action || {ArrowLeft: () => this.go(this.item.index - 1), ArrowRight: () => this.go(this.item.index + 1),
+                                '/': () => this.$refs.search && this.$refs.search.focus()}[k];
+            if (action) { event.preventDefault(); action(); }
+        },
+    },
+    async mounted() {
+        this.progress = await this.api('/progress');
+        this.vocabs = await loadVocabularies(path => this.api(path));
+        const asked = Number(new URLSearchParams(location.search).get('item'));
+        const {index} = await this.api('/resume');
+        await this.go(asked ? asked - 1 : index || 0);
+        window.addEventListener('keydown', this.key);
+    },
+});
+useVocabularies(app);
+app.mount('#app');
+</script>
+</body>
+</html>

@@ -109,6 +109,29 @@ def test_a_run_of_another_version_is_outside_the_scope(tmp_path):
     assert report["cases"][0]["excluded"]["run-01"].startswith("outside the case's scope")
 
 
+def test_a_run_of_a_version_the_author_states_compatible_is_in_the_scope(tmp_path):
+    """CamScanner, 12 Nov 2026: Play installed 7.28.5 for cases of 7.27.5; the author stated them compatible."""
+    import yaml
+
+    root = ws.build(tmp_path, freeze=False)
+    record = root / "runs" / "run-01" / "run.json"
+    meta = json.loads(record.read_text(encoding="utf-8"))
+    meta["app"] = {"version_name": "2.0"}
+    record.write_text(json.dumps(meta))
+    version = str(inputs.load(root).application["version"])
+    statement = {
+        "versions": [version, "2.0"],
+        "reason": "r",
+        "author": {"kind": "human", "id": "a"},
+        "fixed": "2026-11-12",
+    }
+    (root / "assessment.yaml").write_text(yaml.safe_dump({"compatible_versions": [statement]}))
+    inputs.freeze(root, ws.AUTHOR, now=datetime.fromisoformat(ws.FIXED))
+    case = analyse(inputs.load(root), make_observations=False)["cases"][0]
+    assert "run-01" not in case["excluded"]
+    assert case["scope"]["observation"]["compatible_versions"][0]["versions"] == [version, "2.0"]
+
+
 def test_an_alternative_whose_intervention_imposes_nothing_is_not_tested(tmp_path):
     root = ws.build(tmp_path, freeze=False)
     case = root / "cases" / "start.yaml"
@@ -226,6 +249,13 @@ def test_runs_made_before_the_inputs_were_fixed_judge_nothing(tmp_path):
     assert all(v == "made before the case's inputs were fixed" for v in report["cases"][0]["excluded"].values())
 
 
+def test_a_fixed_input_removed_without_a_record_is_refused(tmp_path):
+    root = ws.build(tmp_path)
+    (root / "cases" / "start.yaml").unlink()  # its oracle stays, unused
+    with pytest.raises(inputs.InputError, match="cases/start.yaml was removed without a record"):
+        inputs.check_frozen(inputs.load(root))
+
+
 def test_an_input_changed_without_a_record_is_refused_and_a_recorded_change_is_reported(tmp_path):
     root = ws.build(tmp_path)
     oracle = root / "oracles" / "O@1.yaml"
@@ -308,3 +338,23 @@ def test_a_case_its_qualifying_replay_did_not_qualify_is_not_judged(tmp_path):
     problems = {a["id"]: a["problems"] for a in report["cases"][0]["scope"]["search_space"]}
     assert set(problems) == {"A1", "A2"}
     assert all("did not qualify: O@1 decides unmet" in p[0] for p in problems.values())
+
+
+def test_a_recipient_no_baseline_run_reaches_is_not_compared_and_its_claims_are_not_applicable(tmp_path):
+    """C2 (author, 14 Nov 2026): an intervention that varies nothing on the case's path decides nothing."""
+    root = ws.build(tmp_path, freeze=False)
+    for line in (root / "runs.jsonl").read_text(encoding="utf-8").splitlines():
+        entry = json.loads(line)
+        if entry["condition"] == "baseline":
+            path = root / "observation" / entry["run"] / "observation_report.json"
+            report = json.loads(path.read_text(encoding="utf-8"))
+            report["claims"] = [c for c in report["claims"] if c["id"] != "t2"]  # no transmission to the tracker
+            path.write_text(json.dumps(report))
+    inputs.freeze(root, ws.AUTHOR, now=datetime.fromisoformat(ws.FIXED))
+    workspace = inputs.load(root)
+    report = analyse(workspace, make_observations=False)
+    validate("expectation_report", report)
+    assert {k["alternative"] for k in report["comparisons"]} == {"A1"}
+    made = [c for m in case_claims(workspace, report).values() for c in m]
+    assert {c.status for c in made if c.component == "tracker" and c.purpose == "P1"} == {"not_applicable"}
+    assert claim(made, "alternative", "P1", alternative="A1").status == "supported"

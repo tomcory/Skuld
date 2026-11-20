@@ -4,8 +4,11 @@ they are of one type, about aligned purposes and the same subject and component 
 experiment, the same alternative); related claims that agree in status are corroborated into one combined claim that
 cites them; where they disagree, the claim of greatest strength decides if it is supported or refuted, and the
 combined claim takes its status and its value; otherwise the combined claim is conflicted if its claims speak both
-for and against it, else not assessable, with the reason, if one of them is, and not established if not. One sample
-of a model that supports a claim by documents therefore decides over samples that do not.
+for and against it. Where none decides, a claim that could not be assessed abstains: the claims that were judged give
+the status (their common one, else not established), and the combined claim is not assessable, with the reason, only
+if every claim is (author, 13 Nov 2026; before, one claim not assessable made the combination not assessable, so that
+a sample with a vague purpose outweighed samples that judged the dependency). One sample of a model that supports a
+claim by documents therefore decides over samples that do not.
 
 A combined claim cites the evidence of its claims that agree with its status, and its uncertainty is, per factor, the
 least over them where the factor applies, or the highest over all of them where none agrees. The combination calls no
@@ -14,10 +17,15 @@ model and yields no finding: the claims it combines are kept, in the samples and
     hypotheses    the expectation stage's claims across its samples: purposes aligned by node and beneficiary within a
                   practice (E's ≈), and the dependencies of each combined purpose by component; they enter the
                   assessment stage as its hypotheses, and nothing of the assessment stage passes back into them
-    alternatives  the reasoning tier's Alternative claims across its samples, by purpose and component
+    alternatives  the reasoning tier's Alternative claims across its samples, by purpose and component; from reading 2
+                  a documented alternative stays supported only with a majority of its question's samples (gate (d),
+                  MAJORITY), else it is not established
     experimental  the experimental channel's claims with the hypotheses of aligned purposes: a hypothesis purpose of a
-                  practice is aligned with the case purpose of the same beneficiary whose node is its own or the
-                  nearest above it (≈), which raises its semantic uncertainty to moderate; an experiment's Dependency
+                  practice is aligned with the case purpose of the same beneficiary at its own node, and, where the
+                  experiment broke the case purpose, also with one at the nearest node above it (≈), which raises its
+                  semantic uncertainty to moderate (C1, author 14 Nov 2026: that a function survives without the data
+                  shows nothing for a narrower purpose, while that it breaks holds for every purpose it includes); an
+                  experiment's Dependency
                   claim is combined with the hypotheses' on the same component. Where no hypothesis aligns, reasoning
                   is silent on the case's purpose, and the experiment's claim stands combined alone.
 
@@ -31,20 +39,24 @@ from skuld.uncertainty import FACTORS, ORDER, highest
 #: only if supported or refuted, and then it is doc or run, since no rule lets own knowledge decide
 STRENGTH = {"own": 0, "doc": 1, "run": 2}
 DECISIVE = ("supported", "refuted")
+#: The combination as a named method of the report: 2 since claims that could not be assessed abstain (13 Nov 2026)
+VERSION = "2"
+COMPONENT = {"role": "method", "id": "skuld.combine", "version": VERSION}
 #: What a combined claim carries over from the claim that decides it
 CARRIED = ("stage", "tier", "case", "scope", "component", "relationship", "alternative", "level")
 
 
 def decide(members: list[dict]) -> tuple[str, dict | None]:
     """The status of related claims, and the claim that decides it: the strongest supported or refuted claims if
-    they agree in status and value, else conflicted; without one, their common status, else not assessable if one
-    is, else not established."""
+    they agree in status and value, else conflicted; without one, the claims that were assessed decide (their common
+    status, else not established), and only if none was is the status not assessable."""
     decisive = [m for m in members if m["status"] in DECISIVE]
     if not decisive:
-        statuses = {m["status"] for m in members}
+        judged = [m for m in members if m["status"] != "not_assessable"] or members
+        statuses = {m["status"] for m in judged}
         if len(statuses) == 1:
-            return statuses.pop(), _strongest(members) or members[0]
-        return ("not_assessable" if "not_assessable" in statuses else "not_established"), None
+            return statuses.pop(), _strongest(judged) or judged[0]
+        return "not_established", None
     top = _top(decisive)
     if len({(m["status"], m.get("relationship")) for m in top}) == 1:
         return top[0]["status"], top[0]
@@ -90,8 +102,7 @@ def combined(cid: str, members: list[dict], **fields) -> dict:
                 "strength": m.get("strength", "own"),
             }
             for m in members
-            if m["status"] in DECISIVE
-            and (m["status"], m.get("relationship")) != (status, first.get("relationship"))
+            if m["status"] in DECISIVE and (m["status"], m.get("relationship")) != (status, first.get("relationship"))
         ]
         if overruled:
             claim["overruled"] = overruled
@@ -180,17 +191,49 @@ def hypotheses(claims: list[dict], number: Numbers) -> list[dict]:
     return out
 
 
-def alternatives(claims: list[dict], number: Numbers) -> list[dict]:
-    """The reasoning tier's Alternative claims combined across its samples, per practice, purpose and component."""
+#: Gate (d) of E's status rule for a documented alternative (Expectation report 0.9, def:combination): a majority of
+#: the samples of its question must support it, since one sample of three decided 40-60 % of the study's
+#: documented alternatives. It applies from the reasoning tier's reading 2 (judge.READING) on.
+MAJORITY = "gate (d): no majority of the samples of its question supports the alternative"
+
+
+def alternatives(claims: list[dict], number: Numbers, asked: dict[str, set[str]] | None = None) -> list[dict]:
+    """The reasoning tier's Alternative claims combined across its samples, per practice, purpose and component.
+    With `asked` (the samples of each practice's minimisation question, by sample name), a supported combined claim
+    must be supported by more than half of them (gate d), and is otherwise not established."""
     groups: dict[tuple, list[dict]] = {}
     for c in claims:
         groups.setdefault((c["subject"], c["basis"][0], c["component"]), []).append(c)
-    return [combined(number(subject), members, basis=[pid]) for (subject, pid, _), members in groups.items()]
+    out = []
+    for (subject, pid, _), members in groups.items():
+        claim = combined(number(subject), members, basis=[pid])
+        if asked is not None and claim["status"] == "supported" and claim.get("tier") == "reasoning":
+            samples = asked.get(subject) or set()
+            supporting = {
+                ch.removeprefix("reasoning:") for m in members if m["status"] == "supported" for ch in m["channels"]
+            }
+            if samples and 2 * len(supporting & samples) <= len(samples):
+                claim = _without_majority(claim, len(supporting & samples), len(samples))
+        out.append(claim)
+    return out
 
 
-def aligned(hypotheses: list[dict], case_purposes: list[dict], vocabulary) -> dict[str, dict]:
+def _without_majority(claim: dict, supporting: int, samples: int) -> dict:
+    """A supported alternative that too few samples support: plausible and not established, with gate (d) as reason."""
+    claim = {k: v for k, v in claim.items() if k not in ("strength", "overruled")}
+    claim.update(
+        status="not_established",
+        level="plausible",
+        supporting=[],
+        sufficiency={"sufficient": False, "reason": "not_admitted"},
+        reason=f"{MAJORITY} ({supporting} of {samples})",
+    )
+    return claim
+
+
+def aligned(hypotheses: list[dict], case_purposes: list[dict], vocabulary, same_node: bool = False) -> dict[str, dict]:
     """Per hypothesis purpose id, the case purpose it aligns with (≈): the same beneficiary, and the case purpose's
-    node its own or the nearest above it."""
+    node its own or the nearest above it; with `same_node`, its own only."""
     out = {}
     for h in hypotheses:
         if h["type"] != "purpose":
@@ -198,7 +241,7 @@ def aligned(hypotheses: list[dict], case_purposes: list[dict], vocabulary) -> di
         node = h["purpose"].get("node")
         if not node or node not in vocabulary:
             continue
-        lineage = [node, *vocabulary.ancestors(node)]
+        lineage = [node] if same_node else [node, *vocabulary.ancestors(node)]
         who = beneficiary(h["purpose"].get("beneficiary"))
         candidates = [
             (lineage.index(q["node"]), n)
@@ -210,37 +253,69 @@ def aligned(hypotheses: list[dict], case_purposes: list[dict], vocabulary) -> di
     return out
 
 
+#: The statuses of an experimental premise that an experiment decided
+DECIDED = ("supported", "refuted")
+
+
 def experimental(hypotheses: list[dict], premises: list[dict], vocabulary, number: Numbers) -> list[dict]:
     """
     The experimental premises combined with the hypotheses of aligned purposes, per practice: one combined claim per
     (case purpose, type, component, and alternative), whose `basis` names the aligned hypothesis purposes, so that a
     concern of a hypothesis purpose reads it.
+
+    Only a premise an experiment decided (supported or refuted) is combined so. One that decided nothing (its
+    purpose has no oracle: not_assessable; the comparison was undecided: not_established) stays a claim of its own
+    with an empty basis: the experiment is reported, but it neither merges the hypotheses aligned to its purpose
+    into one claim nor gives a concern of theirs a premise (author, 12 Nov 2026).
     """
     out: list[dict] = []
+    for x in premises:
+        if x["status"] not in DECIDED:
+            out.append(
+                combined(
+                    number(x["subject"]),
+                    [x],
+                    stage="assessment",
+                    purpose=x["purpose"],
+                    case=x["case"],
+                    scope=x["scope"],
+                    component=x["component"],
+                    basis=[],
+                )
+            )
+    premises = [x for x in premises if x["status"] in DECIDED]
     for subject in sorted({x["subject"] for x in premises}):
         mine = [x for x in premises if x["subject"] == subject]
         purposes = {(x["case"], x["purpose"]["id"]): x["purpose"] for x in mine}
         keys = list(purposes)
         own = [h for h in hypotheses if h["subject"] == subject]
         by_id = {h["id"]: h for h in own}
-        to = aligned(own, [purposes[k] for k in keys], vocabulary)
-        by_case_purpose: dict[tuple, list[str]] = {}
-        for hid, q in to.items():
-            k = next(k for k in keys if purposes[k] is q)
-            by_case_purpose.setdefault(k, []).append(hid)
+        # C1: a preserved purpose reaches hypotheses at its own node only; a broken one also those below it
+        by_reach: dict[bool, dict[tuple, list[str]]] = {}
+        for same_node in (True, False):
+            by_case_purpose: dict[tuple, list[str]] = {}
+            for hid, q in aligned(own, [purposes[k] for k in keys], vocabulary, same_node).items():
+                k = next(k for k in keys if purposes[k] is q)
+                by_case_purpose.setdefault(k, []).append(hid)
+            by_reach[same_node] = by_case_purpose
         groups: dict[tuple, list[dict]] = {}
         for x in mine:
             k = (x["case"], x["purpose"]["id"])
             groups.setdefault((k, x["type"], x["component"], x.get("alternative")), []).append(x)
+
+        def reach(members: list[dict], by_reach=by_reach) -> dict[tuple, list[str]]:
+            return by_reach[not any(m.get("broke") for m in members if m["stage"] == "assessment")]
+
         for h in own:
             if h["type"] != "dependency" or not h.get("basis"):
                 continue
-            for k, hids in by_case_purpose.items():
-                if h["basis"][0] in hids and (key := (k, "dependency", h["component"], None)) in groups:
-                    groups[key].append(h)
+            for key, members in groups.items():
+                k, kind, component, _ = key
+                if kind == "dependency" and component == h["component"] and h["basis"][0] in reach(members).get(k, []):
+                    members.append(h)
         for (k, _, _, _), members in groups.items():
             x = next(m for m in members if m["stage"] == "assessment")
-            basis = sorted(by_case_purpose.get(k, []))
+            basis = sorted(reach(members).get(k, []))
             claim = combined(
                 number(subject),
                 members,

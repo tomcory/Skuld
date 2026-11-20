@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Review of the expectation stage</title>
+    <link rel="stylesheet" href="/vendor/bootstrap.css">
+    <link rel="stylesheet" href="/vendor/icons/bootstrap-icons.min.css">
+    <style>
+        body { background: #f6f7f9; }
+        mark { background: #ffe58a; padding: 0 .1em; }
+        .ask { font-size: 1.05rem; font-weight: 600; }
+        .purpose { border: 1px solid #dee2e6; border-radius: .375rem; padding: .6rem .75rem; margin-bottom: .75rem; background: #fff; }
+        .purpose.active { border-color: #0d6efd; box-shadow: 0 0 0 .15rem rgba(13,110,253,.15); }
+        .dependency { background: #f8f9fa; border-radius: .25rem; padding: .4rem .6rem; margin-top: .5rem; }
+        .step { border-left: 3px solid #adb5bd; padding-left: .5rem; margin-top: .3rem; }
+        .cite { color: #495057; font-size: .8rem; background: #fff; border: 1px dashed #ced4da; border-radius: .25rem; padding: .2rem .4rem; margin-top: .2rem; max-height: 8rem; overflow-y: auto; word-break: break-word; }
+        .chip { display: inline-block; font-size: .72rem; border: 1px solid #ced4da; border-radius: 1rem; padding: 0 .45rem; margin: .1rem .2rem 0 0; background: #fff; color: #495057; cursor: pointer; }
+        .chip.open { background: #e7f1ff; border-color: #0d6efd; color: #0d6efd; }
+        .why { font-size: .82rem; color: #6c757d; }
+        .not-asked { color: #6c757d; font-style: italic; }
+        .q { display: flex; align-items: center; gap: .5rem; margin-top: .3rem; flex-wrap: wrap; }
+        .q-label { font-size: .82rem; color: #495057; min-width: 9.5rem; }
+        .context { max-height: 82vh; overflow-y: auto; }
+        .screen { border-bottom: 1px solid #eee; padding: .35rem 0; font-size: .82rem; }
+        .screen.cited { background: #fff8e1; }
+        .evidence-item { border-left: 3px solid #0d6efd; padding-left: .5rem; margin-bottom: .5rem; font-size: .82rem; }
+        .traffic { border-bottom: 1px solid #eee; padding: .4rem 0; font-size: .8rem; font-family: ui-monospace, Menlo, monospace; word-break: break-all; }
+        mark.datum { background: #ffd166; font-weight: 600; padding: 0 .15em; }
+        .told { background: #f1f3f5; border-left: 3px solid #6c757d; padding: .35rem .6rem; font-size: .88rem; margin-top: .5rem; }
+        .decide { position: sticky; bottom: 0; background: #fff; margin-top: 1rem; padding: .75rem 0 .25rem; border-top: 1px solid #dee2e6; z-index: 5; }
+        .left { max-height: 86vh; overflow-y: auto; }
+        kbd { font-size: .72rem; }
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body>
+<div id="app" class="container-fluid py-3" v-cloak>
+    <nav class="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <h1 class="h5 m-0">Review of the expectation stage</h1>
+        <span class="text-secondary small" v-if="progress">{{ progress.calibration }} · {{ progress.reviewed }}/{{ progress.total }} practices done
+            <span v-if="progress.counts.started">({{ progress.counts.started }} started)</span></span>
+        <div class="flex-grow-1" style="min-width: 160px">
+            <div class="progress" style="height: .5rem" v-if="progress">
+                <div class="progress-bar" :style="{width: (100 * progress.reviewed / progress.total) + '%'}"></div>
+            </div>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" @click="help = !help"><i class="bi bi-question-circle"></i> Help</button>
+    </nav>
+
+    <div class="alert alert-info small" v-if="help">
+        <p class="mb-1"><b>What you judge.</b> Each unit is one <i>practice</i> (data sent to a recipient, or read on the device)
+            and what E's first stage predicted for it: the purposes the processing serves and whether the data is needed for
+            them. Judge the predictions <b>against what the stage saw</b>: the sentence it was given for the practice (grey
+            box), and on the right the practice's <b>traffic</b> (the requests as captured, the data found in them
+            highlighted), the screens of the episodes it occurred in and the documentation passages. The stage never sees
+            the provider's privacy policy or store listing, so do not judge against them; if you know that the provider
+            says otherwise, say so in the note.
+            Which model produced the unit is not shown.</p>
+        <p class="mb-1"><b>Each question on its own.</b> A flaw counts once, in the question it belongs to: an implausible
+            purpose is a <i>no</i> on Plausible, not also on its node, need or steps. Judge the node, the need and the steps
+            for the purpose <i>as E states it</i>, even where you find the purpose itself implausible. A purpose that repeats
+            another is judged on its own; mention the repetition in the note. Answer <i>unsure</i> only where the context
+            does not let you decide, and say why in the note.</p>
+        <ul class="mb-1">
+            <li><b>Plausible</b>: a plausible purpose for this flow, given the context.
+                <i>Yes</i>: someone who knows the recipient and sees this flow would name this purpose.
+                <i>Partly</i>: the right kind of purpose, but a specific E asserts is not shown (e.g. <i>personalised</i>
+                advertising where the flow shows only ad delivery), or it fits only a minor part of the flow.
+                <i>No</i>: it does not fit what the recipient does (e.g. app performance analytics for an ad-tech ID sync).</li>
+            <li><b>Node</b>: the DPV purpose node: exact, too broad, too narrow, wrong (name a better one if you can), for the
+                purpose as E words it.</li>
+            <li><b>Beneficiary</b> (user, provider, other) and <b>role</b> (functional: the feature the user uses; ancillary:
+                anything else): right or wrong. Functional means the feature the user is using needs this processing;
+                ads, consent dialogs, analytics, and fonts or resources loaded for an ad are ancillary even when they appear
+                on the screen. Where the screens do not show which, decide by what the recipient does; <i>unsure</i> only if
+                it serves both.</li>
+            <li><b>Cited parts show its outcome</b>, for a purpose E holds supported: the parts it cites (tab <i>Cited for</i>
+                on the right) show what the purpose achieves.
+                <i>Yes</i>: they show that this purpose's outcome happens in this app, including what sets it apart (for
+                personalised ads, something showing personalisation, not just that ads appear).
+                <i>Partly</i>: they show only the broader activity (ads appear), or only some of the cited parts show it.
+                <i>No</i>: none of them shows it, e.g. only a general guideline or documentation passage.</li>
+            <li>Per <b>need</b> E stated (is the data, or the recipient, essential / quality-dependent / not needed for the
+                purpose): is that plausible, and do E's <b>steps</b> follow from what they cite? Each step's citations are
+                chips (<i class="bi bi-arrow-left-right"></i> traffic, <i class="bi bi-phone"></i> screen,
+                <i class="bi bi-book"></i> passage): click one to read the cited text, hover for a preview. A need E holds
+                not assessable is not asked; its reasoning can be shown.
+                <ul>
+                    <li><b>Stated need plausible</b>. <i>Yes</i>: it is the level you would choose. <i>Partly</i>: one level
+                        off (essential where quality-dependent fits, quality-dependent where not needed fits, or the reverse).
+                        <i>No</i>: two levels off (essential against not needed).</li>
+                    <li><b>Steps follow from what they cite</b>, whether or not you agree with the level (that is the
+                        question above). A step counts as supported if what it cites shows it, or if it is general technical
+                        knowledge you would accept without a source (e.g. that a WebView sends a User-Agent).
+                        <i>Yes</i>: every step the conclusion rests on is supported. <i>Partly</i>: at least one such step
+                        is an uncited claim about this app or recipient, or contradicts what it cites, but the other steps
+                        still carry the conclusion. <i>No</i>: without the unsupported steps nothing carries the
+                        conclusion.</li>
+                </ul></li>
+            <li><b>Missed</b>: a purpose E should have predicted and did not; tick functional if it is the feature's own.</li>
+            <li><b>Values in <code>code type</code></b> (a data type, a purpose node) open their vocabulary when clicked: the tree
+                with the value selected (marked "shown in the unit"), its description, the broader node, the nodes alongside
+                it and the narrower ones, to judge whether it is exact, too broad or too narrow.</li>
+            <li><b>DPV node fields</b> (a missed purpose, a better node): type part of a name for suggestions
+                (<kbd>↓</kbd> <kbd>↑</kbd> <kbd>Enter</kbd>), or click <i class="bi bi-diagram-3"></i> to browse the DPV purposes as a
+                tree, filter it, read each node's description and select one.</li>
+            <li><kbd>←</kbd> <kbd>→</kbd> previous and next practice, <kbd>O</kbd> next open one, <kbd>S</kbd> save,
+                <kbd>Enter</kbd> save as done, <kbd>/</kbd> search the context.</li>
+        </ul>
+    </div>
+
+    <div class="row g-3" v-if="item">
+        <div class="col-lg-6 left">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="text-secondary small">practice {{ item.index + 1 }} of {{ item.total }} · {{ item.id }} · {{ item.application }}</span>
+                        <span v-if="item.review && item.review.done" class="badge text-bg-success">done</span>
+                        <span v-else-if="item.review" class="badge text-bg-warning">started</span>
+                    </div>
+                    <div class="mt-2">
+                        <span class="badge text-bg-light border me-1">{{ item.practice.type }}</span>
+                        <vocab-term kind="data" :id="item.practice.data"></vocab-term>
+                        <span v-if="item.practice.recipient"> → <b>{{ item.practice.recipient }}</b>
+                            <span class="text-secondary small" v-if="item.practice.relation">({{ item.practice.relation }})</span></span>
+                        <span v-else class="text-secondary"> on the device</span>
+                    </div>
+                    <div class="small text-secondary">episodes {{ item.practice.episodes.join(', ') || '–' }}</div>
+                    <div class="told" v-if="item.told"><span class="text-secondary">What stage 1 was told:</span> {{ item.told }}</div>
+                    <div class="ask mt-3">{{ item.ask }}</div>
+
+                    <div v-for="p in item.purposes" :key="p.key" class="purpose mt-2" :class="{active: p.key === focus}" @click="focus = p.key">
+                        <div class="d-flex justify-content-between flex-wrap gap-1">
+                            <b>{{ label(p.key) }} · {{ p.action }} {{ p.object }}<span v-if="p.outcome">, {{ p.outcome }}</span></b>
+                            <span>
+                                <span class="badge" :class="statusClass(p.status)" :title="statusTitle(p.status)">E: {{ p.status.replace('_', ' ') }}</span>
+                                <span class="badge text-bg-light border ms-1" title="how many of E's answers (per episode and seed) gave this purpose">{{ p.samples }} {{ p.samples === 1 ? 'answer' : 'answers' }}</span>
+                            </span>
+                        </div>
+                        <div class="small mt-1">
+                            node <vocab-term kind="purpose" :id="p.node"></vocab-term> · beneficiary <b>{{ p.beneficiary }}</b> · role <b>{{ p.role }}</b>
+                            · specificity {{ p.specificity }}<span v-if="p.context"> · context: {{ p.context }}</span>
+                        </div>
+                        <div class="why" v-if="p.reason">Why E holds it {{ p.status.replace('_', ' ') }}: {{ p.reason }}</div>
+                        <div class="why" v-if="p.evidence.length">{{ p.evidence.length }} cited {{ p.evidence.length === 1 ? 'part' : 'parts' }}: tab <i>Cited for {{ label(p.key) }}</i> on the right</div>
+
+                        <div class="q" v-for="q in asked(p)" :key="q">
+                            <span class="q-label">{{ labels[q] }}</span>
+                            <div class="btn-group btn-group-sm">
+                                <button v-for="v in item.questions.purpose[q]" class="btn"
+                                        :class="answer(p.key, q) === v ? btnOn(v) : btnOff(v)" @click.stop="setPurpose(p.key, q, v)">{{ v.replace('_', ' ') }}</button>
+                            </div>
+                            <div v-if="q === 'node' && ['too_broad', 'too_narrow', 'wrong'].includes(answer(p.key, 'node'))" style="width: 17rem" @click.stop>
+                                <node-picker :vocab="vocabs.purpose" placeholder="better node (optional)" :model-value="answer(p.key, 'better_node') || ''"
+                                             @update:model-value="v => setPurpose(p.key, 'better_node', v)"
+                                             @browse="openBrowser(id => setPurpose(p.key, 'better_node', id), answer(p.key, 'better_node') || p.node)"></node-picker>
+                            </div>
+                        </div>
+
+                        <div v-for="d in p.dependencies" :key="d.key" class="dependency small">
+                            <div class="d-flex justify-content-between gap-2">
+                                <span><b>{{ label(d.key) }}</b> · E: the <b>{{ d.component || 'data' }}</b> is
+                                    <b>{{ (d.relationship || '?').replace('_', ' ') }}</b> for this purpose</span>
+                                <span><span class="badge" :class="statusClass(d.status)" :title="statusTitle(d.status)">E: {{ d.status.replace('_', ' ') }}</span></span>
+                            </div>
+                            <div class="not-asked mt-1" v-if="!d.asked">Not asked: E holds this need not assessable<span v-if="d.reason === 'the purpose is too vague'">,
+                                because in every one of E's answers that state it the purpose was too vague to judge it</span><span v-else-if="d.reason">: {{ d.reason }}</span>.</div>
+                            <div class="why" v-else-if="d.reason">Why E holds it {{ d.status.replace('_', ' ') }}: {{ d.reason }}</div>
+                            <button v-if="!d.asked && d.steps.length" class="btn btn-link btn-sm p-0" @click.stop="toggle(d.key)">
+                                <i class="bi" :class="expanded.has(d.key) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                                {{ expanded.has(d.key) ? 'hide' : 'show' }} E's reasoning ({{ d.steps.length }} {{ d.steps.length === 1 ? 'step' : 'steps' }})</button>
+                            <template v-if="d.asked || expanded.has(d.key)">
+                                <div v-for="(s, si) in d.steps" class="step">
+                                    {{ s.text }}
+                                    <div v-if="s.cites.length">
+                                        <span v-for="c in s.cites" class="chip" :class="{open: expanded.has(citeKey(d, si, c))}" :title="c.text"
+                                              @click.stop="toggle(citeKey(d, si, c))"><i class="bi" :class="kindIcon(c.kind)"></i> {{ c.id }} · {{ c.kind }}</span>
+                                    </div>
+                                    <template v-for="c in s.cites"><div v-if="expanded.has(citeKey(d, si, c))" class="cite"><b>{{ c.id }}</b> ({{ c.kind }}): <span v-html="c.kind === 'traffic' ? traffic(c.text) : mark(c.text)"></span></div></template>
+                                </div>
+                                <div v-if="!d.steps.length" class="text-secondary">no steps recorded</div>
+                            </template>
+                            <template v-if="d.asked">
+                                <div class="q" v-for="(values, q) in item.questions.dependency" :key="q">
+                                    <span class="q-label">{{ labels[q] }}</span>
+                                    <div class="btn-group btn-group-sm">
+                                        <button v-for="v in values" class="btn" :class="dependency(d.key, q) === v ? btnOn(v) : btnOff(v)"
+                                                @click.stop="setDependency(d.key, q, v)">{{ v }}</button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <b class="small">Purposes E missed</b>
+                        <div v-for="(m, i) in missed" class="row g-1 mt-1">
+                            <div class="col-5"><input class="form-control form-control-sm" v-model="m.note" placeholder="the purpose E should have predicted" @keydown.stop></div>
+                            <div class="col-4"><node-picker :vocab="vocabs.purpose" v-model="m.node" placeholder="DPV node: type or browse"
+                                                            @browse="openBrowser(id => (m.node = id), m.node)"></node-picker></div>
+                            <div class="col-2 d-flex align-items-center"><label class="form-check-label small"><input class="form-check-input me-1" type="checkbox" v-model="m.functional"> functional</label></div>
+                            <div class="col-1"><button class="btn btn-sm btn-outline-danger" @click="missed.splice(i, 1)" title="remove"><i class="bi bi-x"></i></button></div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary mt-1" @click="missed.push({note: '', node: '', functional: false})"><i class="bi bi-plus"></i> Add a missed purpose</button>
+                        <span class="small text-secondary ms-2">functional: the purpose is the feature the user uses</span>
+                    </div>
+
+                    <div class="decide">
+                        <textarea class="form-control form-control-sm" rows="2" placeholder="Note (optional; e.g. where the provider says otherwise)" v-model="note" @keydown.stop></textarea>
+                        <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
+                            <button class="btn btn-success" :disabled="open.length > 0" @click="save(true)"><i class="bi bi-check-lg"></i> Done <kbd>Enter</kbd></button>
+                            <button class="btn btn-outline-primary" @click="save(false)">Save <kbd>S</kbd></button>
+                            <span v-if="open.length" class="small text-secondary">Still to answer for <b>Done</b>: {{ open.slice(0, 3).map(o => label(o.split(' ')[0]) + ': ' + (labels[o.split(' ')[1]] || o.split(' ')[1])).join('; ') }}<span v-if="open.length > 3"> and {{ open.length - 3 }} more</span></span>
+                            <button class="btn btn-outline-secondary ms-auto" v-if="item.review" @click="reset()" title="Remove the review"><i class="bi bi-arrow-counterclockwise"></i></button>
+                        </div>
+                        <div class="d-flex gap-2 mt-2">
+                            <button class="btn btn-sm btn-outline-dark" @click="go(item.index - 1)" :disabled="item.index === 0"><i class="bi bi-arrow-left"></i></button>
+                            <button class="btn btn-sm btn-outline-dark" @click="go(item.index + 1)" :disabled="item.index + 1 >= item.total"><i class="bi bi-arrow-right"></i></button>
+                            <button class="btn btn-sm btn-outline-dark" @click="nextOpen()">Next open <kbd>O</kbd></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <ul class="nav nav-tabs mb-2">
+                        <li class="nav-item"><a class="nav-link" :class="{active: tab === 'traffic'}" href="#" @click.prevent="tab = 'traffic'">Traffic ({{ (item.context.traffic || []).length }})</a></li>
+                        <li class="nav-item"><a class="nav-link" :class="{active: tab === 'evidence'}" href="#" @click.prevent="tab = 'evidence'">Cited for {{ label(focus) }} ({{ focusEvidence.length }})</a></li>
+                        <li class="nav-item"><a class="nav-link" :class="{active: tab === 'screens'}" href="#" @click.prevent="tab = 'screens'">Screens ({{ item.context.screens.length }})</a></li>
+                        <li class="nav-item"><a class="nav-link" :class="{active: tab === 'passages'}" href="#" @click.prevent="tab = 'passages'">Passages ({{ item.context.passages.length }})</a></li>
+                    </ul>
+                    <input ref="search" class="form-control form-control-sm mb-2" placeholder="Search the context (/)" v-model="query" @keydown.esc="$event.target.blur()" @keydown.stop>
+                    <div class="context">
+                        <template v-if="tab === 'traffic'">
+                            <div v-if="!(item.context.traffic || []).length" class="text-secondary small">The stage was shown no traffic for this practice.</div>
+                            <div v-for="t in item.context.traffic" class="traffic" v-html="traffic(t)"></div>
+                        </template>
+                        <template v-else-if="tab === 'evidence'">
+                            <div v-if="!focusEvidence.length" class="text-secondary small">E cites nothing for this purpose and its dependencies.</div>
+                            <div v-for="e in focusEvidence" class="evidence-item">
+                                <div class="text-secondary">{{ e.source || e.kind }}</div>
+                                <div v-html="e.source === 'traffic as captured' ? traffic(e.text) : mark(e.text)"></div>
+                            </div>
+                        </template>
+                        <template v-else-if="tab === 'screens'">
+                            <div v-for="(s, i) in shownScreens" class="screen" :class="{cited: citedTexts.has(s)}"><span class="text-secondary">screen {{ i + 1 }}</span> · <span v-html="mark(s)"></span></div>
+                            <div v-if="!shownScreens.length" class="text-secondary small">No screen matches.</div>
+                        </template>
+                        <template v-else>
+                            <div v-for="s in item.context.passages" class="screen" :class="{cited: citedTexts.has(s)}" v-html="mark(s)"></div>
+                            <div v-if="!item.context.passages.length" class="text-secondary small">No passages.</div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div v-else-if="progress" class="text-secondary">Loading…</div>
+    <vocab-browser v-if="browser" :vocab="vocabs[browser.kind]" :mode="browser.mode" :initial="browser.initial" :title="browser.title"
+                   @close="browser = null" @choose="chooseNode"></vocab-browser>
+</div>
+<script type="module">
+import {createApp} from '/vendor/vue.js';
+import {useVocabularies, loadVocabularies, TITLES} from '/vocab.js';
+const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
+const labels = {plausible: 'Plausible purpose', node: 'DPV node', beneficiary: 'Beneficiary', role: 'Role',
+                cites: 'Cited parts show its outcome', relationship: 'Stated need plausible', steps: 'Steps follow from what they cite'};
+const STATUS = {supported: 'the cited context shows it', not_established: 'E could not show it from the context',
+                not_assessable: 'E could not judge it', conflicted: "E's answers disagree"};
+const ICON = {traffic: 'bi-arrow-left-right', screen: 'bi-phone', passage: 'bi-book', practice: 'bi-eye', application: 'bi-app'};
+const GOOD = ['yes', 'exact', 'right'];
+const BAD = ['no', 'wrong'];
+const app = createApp({
+    data: () => ({progress: null, item: null, help: false, labels, purposes: {}, dependencies: {}, missed: [], note: '',
+                  focus: null, tab: 'evidence', query: '', vocabs: {purpose: [], data: []}, browser: null, expanded: new Set()}),
+    provide() { return {openVocab: (kind, id) => this.openVocab(kind, id)}; },
+    computed: {
+        open() {
+            if (!this.item) return [];
+            const out = [];
+            for (const p of this.item.purposes) {
+                for (const q of this.asked(p)) if (!this.item.questions.purpose[q].includes(this.answer(p.key, q))) out.push(`${p.key} ${q}`);
+                for (const d of p.dependencies.filter(d => d.asked))
+                    for (const q of Object.keys(this.item.questions.dependency)) if (!this.item.questions.dependency[q].includes(this.dependency(d.key, q))) out.push(`${d.key} ${q}`);
+            }
+            return out;
+        },
+        focusPurpose() { return this.item && this.item.purposes.find(p => p.key === this.focus); },
+        focusEvidence() {
+            const p = this.focusPurpose;
+            if (!p) return [];
+            const seen = new Set();
+            return [...p.evidence, ...p.dependencies.flatMap(d => d.evidence)].filter(e => !seen.has(e.text) && seen.add(e.text));
+        },
+        citedTexts() {
+            const p = this.focusPurpose;
+            if (!p) return new Set();
+            return new Set([...this.focusEvidence.map(e => e.text), ...p.dependencies.flatMap(d => d.steps.flatMap(s => s.cites.map(c => c.text)))]);
+        },
+        shownScreens() {
+            const q = this.query.trim().toLowerCase();
+            const all = this.item.context.screens;
+            return q.length < 3 ? all : all.filter(s => s.toLowerCase().includes(q));
+        },
+    },
+    methods: {
+        // a value of the unit in its vocabulary; a node for a field, from the DPV purposes
+        openVocab(kind, id) { this.browser = {kind, mode: 'view', initial: id, title: TITLES[kind]}; },
+        openBrowser(setter, current) { this.browser = {kind: 'purpose', mode: 'select', initial: current, title: TITLES.purpose, setter}; },
+        chooseNode(id) { if (this.browser && this.browser.setter) this.browser.setter(id); this.browser = null; },
+        async api(path, options) {
+            const response = await fetch('/api' + path, options);
+            if (!response.ok) { const t = await response.text(); alert(t); throw new Error(t); }
+            return response.json();
+        },
+        asked(p) { return Object.keys(this.item.questions.purpose).filter(q => q !== 'cites' || p.status === 'supported'); },
+        answer(key, q) { return (this.purposes[key] || {})[q]; },
+        dependency(key, q) { return (this.dependencies[key] || {})[q]; },
+        setPurpose(key, q, v) { this.purposes = {...this.purposes, [key]: {...(this.purposes[key] || {}), [q]: v}}; this.focus = key; },
+        setDependency(key, q, v) { this.dependencies = {...this.dependencies, [key]: {...(this.dependencies[key] || {}), [q]: v}}; },
+        btnOn: v => (GOOD.includes(v) ? 'btn-success' : BAD.includes(v) ? 'btn-danger' : v === 'unsure' ? 'btn-secondary' : 'btn-warning'),
+        btnOff: v => (GOOD.includes(v) ? 'btn-outline-success' : BAD.includes(v) ? 'btn-outline-danger' : v === 'unsure' ? 'btn-outline-secondary' : 'btn-outline-warning'),
+        statusTitle: s => STATUS[s] || s,
+        kindIcon: k => ICON[k] || 'bi-dot',
+        citeKey: (d, si, c) => `${d.key}/${si}/${c.id}`,
+        toggle(key) { const x = new Set(this.expanded); x.has(key) ? x.delete(key) : x.add(key); this.expanded = x; },
+        statusClass: s => ({supported: 'text-bg-primary', not_established: 'text-bg-warning', not_assessable: 'text-bg-secondary', conflicted: 'text-bg-danger'})[s] || 'text-bg-secondary',
+        label(key) {
+            const m = /^p(\d+)(?:d(\d+))?$/.exec(key || '');
+            if (!m) return key;
+            return m[2] ? `Purpose ${m[1]} · need ${m[2]}` : `Purpose ${m[1]}`;
+        },
+        traffic(text) {
+            return this.mark(text).replace(/«([^»]*)»/g, '<mark class="datum">$1</mark>');
+        },
+        mark(text) {
+            const html = escape(text);
+            const q = this.query.trim();
+            if (q.length < 3) return html;
+            const pattern = new RegExp(escape(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+            return html.replace(pattern, m => `<mark>${m}</mark>`);
+        },
+        async go(index) {
+            if (!this.progress || index < 0 || index >= this.progress.total) return;
+            this.item = await this.api(`/items/${index}`);
+            const r = this.item.review || {};
+            this.purposes = JSON.parse(JSON.stringify(r.purposes || {}));
+            this.dependencies = JSON.parse(JSON.stringify(r.dependencies || {}));
+            this.missed = JSON.parse(JSON.stringify(r.missed || []));
+            this.note = r.note || '';
+            this.focus = this.item.purposes.length ? this.item.purposes[0].key : null;
+            this.tab = (this.item.context.traffic || []).length ? 'traffic' : 'evidence';
+            this.query = '';
+            this.expanded = new Set();
+        },
+        async save(done) {
+            if (done && this.open.length) return;
+            const body = {purposes: this.purposes, dependencies: this.dependencies, note: this.note, done,
+                          missed: this.missed.filter(m => m.note.trim())};
+            this.progress = await this.api(`/reviews/${this.item.id}`, {
+                method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+            });
+            if (done) await this.nextOpen();
+            else await this.go(this.item.index);
+        },
+        async reset() {
+            this.progress = await this.api(`/reviews/${this.item.id}`, {method: 'DELETE'});
+            await this.go(this.item.index);
+        },
+        async nextOpen() {
+            const {index} = await this.api(`/next-open?after=${this.item ? this.item.index : -1}`);
+            if (index === null) { alert('Every practice is done.'); return; }
+            await this.go(index);
+        },
+        key(event) {
+            if (this.browser) { if (event.key === 'Escape') this.browser = null; return; }  // a vocabulary is open: no shortcuts
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || !this.item) return;
+            const action = {ArrowLeft: () => this.go(this.item.index - 1), ArrowRight: () => this.go(this.item.index + 1),
+                            o: () => this.nextOpen(), s: () => this.save(false), Enter: () => this.save(true),
+                            '/': () => { this.tab = 'screens'; this.$refs.search && this.$refs.search.focus(); }}[event.key];
+            if (action) { event.preventDefault(); action(); }
+        },
+    },
+    async mounted() {
+        this.progress = await this.api('/progress');
+        this.vocabs = await loadVocabularies(path => this.api(path));
+        const asked = Number(new URLSearchParams(location.search).get('item'));
+        const {index} = await this.api('/resume');
+        await this.go(asked ? asked - 1 : index || 0);
+        window.addEventListener('keydown', this.key);
+    },
+});
+useVocabularies(app);
+app.mount('#app');
+</script>
+</body>
+</html>

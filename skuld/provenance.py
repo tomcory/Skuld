@@ -96,24 +96,68 @@ def _samples(root: Path) -> tuple[dict[str, list[dict]], list[str]]:
         folder = record.parent
         rel = folder.relative_to(root).as_posix()
         meta = json.loads(record.read_text(encoding="utf-8"))
+        if not (folder / "context.json").is_file():
+            problems.append(f"sample {rel}: its context is missing")
+            continue
         parts = json.loads((folder / "context.json").read_text(encoding="utf-8"))["parts"]
         if hashlib.sha256(json.dumps(parts, sort_keys=True, ensure_ascii=False).encode()).hexdigest() != (
             meta.get("context") or {}
         ).get("sha256"):
             problems.append(f"sample {rel}: its context does not verify")
         answer = folder / "answer.json"
-        if (
-            answer.is_file()
-            and (meta.get("answer") or {}).get("sha256")
-            != hashlib.sha256(answer.read_text(encoding="utf-8").encode()).hexdigest()
-        ):
+        named = (meta.get("answer") or {}).get("sha256")
+        if not answer.is_file():
+            if named:
+                problems.append(f"sample {rel}: its answer is missing")
+        # the bytes as written: reading text would turn a "\r" in the answer into "\n"
+        elif named != hashlib.sha256(answer.read_bytes()).hexdigest():
             problems.append(f"sample {rel}: its answer does not verify")
         contexts[rel] = parts
         contexts[rel.removeprefix("expectation/")] = parts
     return contexts, problems
 
 
-def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list[dict] | None = None) -> list[str]:
+def _o_ref(cid) -> dict | None:
+    """A traffic part's citation id: the O claim it shows, written as JSON ({"claim", "dimension": "O", "report"});
+    None for any other id."""
+    if not isinstance(cid, str) or not cid.startswith("{"):
+        return None
+    try:
+        ref = json.loads(cid)
+    except ValueError:
+        return None
+    return ref if isinstance(ref, dict) and ref.get("dimension") == "O" and {"claim", "report"} <= ref.keys() else None
+
+
+def component_changes(report: dict, rebuilt: dict) -> list[str]:
+    """The method components whose version differs between a report and its rebuild (`skuld.combine 1, now 2`), and
+    Skuld's and Ratatoskr's own versions (`skuld 0.5.0, now 0.6.0`)."""
+
+    def versions(r: dict) -> dict[str, str]:
+        methods = {
+            c["id"]: str(c.get("version"))
+            for c in r["report"].get("components", [])
+            if c.get("role") == "method" and c.get("id")
+        }
+        return methods | {k: str(r["report"][k]) for k in ("skuld", "ratatoskr") if r["report"].get(k)}
+
+    then, now = versions(report), versions(rebuilt)
+    # a report that names no notice definition was made with 1.1.0, and is rebuilt with it: no change
+    from skuld.expectation import NOTICES_UNNAMED, notice_rules
+
+    then.setdefault(notice_rules.COMPONENT["id"], NOTICES_UNNAMED)
+    changed = [f"{k} {then[k]}, now {now[k]}" for k in sorted(then) if k in now and then[k] != now[k]]
+    # a method the report names no version of came later (skuld.judge.reading, after the study's first runs)
+    return changed + [f"{k} (none), now {now[k]}" for k in sorted(now) if k not in then]
+
+
+def check_assessment(
+    a,
+    report: dict,
+    rebuilt: dict | None = None,
+    members: list[dict] | None = None,
+    notes: list[str] | None = None,
+) -> list[str]:
     """
     The problems of an assessment report (EV-E-PROV, EV-E-REPLAY); none if its provenance is complete:
     every report and named input it names verifies by digest, every kept sample's context and answer verify, every
@@ -122,6 +166,9 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
     concern, relation, coverage entry, open condition or gap names exists, a combined claim's claims (`of`) are
     claims of the samples, of the case report's experiments (`members`, from the rebuild) or of the report, every O–E
     outcome is the one its claims give, the independence gates hold, and, given the rebuilt report, it is identical.
+    A report assessed under earlier versions of Skuld's methods (the study's runs under combination rule A,
+    skuld.combine 1) cannot be rebuilt identically by the current ones: that is no problem but a note, appended to
+    `notes`, naming the components that changed.
     """
     from skuld import corpus, expectation, inputs, judge, relations, select
     from skuld.assess import identity
@@ -194,7 +241,10 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
                 )
         elif e.get("citation"):
             cid = e["citation"]["id"]
-            if cid not in passages and cid not in runs and cid != ASSESSMENT:
+            o_ref = _o_ref(cid)
+            if o_ref is not None:
+                problem = claim_ref(o_ref)
+            elif cid not in passages and cid not in runs and cid != ASSESSMENT:
                 problem = f"{cid} is neither a passage of the corpus, a run read nor the assessment's inputs"
         elif e.get("premises") is not None:
             problem = next((f"premise {p} is no item" for p in e["premises"] if p not in items), None)
@@ -217,8 +267,29 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
         ]
         problems += [f"{c['id']}: basis {b} is no claim" for b in c.get("basis", []) if b not in claims]
     if members is not None:
-        for c in report["claims"]:
-            problems += [f"{c['id']}: {m} is no claim it could combine" for m in c["of"] if m not in combined]
+        uncombined = [
+            f"{c['id']}: {m} is no claim it could combine"
+            for c in report["claims"]
+            for m in c["of"]
+            if m not in combined
+        ]
+        # the samples are read again by the current reading: one read otherwise cites what it no longer gives
+        reading = next(
+            (
+                c
+                for c in (rebuilt or {}).get("report", {}).get("components", [])
+                if c.get("id") == "skuld.judge.reading"
+            ),
+            None,
+        )
+        then = next((c for c in report["report"].get("components", []) if c.get("id") == "skuld.judge.reading"), None)
+        if uncombined and reading and notes is not None and (then or {}).get("version") != reading.get("version"):
+            notes.append(
+                f"{len(uncombined)} combined claims cite sample claims the current reading (skuld.judge.reading "
+                f"{reading['version']}; the report's: {(then or {}).get('version', 'none')}) no longer gives"
+            )
+        else:
+            problems += uncombined
     for c in report["concerns"]:
         if c.get("purpose") and c["purpose"] not in claims:
             problems.append(f"{c['id']}: purpose {c['purpose']} is no claim")
@@ -277,6 +348,21 @@ def check_assessment(a, report: dict, rebuilt: dict | None = None, members: list
         if g.get("of") and g["of"] not in known | {"collection"} | requirements | practices:
             problems.append(f"{g['id']}: of {g['of']}, which is unknown")
     problems += expectation.independent(root, report) + judge.independent(root, report)
+    if rebuilt is not None and not any(
+        c.get("id") == expectation.notice_rules.COMPONENT["id"] for c in report["report"].get("components", [])
+    ):
+        # a report that names no notice definition was made with 1.1.0, which the rebuild names: no difference
+        rebuilt = json.loads(json.dumps(rebuilt))
+        rebuilt["report"]["components"] = [
+            c for c in rebuilt["report"]["components"] if c.get("id") != expectation.notice_rules.COMPONENT["id"]
+        ]
     if rebuilt is not None and identity(rebuilt) != identity(report):
-        problems.append("the report rebuilt from the same inputs and kept samples differs")
+        changed = component_changes(report, rebuilt)
+        if changed and notes is not None:
+            notes.append(f"assessed under earlier components ({'; '.join(changed)}): not rebuilt with the current ones")
+        else:
+            problems.append(
+                "the report rebuilt from the same inputs and kept samples differs"
+                + (f" (and the components changed: {'; '.join(changed)})" if changed else "")
+            )
     return problems

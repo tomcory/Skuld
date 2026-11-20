@@ -23,7 +23,8 @@ on as not comparable, with the reason, and the collection is still a subject of 
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
+import re
+from dataclasses import asdict, dataclass, field, replace
 
 from ratatoskr import align, channels, tilt
 from ratatoskr import claims as claim_views
@@ -35,7 +36,7 @@ from skuld.inputs import Assessment, ReportRef
 from skuld.observe import claims as o_claims
 from skuld.uncertainty import FACTORS, ORDER, highest
 
-VERSION = "1"
+VERSION = "2"  # 2: D's marks on the root read from its derived documents (Urda 2.1.0)
 COMPONENT = {"role": "method", "id": "skuld.assessment", "version": VERSION}
 
 
@@ -68,6 +69,20 @@ class Declaration:
     polarity: str
     claim: dict
     uncertainty: dict = field(default_factory=dict)  # t, s, n of the D claim, U_s read leniently
+    # D's marks on the root (Urda 2.1.0): the declaration names no data, so it holds of all data as stated (_no_data);
+    # the fields that hold the root only because D could not place their value (_unplaced: category, purpose); and
+    # whether D's report marks them at all (`marked`: an unmarked root of an earlier report may mean either)
+    no_data: bool = False
+    unplaced: list[str] = field(default_factory=list)
+    marked: bool = False
+
+    def unplaced_data(self, root: str) -> bool:
+        """Whether its data is the root only because D could not place the value: undecided, not all data."""
+        return self.data == root and "category" in self.unplaced
+
+    def unplaced_purpose(self, root: str) -> bool:
+        """Whether its purpose is the root only because D could not place the value: undecided, not every purpose."""
+        return self.value == root and "purpose" in self.unplaced
 
 
 @dataclass
@@ -185,9 +200,18 @@ def declarations(report: ReportRef | None) -> list[Declaration]:
     its recipient."""
     if report is None:
         return []
+    loaded = report.load()
+    documents = {
+        ch["channel"]: ch.get("tilt") or {} for ch in loaded.get("channels", []) if ch.get("status") == "analysed"
+    }
+    marked = _marks_root(loaded, documents)
     out = []
-    for n, claim in enumerate(claim_views.of_report(report.load())):
+    for n, claim in enumerate(claim_views.of_report(loaded)):
         value = claim.get("recipient") if claim["type"] == "declares_recipient" else claim.get("value")
+        document = documents.get(claim["channels"][0]) or {}
+        item = _at(document, claim.get("declaration"))
+        entry = _at(document, claim["id"].split(":", 1)[1] if ":" in claim["id"] else None)
+        unplaced = [*(item.get("_unplaced") or ()), *((entry.get("_unplaced") or ()) if entry is not item else ())]
         out.append(
             Declaration(
                 f"D-{n}",
@@ -199,9 +223,40 @@ def declarations(report: ReportRef | None) -> list[Declaration]:
                 claim.get("polarity", "+"),
                 _ref("D", report, claim["id"]),
                 declared_uncertainty(claim),
+                no_data=bool(item.get("_no_data")),
+                unplaced=sorted(set(unplaced)),
+                marked=marked,
             )
         )
     return out
+
+
+#: The first Urda that marks a root it holds for all data (_no_data) apart from one it could not place (_unplaced)
+MARKS_SINCE = (2, 1)
+
+
+def _marks_root(report: dict, documents: dict[str, dict]) -> bool:
+    """Whether D's report marks its roots: written by Urda 2.1.0 or later, or carrying a mark. In an earlier report
+    the root stands both for all data and for a value D could not place."""
+    named = re.match(r"(\d+)\.(\d+)", str((report.get("report") or {}).get("urda") or ""))
+    if named and (int(named.group(1)), int(named.group(2))) >= MARKS_SINCE:
+        return True
+    text = json.dumps(documents)
+    return '"_no_data"' in text or '"_unplaced"' in text
+
+
+def _at(document: dict, pointer: str | None) -> dict:
+    """The object at a JSON Pointer of a derived document, or {} where there is none."""
+    node: object = document
+    for part in (pointer or "").strip("/").split("/") if pointer else ():
+        part = part.replace("~1", "/").replace("~0", "~")
+        if isinstance(node, list) and part.isdigit() and int(part) < len(node):
+            node = node[int(part)]
+        elif isinstance(node, dict) and part in node:
+            node = node[part]
+        else:
+            return {}
+    return node if isinstance(node, dict) else {}
 
 
 def collection(report: ReportRef | None) -> dict | None:
@@ -244,6 +299,18 @@ def comparability(a: Assessment, compatible_versions: set[frozenset[str]] | None
             reasons += [f"{scope.get('observation')}: {r}" for r in result.reasons]
             unknown |= set(result.unknown)
     return {"comparable": not reasons, "reasons": reasons, "unknown": sorted(unknown)}
+
+
+#: The data vocabulary's root: O's node for a datum it could not identify (encrypted, binary or damaged content)
+UNIDENTIFIED = "data"
+
+
+def known_data(subjects: Subjects) -> tuple[Subjects, list[Practice]]:
+    """The subjects without the practices whose datum O could not identify, and those practices (author, 13 Nov 2026:
+    a contact whose content is not observable is no practice the assessment can judge; config
+    `assessment.known_data_only`)."""
+    left_out = [p for p in subjects.practices if p.data == UNIDENTIFIED]
+    return replace(subjects, practices=[p for p in subjects.practices if p.data != UNIDENTIFIED]), left_out
 
 
 def build(a: Assessment, registry: Registry | None) -> Subjects:

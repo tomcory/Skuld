@@ -10,7 +10,13 @@ Two aspects per practice, each a relation:
                types fall under (hierarchically); a transmission to the provider itself has no recipient aspect
 
 A positive declaration aligned with the practice corresponds, the best alignment deciding the outcome among those it
-relates; a denial aligned with it contradicts it, under a
+relates; a denial aligned with it contradicts it if the practice transmits the data (Google Play counts only data that
+leaves the device as collected, so an access on the device contradicts no denial). D's root category of data holds
+of all data where D's report marks the declaration as naming no data (`_no_data`, Urda 2.1.0) or places the root
+itself; where it marks the root as a value it could not place (`_unplaced`), the declaration relates to no practice by
+it, and a relation only such declarations could decide is insufficient evidence; in an earlier report, which marks
+neither, a denial labelled with the root alone contradicts under a condition (that it meant the data observed). A
+denial contradicts under a
 condition where what the denial means depends on what O cannot observe: a channel's own definitions (Google Play's
 Data safety section does not count a transfer to a service provider as sharing) or the legal role a denial names
 (that the recipient is a third party, not a processor). Denials of a sale are not related: O observes no
@@ -20,7 +26,7 @@ declarations of practice that no practice aligns with are declared without obser
 their node. Where O's and D's scopes are not comparable, every relation is not comparable.
 
 `covered` decides whether a purpose is covered by a specified one (purpose limitation's rule part): the same node or
-one below it, of the same beneficiary.
+one above it (D's purposes name no beneficiary, so none is compared).
 """
 
 from dataclasses import asdict, dataclass, field
@@ -33,7 +39,10 @@ from ratatoskr.vocabularies import Vocabulary
 from skuld.assessment import Declaration, Practice, Subjects, exhaustive
 from skuld.uncertainty import highest, joined
 
-VERSION = "4"
+VERSION = "7"  # 7: D's marks on the root (Urda 2.1.0): a denial of no data in particular contradicts under no
+# condition of its own, a value D could not place leaves the relation undecided; 6: a denial naming a recipient
+# contradicts only a transmission to it; 5: denials relate to
+# transmissions only; a root-category denial contradicts under a condition
 COMPONENT = {"role": "method", "id": "skuld.correspondence", "version": VERSION}
 
 EXACTLY, HIERARCHICALLY, PARTIALLY = "corresponds_exactly", "corresponds_hierarchically", "corresponds_partially"
@@ -125,17 +134,35 @@ def _recipient_outcome(practice: Practice, value: dict, registry: Registry | Non
     if category:
         if category == types.root:
             return PARTIALLY, ROOT_CATEGORY  # 'recipients' says only that someone receives
-        r = align.recipient_category(entity, category, registry, types)
+        try:
+            r = align.recipient_category(entity, category, registry, types)
+        except KeyError:  # a category the vocabulary does not know relates to no recipient
+            return None
         if r.kind in (align.EQUAL, align.NARROWER):
             return HIERARCHICALLY, f"by category ({category})"
     return None
 
 
+def _names_recipient(value, types: Vocabulary) -> bool:
+    """Whether a declaration's value names a recipient: an entity, or a category of recipients below the root."""
+    if not isinstance(value, dict):
+        return False
+    if value.get("entity") or value.get("_entity"):
+        return True
+    category = value.get("category") or next(iter(value.get("categories") or ()), None)
+    return bool(category) and category != types.root
+
+
 def _condition(
-    declaration: Declaration, qualifiers: dict, aspect: str, channel_definitions: dict[str, str | None]
+    declaration: Declaration,
+    qualifiers: dict,
+    aspect: str,
+    channel_definitions: dict[str, str | None],
+    data: Vocabulary | None = None,
 ) -> str | None:
-    """What O cannot observe but a contradiction needs: a channel's definitions, the legal role a denial names, and
-    the denial's own condition and applicability."""
+    """What O cannot observe but a contradiction needs: a channel's definitions, the legal role a denial names, the
+    denial's own condition and applicability, and, for a denial D labelled only with the root category of data, that
+    it meant the data observed (POST_PAPER_FIXES 3: "we never collect or store those informations")."""
     parts = []
     definitions = channel_definitions.get(declaration.channel)
     if (definitions, aspect) in DEFINITIONS:
@@ -148,7 +175,18 @@ def _condition(
     if qualifiers.get("applicability"):
         limits = ", ".join(f"{a.get('kind')} {a.get('value')}" for a in qualifiers["applicability"])
         parts.append(f"the denial applies to the observation ({limits})")
+    if data is not None and declaration.data == data.root and not (declaration.no_data or declaration.marked):
+        # an earlier report's root stands both for all data and for a value D could not place (Urda before 2.1.0)
+        parts.append(f"the denial, labelled only {data.root}, means the data observed")
     return "; and ".join(parts) or None
+
+
+#: Why a relation that only declarations of unplaced data could decide is insufficient evidence
+UNPLACED = "D could not place the data of the declarations that could relate ({})"
+
+
+def _unplaced_words(declarations: list[Declaration]) -> str:
+    return ", ".join(sorted({d.claim["claim"] for d in declarations}))
 
 
 def relate(
@@ -206,16 +244,42 @@ def relate(
                     alignment="recipient unknown or of an undecided party",
                 )
                 continue
-            found, contradicting = [], []
+            found, contradicting, unplaced = [], [], []
             for d in declarations:
                 d_data = align.data(p.data, d.data, data)
                 if not d_data.aligned:
                     continue
+                if d.unplaced_data(data.root):
+                    # the root of a value D could not place says nothing of all data: it could relate, or not
+                    if d.polarity == "-" and (
+                        p.claim_type != "transmits" or (isinstance(d.value, dict) and d.value.get("sale"))
+                    ):
+                        continue
+                    if (
+                        aspect == "recipient"
+                        and d.polarity == "+"
+                        and _recipient_outcome(p, d.value, registry, types) is None
+                    ):
+                        continue
+                    if aspect == "recipient" and d.polarity == "-" and _names_recipient(d.value, types):
+                        pair = _recipient_outcome(p, d.value, registry, types)
+                        if pair is None or pair[0] == PARTIALLY:
+                            continue
+                    unplaced.append(d)
+                    continue
                 if d.polarity == "-":
-                    # a denial contradicts only what falls under it; O observes no sale's consideration
+                    # a denial contradicts only a transmission of what falls under it; O observes no sale's consideration
+                    if p.claim_type != "transmits":
+                        continue
                     if d_data.kind in (align.EQUAL, align.NARROWER) and not (
                         isinstance(d.value, dict) and d.value.get("sale")
                     ):
+                        # a denial that names a recipient (an entity, or a category below the root) contradicts
+                        # only a transmission to that recipient
+                        if aspect == "recipient" and _names_recipient(d.value, types):
+                            pair = _recipient_outcome(p, d.value, registry, types)
+                            if pair is None or pair[0] == PARTIALLY:
+                                continue
                         contradicting.append(d)
                     continue
                 if aspect == "data":
@@ -229,9 +293,19 @@ def relate(
                         outcome = HIERARCHICALLY
                 if outcome:
                     found.append((ORDER.index(outcome), outcome, how, d))
+            denied = [d for d in unplaced if d.polarity == "-"]
+            if denied:  # a denial of data D could not place may or may not deny the practice: undecided
+                add(
+                    outcome=INSUFFICIENT,
+                    of=of,
+                    to=[d.claim for d in denied],
+                    subject=p.id,
+                    aspect=aspect,
+                    alignment=UNPLACED.format(_unplaced_words(denied)),
+                )
             for d in contradicting:
                 matched.add(d.id)
-                condition = _condition(d, qualifiers[d.claim["claim"]], aspect, definitions)
+                condition = _condition(d, qualifiers[d.claim["claim"]], aspect, definitions, data)
                 add(
                     outcome=CONTRADICTS,
                     of=of,
@@ -255,6 +329,17 @@ def relate(
                     alignment=chosen[0][2],
                     partial=_partial(chosen[0][1], chosen[0][2]),
                     **(silent_if if _partial(chosen[0][1], chosen[0][2]) == "related" else {}),
+                )
+            elif not contradicting and [d for d in unplaced if d.polarity == "+"]:
+                positive = [d for d in unplaced if d.polarity == "+"]
+                matched.update(d.id for d in positive)
+                add(
+                    outcome=INSUFFICIENT,
+                    of=of,
+                    to=[d.claim for d in positive],
+                    subject=p.id,
+                    aspect=aspect,
+                    alignment=UNPLACED.format(_unplaced_words(positive)),
                 )
             elif not contradicting:
                 if analysed:
@@ -281,8 +366,18 @@ def relate(
         if not comparable:
             add(outcome=NOT_COMPARABLE, of=d.claim, subject=d.id, reason=why_not)
             continue
+        if d.unplaced_data(data.root):  # O's silence on the root says nothing of data D could not place
+            add(
+                outcome=INSUFFICIENT,
+                of=d.claim,
+                subject=d.id,
+                aspect="data" if d.type == "declares_collection" else "recipient",
+                alignment=UNPLACED.format(d.claim["claim"]),
+            )
+            continue
         silence = [
             f"O {s['claim_type']} {s['node']}: {s['status']}"
+            + (f" (not_found for {', '.join(s['not_found_for'])})" if s.get("not_found_for") else "")
             for s in o_statuses
             if s.get("node") == d.data and s.get("claim_type") == "transmits"
         ]

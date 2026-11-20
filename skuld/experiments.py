@@ -16,11 +16,11 @@ from pathlib import Path
 from ratatoskr.vocabularies import Vocabulary
 
 import skuld
-from skuld import configuration, oracles, rules, space
+from skuld import configuration, oracles, rules, space, yamlio
 from skuld.common import vocabulary
 from skuld.comparison import Comparison, compare
-from skuld.inputs import Case, Workspace, check_frozen, digest
-from skuld.observe import ObservationError, observe, report_path, source_reads
+from skuld.inputs import Case, InputError, Workspace, check_frozen, digest
+from skuld.observe import ObservationError, annotators, observe, report_path, source_reads
 from skuld.runs import Run, RunRefused, load
 from skuld.uncertainty import ORDER
 from skuld.verify import Verification, baseline_problem, imposes, settings, verify
@@ -46,6 +46,16 @@ class RunState:
     decisions: dict = field(default_factory=dict)
 
 
+#: What of Loki's replay record says the replay departed from the recording; its other keys (until_action, keep_going,
+#: blocked_actions) state how it was asked to replay
+DIVERGED = ("divergences", "repairs", "skipped_actions")
+
+
+def _diverged(run) -> bool:
+    """Whether a replay departed from its recording."""
+    return any((run.meta.get("replay") or {}).get(x) for x in DIVERGED)
+
+
 def analyse(workspace: Workspace, make_observations: bool = True, now: datetime | None = None) -> dict:
     """The expectation report of a workspace."""
     try:
@@ -63,9 +73,17 @@ def analyse(workspace: Workspace, make_observations: bool = True, now: datetime 
             continue
         try:
             state.run = load(entry.directory)
-            state.report = observe(workspace.root, entry.id, entry.directory, workspace.verdandi, make_observations)
+            state.report = observe(
+                workspace.root,
+                entry.id,
+                entry.directory,
+                workspace.verdandi,
+                make_observations,
+                workspace.verdandi_options,
+            )
         except (RunRefused, ObservationError) as e:
             state.refused = str(e)
+    _refuse_other_annotators(states)
 
     builder = _Report(workspace, frozen, states, data_vocabulary)
     for case in workspace.cases:
@@ -73,20 +91,44 @@ def analyse(workspace: Workspace, make_observations: bool = True, now: datetime 
     return builder.write(now, data_vocabulary, purpose_vocabulary)
 
 
+def _refuse_other_annotators(states: dict) -> None:
+    """Refuses the runs whose observation report was made with other annotators than the workspace's first run: a
+    datum one report inferred and the other could not would look like a practice the replay removed."""
+    reports = [s for s in states.values() if s.report is not None and not s.refused]
+    if not reports:
+        return
+    expected = annotators(reports[0].report)
+    for state in reports[1:]:
+        found = annotators(state.report)
+        if found != expected:
+            state.refused = (
+                f"its observation report was made with other annotators ({found or 'none'}) than the workspace's "
+                f"first run ({expected or 'none'}); analyse every run alike (workspace.yaml: verdandi_options)"
+            )
+
+
 def unqualified(root: Path) -> dict[str, list[str]]:
     """The cases a qualifying replay did not qualify, with why (`skuld run --qualify`)."""
     path = root / "qualification.json"
     if not path.is_file():
         return {}
-    return {c: p for c, p in json.loads(path.read_text(encoding="utf-8"))["cases"].items() if p}
+    try:
+        cases = json.loads(path.read_text(encoding="utf-8"))["cases"]
+    except (ValueError, KeyError) as e:
+        raise InputError(f"{path} cannot be read ({e}); run the qualifying replay again") from None
+    return {c: p for c, p in cases.items() if p}
 
 
 def runs_of(case: Case, state: RunState) -> bool:
-    """Whether a run is meant as a run of the case's feature: a replay of the recording its path is taken from."""
+    """Whether a run is meant as a run of the case's feature: a replay of the recording its path is taken from, and,
+    for a replay of a prefix of it (`skuld run --case`), one that went as far as the path's last action."""
     feature = case.feature
+    run = state.run
+    until = ((run.meta.get("replay") or {}) if run is not None else {}).get("until_action")
+    if until is not None and until < feature.actions:
+        return False
     if feature.path_run is None:
         return True
-    run = state.run
     return (run.meta.get("replay_of") or run.run_id) == feature.path_run
 
 
@@ -97,7 +139,11 @@ DEPARTURES = ("divergence", "repair", "replay_action_failed")
 def departed(case: Case, run: Run) -> str | None:
     """
     Why a run did not follow the feature's path, or None if it did: a replay is a run of the feature only if it
-    departed from the recording nowhere up to the path's last action. Departures after it are outside the feature.
+    departed from the recording nowhere within the path, from just after the action before its first (so that
+    reaching the start screen of its episode counts) to its last action. Departures before the path are judged by
+    whether the replay then reaches the path's screens: every replayed action checks that it is on its recorded
+    screen, and records a departure if not (author, 12 Nov 2026; before, any departure before the path counted).
+    Departures after it are outside the feature.
     """
     feature = case.feature
     if feature.path_run is None or not run.meta.get("replay_of"):
@@ -106,7 +152,8 @@ def departed(case: Case, run: Run) -> str | None:
     if len(recorded) < feature.actions:
         return f"the recording has {len(recorded)} actions, the feature's path {feature.actions}"
     last = recorded[feature.actions - 1] if feature.actions else 0
-    within = [e for e in run.events if e.get("type") in DEPARTURES and (e.get("source_seq") or 0) <= last]
+    before = recorded[feature.start - 1] if feature.start else 0
+    within = [e for e in run.events if e.get("type") in DEPARTURES and before < (e.get("source_seq") or 0) <= last]
     if within:
         kinds = ", ".join(sorted({e["type"] for e in within}))
         return f"did not follow the feature's path: {len(within)} departure(s) within it ({kinds})"
@@ -133,6 +180,7 @@ class _Report:
         self.verifications = {}
         self.unqualified = unqualified(workspace.root)
         self._evidence_ids = set()
+        self.accepted_versions: dict[str, list[dict]] = {}
 
     # -- per case -------------------------------------------------------------------------------------------------
 
@@ -144,6 +192,8 @@ class _Report:
         ]
         fixed = max(datetime.fromisoformat(self.frozen[i]["fixed"]) for i in inputs)
         version = str(ws.application.get("version", "?"))
+        stated = _compatible(ws.root, version)
+        accepted = self.accepted_versions[case.id] = []
 
         usable, excluded = [], {}
         for state in self.states.values():
@@ -153,13 +203,17 @@ class _Report:
                 continue
             elif departure := departed(case, state.run):
                 excluded[state.id] = departure
-            elif (state.run.meta.get("app") or {}).get("version_name", version) != version:
+            elif (ran := str((state.run.meta.get("app") or {}).get("version_name", version))) != version and (
+                ran not in stated
+            ):
                 excluded[state.id] = f"outside the case's scope: version {state.run.meta['app'].get('version_name')}"
             elif not _after(state.run.meta.get("started_at"), fixed):
                 excluded[state.id] = "made before the case's inputs were fixed"
             else:
                 usable.append(state)
                 state.cases.append(case.id)
+                if ran != version and stated[ran] not in accepted:
+                    accepted.append(stated[ran])
 
         baseline = []
         for s in usable:
@@ -169,6 +223,8 @@ class _Report:
                     excluded[s.id] = f"no baseline: {problem}"
                 else:
                     baseline.append(s)
+        # u_0 from the baseline runs of this case's path: a component none of them shows (no read of its source, no
+        # transmission to its recipient) is no component of it, and no comparison varies it (C2)
         u0 = configuration.baseline([s.report for s in baseline])
         present = {c.id: configuration.present(c, u0, self.vocabulary) for c in case.components}
         alternatives_ok, missing_why = [], {}
@@ -189,17 +245,22 @@ class _Report:
                     missing_why[(p.id, alt.id)] = "precondition_failed"
             alternatives_ok = []
 
-        most_reads = {}
+        baseline_reads: dict[str, list[int]] = {}
         for s in baseline:
             for source in settings(s.report):
-                most_reads[source] = max(most_reads.get(source, 0), len(source_reads(s.report, source)))
+                baseline_reads.setdefault(source, []).append(len(source_reads(s.report, source)))
 
         under = {}
         for alt in alternatives_ok:
+            if not present[alt.component]:
+                # no comparison varies a component no baseline run shows (C2, below), and its runs cannot be verified
+                # against a baseline that never read the source
+                under[alt.id] = []
+                continue
             runs = [s for s in usable if s.entry.condition == alt.condition]
             verified = []
             for s in runs:
-                v = verify(s.run, s.report, alt, case, most_reads)
+                v = verify(s.run, s.report, alt, case, baseline_reads)
                 s.verification = s.verification or v
                 self.verifications[(case.id, s.id)] = v
                 self._verification_evidence(case, s, v)
@@ -227,6 +288,11 @@ class _Report:
                 self._decision_evidence(case, purpose.id, oracle, s, d)
             valid_baseline = {s.id: decided[s.id] for s in baseline if decided[s.id].decision != "invalid"}
             for alt in alternatives_ok:
+                if not present[alt.component]:
+                    # C2 (author, 14 Nov 2026): no baseline run of the case's path read the source or reached the
+                    # recipient, so the intervention varies nothing there; its claims are not applicable (rules)
+                    missing_why.setdefault((purpose.id, alt.id), "precondition_failed")
+                    continue
                 valid = {s.id: decided[s.id] for s in under[alt.id] if decided[s.id].decision != "invalid"}
                 if not valid_baseline or not valid:
                     # every run of a side was invalid for the oracle, or no baseline run was usable
@@ -248,10 +314,7 @@ class _Report:
                     [
                         {"run": s, **self.states[s].run.meta["replay"]}
                         for s in [*valid_baseline, *valid]
-                        if any(
-                            (self.states[s].run.meta.get("replay") or {}).get(x)
-                            for x in ("divergences", "repairs", "skipped_actions")
-                        )
+                        if _diverged(self.states[s].run)
                     ],
                 )
                 comparisons[(purpose.id, alt.id)] = k
@@ -410,6 +473,9 @@ class _Report:
                         source["reason"] = state.refused
                     sources.append(source)
         scope = _shared_scope([s.report for s in usable])
+        if accepted := self.accepted_versions.get(case.id):
+            # runs of another version taken into the case's scope by the author's statement (assessment.yaml)
+            scope["compatible_versions"] = accepted
         self.cases.append(
             {
                 "id": case.id,
@@ -475,7 +541,7 @@ class _Report:
                             "unverifiable": v.unverifiable,
                         }
                     ),
-                    "divergence": [run.meta["replay"]] if any((run.meta.get("replay") or {}).values()) else [],
+                    "divergence": [run.meta["replay"]] if _diverged(run) else [],
                     "decisions": [
                         {
                             "purpose": purpose,
@@ -650,6 +716,11 @@ def case_claims(cases: Workspace, report: dict) -> dict[str, list[rules.Claim]]:
         if measured is None:
             continue
         present = {c["id"]: c.get("present", False) for c in measured["scope"]["components"]}
+        unknown = [c.id for c in case.components if c.id not in present]
+        if unknown:
+            raise AnalysisError(
+                f"the case report has no component {', '.join(unknown)} of case {case.id}: run skuld analyse again"
+            )
         invalid = {a["id"] for a in measured["scope"]["search_space"] if a.get("problems")}
         missing_why = {(u["purpose"], u["alternative"]): u["reason"] for u in measured.get("untested") or ()}
         compared = {
@@ -715,6 +786,8 @@ def premises(cases: Workspace | None, root: Path, practices: list, item) -> list
                     },
                     "component": varied,
                     "status": c.status,
+                    # C1: whether a comparison broke the purpose (combine.experimental aligns it also below its node)
+                    "broke": any(k.outcome == "breaks" for k in c.comparisons),
                     "supporting": [items[i] for i in c.supporting],
                     "challenging": [items[i] for i in c.challenging],
                     "uncertainty": {
@@ -744,3 +817,24 @@ def device_seconds(cases: Workspace | None, root: Path) -> float:
         if t.get("start") and t.get("end"):
             total += (datetime.fromisoformat(t["end"]) - datetime.fromisoformat(t["start"])).total_seconds()
     return round(total, 3)
+
+
+def _compatible(root: Path, version: str) -> dict[str, dict]:
+    """
+    The versions the author states compatible with the case's (`compatible_versions` of the workspace's
+    assessment.yaml, where the workspace is also an assessment workspace), each with its statement: a run of such a
+    version is in the case's scope.
+    """
+    from skuld.inputs import ASSESSMENT, _compatible_versions
+
+    path = root / ASSESSMENT
+    if not path.is_file():
+        return {}
+
+    out = {}
+    for statement in _compatible_versions(yamlio.load(path.read_text(encoding="utf-8")) or {}):
+        versions = [str(v) for v in statement["versions"]]
+        if version in versions:
+            other = versions[1 - versions.index(version)]
+            out[other] = {**statement, "versions": versions, "fixed": str(statement["fixed"])}
+    return out

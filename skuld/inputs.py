@@ -25,6 +25,8 @@ from pathlib import Path
 
 import yaml
 
+from skuld import yamlio
+
 #: The processing dimensions the instance imposes: data, granularity (precision), recipients
 DIMENSIONS = ("D", "G", "R")
 FROZEN = "frozen.json"
@@ -176,6 +178,9 @@ class Workspace:
     oracles: dict[str, Oracle]
     runs: list[RunEntry]
     verdandi: list[str] = field(default_factory=lambda: ["verdandi"])
+    #: options of `verdandi analyse` for every run of the workspace (e.g. its annotators: --model, --student), so that
+    #: a baseline and its replays are analysed alike
+    verdandi_options: list[str] = field(default_factory=list)
     runs_base: Path | None = None  # what a relative run folder in runs.jsonl is relative to; the root if None
 
     def file(self, path: Path) -> str:
@@ -213,6 +218,7 @@ def load(root: str | Path) -> Workspace:
         oracles=oracles,
         runs=_runs(root, settings),
         verdandi=list(settings.get("verdandi") or ["verdandi"]),
+        verdandi_options=[str(o) for o in settings.get("verdandi_options") or []],
         runs_base=_runs_base(root, settings),
     )
 
@@ -228,7 +234,12 @@ def digest(path: Path) -> str:
 
 def frozen(root: Path) -> dict:
     path = root / FROZEN
-    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {"inputs": {}}
+    if not path.is_file():
+        return {"inputs": {}}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        raise InputError(f"{path} is no JSON ({e}); restore it rather than fix the inputs again") from None
 
 
 def freeze(root: str | Path, author: dict, now: datetime | None = None, authors: dict | None = None) -> list[str]:
@@ -281,12 +292,15 @@ def check_frozen(workspace: Workspace) -> dict[str, dict]:
     """
     record = frozen(workspace.root)["inputs"]
     problems = []
+    names = set()
     for path in input_files(workspace.root):
         name = _name(workspace.root, path)
+        names.add(name)
         if name not in record:
             problems.append(f"{name} is not fixed")
         elif _current(record[name]) != digest(path):
             problems.append(f"{name} changed without a record")
+    problems += [f"{name} was removed without a record" for name in sorted(set(record) - names)]
     if problems:
         raise InputError("; ".join(problems))
     return {name: record[name] for name in (_name(workspace.root, p) for p in input_files(workspace.root))}
@@ -305,12 +319,19 @@ def _time(now: datetime | None) -> str:
 
 
 def _write(root: Path, record: dict) -> None:
-    (root / FROZEN).write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    write_atomically(root / FROZEN, json.dumps(record, indent=2, ensure_ascii=False) + "\n")
+
+
+def write_atomically(path: Path, text: str) -> None:
+    """A file replaced atomically: a crash while writing leaves the old one, never half of the new one."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(text, encoding="utf-8", newline="\n")
+    os.replace(tmp, path)
 
 
 def _yaml(path: Path) -> dict:
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = yamlio.load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as e:
         raise InputError(f"{path}: {e}") from e
     if not isinstance(data, dict):
@@ -571,7 +592,7 @@ def load_assessment(root: str | Path, check: bool = True) -> Assessment:
 
     f = data["frame"]
     _require(f, ("id", "version", "sha256"), f"{ASSESSMENT}: frame")
-    frame = Frame.load(f["id"])
+    frame = Frame.load(f["id"], str(f["version"]))  # the version it names, an earlier one too
     if check and (frame.version, frame.digest()) != (f["version"], f["sha256"]):
         raise InputError(f"{ASSESSMENT}: frame {f['id']} is {frame.version} ({frame.digest()[:12]}), not as named")
 
@@ -611,11 +632,15 @@ def describe_assessment(
     corpus: Path,
     frame: str = "gdpr-art5",
     comment: str | None = None,
+    frame_version: str | None = None,
+    model: str | None = None,
 ) -> Path:
     """
     Writes `assessment.yaml` (`skuld describe`): every report, the exploration's records, the frame and the corpus
     named by their current digests, with paths relative to the workspace. `observations` are (report path, run id)
-    pairs.
+    pairs. The frame is the bundled frame's current version unless `frame_version` names an earlier one, as for a
+    workspace assessed with it. What an existing `assessment.yaml` states beyond what describe writes is kept: the
+    compatibility statements (`compatible_versions`) and the models (`models`; `model` names both stages' model).
     """
     from ratatoskr.frames import Frame
 
@@ -627,7 +652,9 @@ def describe_assessment(
     def rel(path: Path) -> str:
         return portable(path, root)
 
-    loaded = Frame.load(frame)
+    loaded = Frame.load(frame, frame_version)
+    path = root / ASSESSMENT
+    kept = _yaml(path) if path.is_file() else {}
     data = {
         "application": {"package": package, "version": version},
         "observation": [
@@ -640,7 +667,44 @@ def describe_assessment(
         "frame": loaded.reference(),
         "corpus": {"path": rel(corpus), "sha256": load_corpus(corpus).sha256},
     }
-    text = (f"# {comment}\n" if comment else "") + yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
-    path = root / ASSESSMENT
-    path.write_text(text, encoding="utf-8", newline="\n")
+    models = {"expectation": model, "assessment": model} if model else kept.get("models")
+    if models:
+        data["models"] = models
+    if kept.get("compatible_versions"):
+        data["compatible_versions"] = _compatible_versions(kept)
+    _write_assessment(path, data, comment)
     return path
+
+
+def _write_assessment(path: Path, data: dict, comment: str | None = None) -> None:
+    """`assessment.yaml`, replaced atomically (a reader never sees half of it)."""
+    write_atomically(
+        path, (f"# {comment}\n" if comment else "") + yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+    )
+
+
+def add_compatible_versions(root: str | Path, o_version: str, d_version: str, reason: str, author: str) -> dict:
+    """
+    States that D of `d_version` speaks for O's `o_version` (`skuld compat add`): a statement of `compatible_versions`
+    with its reason, its author (a person) and when it was fixed. A pair stated already is refused.
+    """
+    path = Path(root) / ASSESSMENT
+    data = _yaml(path)
+    statements = _compatible_versions(data)
+    pair = frozenset((str(o_version), str(d_version)))
+    if len(pair) != 2:
+        raise InputError("a statement names two different versions")
+    if pair in {frozenset(map(str, s["versions"])) for s in statements}:
+        raise InputError(f"{path}: {o_version} and {d_version} are stated compatible already")
+    if not reason.strip():
+        raise InputError("a statement gives its reason")
+    statement = {
+        "versions": [str(o_version), str(d_version)],
+        "reason": reason.strip(),
+        "author": {"kind": "person", "id": author},
+        "fixed": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+    data["compatible_versions"] = [*statements, statement]
+    first = path.read_text(encoding="utf-8").splitlines()[:1]
+    _write_assessment(path, data, first[0][2:] if first and first[0].startswith("# ") else None)
+    return statement

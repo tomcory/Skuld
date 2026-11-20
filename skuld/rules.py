@@ -39,7 +39,7 @@ class Claim:
     why: str | None = None
 
 
-def precondition(purpose: Purpose, component: Component, present: bool) -> tuple[str, str, str] | None:
+def precondition(purpose: Purpose, present: bool) -> tuple[str, str, str] | None:
     """(status, reason, gap reason) for a claim no comparison can decide, or None."""
     if not present:
         return "not_applicable", "not a component of the baseline configuration", "not_covered"
@@ -122,7 +122,7 @@ def claims(
         for component in case.components:
             alternatives = [a for a in case.alternatives if a.component == component.id and a.id not in invalid]
             removal = next((a for a in alternatives if a.removal), None)
-            pre = precondition(purpose, component, present[component.id])
+            pre = precondition(purpose, present[component.id])
             if pre:
                 status, reason, why = pre
                 made = [Claim("dependency", purpose.id, component.id, status)] if removal else []

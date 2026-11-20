@@ -20,6 +20,7 @@ recipient's removal the recipient of every transmission to that entity.
 from collections.abc import Callable
 
 from skuld import parties
+from skuld.common import DATA, vocabulary
 from skuld.configuration import UNKNOWN
 from skuld.observe import claims
 from skuld.verify import NODE_SOURCES
@@ -149,10 +150,15 @@ def imposable(practice) -> list[dict]:
     """What Skuld can impose on a practice, by the rules of `derive`: {component, dimension, alternatives}. Its party
     relation reads D's controller too, so a recipient `derive` takes for the provider's is never one it imposes."""
     out = []
-    source = NODE_SOURCES.get(practice.data)
+    data = vocabulary(DATA)
+    known = practice.data in data
+    # as `varies` reads a case's components: a datum at or below a source's node, or below location
+    source = NODE_SOURCES.get(practice.data) or next(
+        (s for node, s in NODE_SOURCES.items() if known and node in data and data.is_a(practice.data, node)), None
+    )
     if source in REPLACEMENTS:
         out.append({"component": f"{practice.id}.data", "dimension": "D", "alternatives": [f"D-{source}"]})
-    elif practice.data == LOCATION:
+    elif practice.data == LOCATION or (known and LOCATION in data and data.is_a(practice.data, LOCATION)):
         alternatives = [f"G-round{d}" for d, _ in ROUNDINGS]
         out.append({"component": f"{practice.id}.data", "dimension": "G", "alternatives": alternatives})
     party = (practice.party or {}).get("relation")

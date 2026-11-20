@@ -58,7 +58,7 @@ from skuld.inputs import ReportRef
 from skuld.observe import claims as o_claims
 from skuld.transparency import INCOMPLETE, MISSING_IF, UNREAD, Status
 
-VERSION = "5"
+VERSION = "7"  # 7: D–E: a purpose, or its data, D could not place (Urda 2.1.0) is not comparable as such; 6: claims of practices left out for an unknown datum are passed on as such
 COMPONENT = {"role": "method", "id": "skuld.relations", "version": VERSION}
 
 CONFLICTING, INSUFFICIENT, NOT_ASSESSABLE, NOT_COMPARABLE = (
@@ -211,6 +211,11 @@ def d_e(
         if not comparable:
             add(outcome=NOT_COMPARABLE, of=d.claim, subject=d.id, reason="O's and D's scopes are not comparable")
             continue
+        marks = getattr(d, "unplaced", ())
+        if ("purpose" in marks and d.value == purposes.root) or ("category" in marks and d.data == data.root):
+            what = "the purpose" if "purpose" in marks and d.value == purposes.root else "the data it is declared for"
+            add(outcome=NOT_COMPARABLE, of=d.claim, subject=d.id, reason=f"D could not place {what}")
+            continue
         if not isinstance(d.value, str) or d.value not in purposes or d.value == purposes.root or d.data not in data:
             what = "its data" if isinstance(d.value, str) and d.value in purposes and d.value != purposes.root else "it"
             add(outcome=NOT_COMPARABLE, of=d.claim, subject=d.id, reason=f"{what} names no node E aligns by")
@@ -267,7 +272,9 @@ def _necessity(subjects: Subjects, tested: list[dict], data: Vocabulary, compara
             continue
         common = {"type": "D-E", "tier": "rule", "of": d.claim, "subject": d.id}
         if not comparable:
-            out.append(Relation(id="", outcome=NOT_COMPARABLE, reason="O's and D's scopes are not comparable", **common))
+            out.append(
+                Relation(id="", outcome=NOT_COMPARABLE, reason="O's and D's scopes are not comparable", **common)
+            )
             continue
         if d.data == data.root or d.data not in data:
             reason = "it is declared for no data in particular, as a list of the bases a policy may use is"
@@ -314,14 +321,17 @@ def passed_on(
     declaration: ReportRef | None,
     relations: list[Relation],
     expected: bool = False,
+    left_out: list = (),
 ) -> list[dict]:
     """Every top-level claim of O's reports and every claim of D's report, with its relations or why it has none;
-    `expected` says whether E's expectation stage has claims."""
+    `expected` says whether E's expectation stage has claims, `left_out` the practices left out of the assessment
+    because O could not identify their datum (`assessment.known_data_only`)."""
     related: dict[tuple, list[str]] = {}
     in_practice: dict[tuple, str] = {}
     for p in subjects.practices:
         for ref in p.claims:
             in_practice[_key(ref)] = p.id
+    unknown_datum = {_key(ref) for p in left_out for ref in p.claims}
     for r in relations:
         for ref in [r.of, *r.to]:
             if ref["dimension"] in ("O", "D"):
@@ -336,6 +346,10 @@ def passed_on(
     for report in observations:
         for claim in o_claims(report.load()):
             ref = {"dimension": "O", "report": report.sha256, "claim": claim["id"]}
+            if _key(ref) in unknown_datum and _key(ref) not in related:
+                reason = "left out: O could not identify its datum (source_not_analysable)"
+                out.append({"claim": ref, "not_related": "not_assessable", "reason": reason})
+                continue
             out.append(_entry(ref, related, in_practice, comparable, expected, "O"))
     for d in subjects.declarations:
         out.append(_entry(d.claim, related, in_practice, comparable, expected, "D", d))
@@ -443,6 +457,11 @@ def _entry(ref: dict, related: dict, in_practice: dict, comparable: bool, expect
     elif d is not None and d.type == "declares_purpose":
         reason = (
             "a denial of a purpose: E relates declared purposes only"
+            + (
+                "; D could not place the purpose, so it denies no purpose in particular"
+                if "purpose" in d.unplaced
+                else ""
+            )
             if d.polarity != "+"
             else "E's expectation stage has no claims"
             if not expected

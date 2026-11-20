@@ -161,6 +161,54 @@ def test_a_denial_contradicts_only_under_what_o_cannot_observe(tmp_path):
     assert "third party" in contradictions[1].condition and "registering" in contradictions[1].condition
 
 
+def test_a_denial_contradicts_a_transmission_only(tmp_path):
+    """Google Play counts only data that leaves the device as collected: an access on the device contradicts no
+    denial (POST_PAPER_FIXES 3, Peacock's "Camera" denied and contradicted by every on-device access)."""
+    built, rel = relate(
+        tmp_path,
+        [claim("c1", "photos-videos.photos", ctype="accesses"), claim("c2", "personal-info.name", "adco")],
+        [d_claim("declares_collection", "photos-videos", "-"), d_claim("declares_collection", "personal-info", "-")],
+    )
+    practices = {p.id: p for p in built.practices}
+    contradicted = [practices[r.subject].data for r in rel if r.outcome == "contradicts"]
+    assert contradicted == ["personal-info.name"]  # the transmission; the photo accessed on the device is not
+
+
+def _fresh(path):
+    path.mkdir()
+    return path
+
+
+def test_a_denial_naming_a_recipient_contradicts_only_a_transmission_to_it(tmp_path):
+    """ "We do not share your name with othercorp" (or with payment providers) says nothing of a transmission to adco."""
+    _, rel = relate(
+        tmp_path,
+        [claim("c1", "personal-info.name", "adco")],
+        [
+            d_claim("declares_recipient", "personal-info.name", "-", value={"entity": "othercorp"}),
+            d_claim("declares_recipient", "personal-info.name", "-", value={"category": "payment"}),
+        ],
+    )
+    assert not [r for r in rel if r.outcome == "contradicts"]
+    _, rel = relate(
+        _fresh(tmp_path / "named"),
+        [claim("c1", "personal-info.name", "adco")],
+        [d_claim("declares_recipient", "personal-info.name", "-", value={"entity": "adco"})],
+    )
+    assert [r.aspect for r in rel if r.outcome == "contradicts"] == ["recipient"]
+
+
+def test_a_denial_labelled_only_with_the_root_category_contradicts_under_a_condition(tmp_path):
+    _, rel = relate(
+        tmp_path,
+        [claim("c1", "personal-info.name", "adco")],
+        [d_claim("declares_collection", "data", "-")],  # "we never collect or store those informations"
+    )
+    (contradiction,) = [r for r in rel if r.outcome == "contradicts"]
+    assert contradiction.condition == "the denial, labelled only data, means the data observed"
+    assert contradiction.condition_kind == "fact"
+
+
 def test_without_a_declaration_and_without_an_observation(tmp_path):
     built, rel = relate(
         tmp_path,
@@ -424,6 +472,19 @@ def test_a_declared_necessity_is_refuted_by_a_run_never_supported_and_not_compar
     )
 
 
+@pytest.fixture
+def fixtures_profile(monkeypatch):
+    """The setup the fixtures were asked with (profile fixtures-2026-10), under which their kept samples are found."""
+    from skuld import config
+
+    monkeypatch.setenv("SKULD_PROFILE", "fixtures-2026-10")
+    monkeypatch.delenv("SKULD_CONFIG", raising=False)
+    config.load.cache_clear()
+    yield
+    monkeypatch.undo()
+    config.load.cache_clear()
+
+
 FIXTURES = [
     "pilatesworkout.yogaworkout.loseweight.workoutapps@1.6.4",
     "air.nn.mobile.app.main@3.8.96",
@@ -432,7 +493,7 @@ FIXTURES = [
 
 
 @pytest.mark.parametrize("name", FIXTURES)
-def test_the_fixtures_reports_are_valid_and_pilates_reproduces_the_worked_example(name):
+def test_the_fixtures_reports_are_valid_and_pilates_reproduces_the_worked_example(name, fixtures_profile):
     root = ROOT / "cases" / name
     if not (root / "assessment.yaml").is_file():
         pytest.skip("the case study's workspaces are not in this checkout")
@@ -469,24 +530,22 @@ def test_the_fixtures_reports_are_valid_and_pilates_reproduces_the_worked_exampl
         for c in claims.values()
     )
     if name.startswith("de.wetteronline") and (root / "expectation").is_dir():
-        # one decimal of the location preserves the forecast: a demonstrated minimisation concern, still a judgement
-        # of what is necessary; its O–E relation reads the run
+        # one decimal of the location preserves the forecast (ServiceProvision), but E's purposes of the location are
+        # RequestedServiceProvision, a narrower node: a preserved purpose reaches hypotheses at its own node only, while
+        # a broken one (no location: the forecast for another place) also reaches those below (C1, author 14 Nov 2026)
         located = {p["id"] for p in report["subjects"]["practices"] if p["data"] == "location.coordinates"}
-        demonstrated = [
+        case = [c for c in report["claims"] if c.get("case") == "forecast" and c["subject"] in located]
+        kept = [c for c in case if c["type"] == "alternative" and c["status"] == "supported"]
+        broken = [c for c in case if c["type"] == "alternative" and c["status"] == "refuted"]
+        assert kept and all(c["basis"] == [] for c in kept)
+        assert broken and all(c["basis"] for c in broken)
+        assert not [
             c
             for c in report["concerns"]
             if c["step"] == "less_invasive_alternative"
             and c["subject"] in located
-            and c["status"] == "supported"
-            and "forecast:G1 demonstrated" in c["reason"]
+            and "forecast:G1" in c.get("reason", "")
         ]
-        assert demonstrated and all(c["uncertainty"]["n"] == "moderate" for c in demonstrated)
-        relations = {r["id"]: r for r in report["relations"]}
-        for c in demonstrated:
-            shown = [relations[i] for i in c["relations"] if relations[i]["outcome"].startswith("alternative")]
-            assert [r["outcome"] for r in shown] == ["alternative_demonstrated"]
-            read = [claims[t["claim"]] for r in shown for t in r["to"]]
-            assert any((x["level"], x.get("strength")) == ("demonstrated", "run") for x in read)
     if not name.startswith("pilates"):
         return
     practices = {p["id"]: p for p in report["subjects"]["practices"]}
@@ -519,12 +578,24 @@ def test_the_fixtures_reports_are_valid_and_pilates_reproduces_the_worked_exampl
     }
     if not (root / "assessment").is_dir():
         return
-    # the reasoning tier: "provide and improve the Service" not specific; a less invasive identifier for advertising
+    # the reasoning tier: "provide and improve the Service" not specific
     vague = [c for c in report["concerns"] if c["step"] == "not_specific" and "provide and improve" in c["reason"]]
     assert vague and vague[0]["status"] == "supported"
-    assert any(
-        c["step"] == "less_invasive_alternative"
-        and c["status"] == "supported"
-        and practices[c["subject"]]["data"] == "device-or-other-ids.advertising-id"
+    # a less invasive identifier for advertising, documented by the fixture's corpus (cd73311d), whose passages no
+    # person has checked: gate (c) holds every documented alternative at not established (E 0.9's worked example)
+    identifier = {pid for pid, p in practices.items() if p["data"] == "device-or-other-ids.advertising-id"}
+    assert not [
+        c
         for c in report["concerns"]
-    )
+        if c["step"] == "less_invasive_alternative"
+        and c["status"] == "supported"
+        and c["subject"] in identifier
+        and "run" not in str(c.get("strength"))
+    ]
+    reasoned = [
+        c
+        for c in report["claims"]
+        if c["type"] == "alternative" and c.get("tier") == "reasoning" and c["subject"] in identifier
+    ]
+    assert reasoned and all(c["status"] != "supported" for c in reasoned)
+    assert any("gate (" in str(c.get("reason")) for c in reasoned)

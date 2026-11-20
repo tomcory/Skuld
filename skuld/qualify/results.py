@@ -3,13 +3,17 @@ The qualified results (QUALIFICATION_PLAN.md §3): for a case, or a row of a sec
 taken in order; the first that holds is the result, and every later step that also holds is a secondary reason. Each
 step records what made it hold.
 
-    1  externally established discrepancy  an O–D relation is ≠ by rule, under no condition
-    2  externally supported concern        a concern is supported under no source condition; or an O–D relation is ≠
-                                           under a fact condition only
+    1  externally established discrepancy  an O–D relation is ≠ by rule, under no condition, and is no omission
+    2  externally supported concern        a concern is supported under neither a source nor an applicability
+                                           condition; an O–D relation is ≠ under a fact condition only; an omission
+                                           (≠ on the silence of channels that need not declare every case) under no
+                                           source condition
     3  insufficient or conflicting         a symbol is conflict; a concern is conflicted or not established, or
-       evidence                            supported only under a source condition; an O–D relation is ≠ under a
-                                           source condition; a requirement that applies was not assessed
-    4  not externally assessable           a concern is not assessable, or a gap has observability E3 or E4
+       evidence                            supported only under a source or an applicability condition; an O–D
+                                           relation is ≠ under a source condition; a requirement that applies was not
+                                           assessed
+    4  not externally assessable           a concern is not assessable, or a gap has observability E3 or E4 (what
+                                           only the provider could show: its next step is a request to it)
     5  no concern detected within the      none of the above, and the case was assessed for a requirement
        tested scope
 
@@ -29,9 +33,13 @@ import copy
 from dataclasses import dataclass, field
 
 from skuld.qualify import symbols
-from skuld.qualify.conditions import FACT, SOURCE
+from skuld.qualify.conditions import APPLICABILITY, FACT, SOURCE
 
-VERSION = "2"
+#: 3: a supported concern of minimisation names the strength of its evidence (documented, demonstrated) (18 Nov 2026)
+#: 4: an omission (O≠D on the silence of channels that need not declare every case) is an externally supported
+#: concern, not a discrepancy; a concern under an applicability condition is insufficient evidence (framework report
+#: 0.6, def:qualification; 18 Nov 2026)
+VERSION = "4"
 COMPONENT = {"role": "method", "id": "skuld.qualify.results", "version": VERSION}
 
 DISCREPANCY = "externally_established_discrepancy"
@@ -63,6 +71,7 @@ class Rel:
     text: str | None = None  # the condition's text
     high: bool = False  # an uncertainty factor is high
     partial: str | None = None  # for corresponds_partially: broader, related, root_category
+    omission: bool = False  # O≠D that reads only the silence of channels not exhaustive for the predicate
 
 
 @dataclass
@@ -76,6 +85,7 @@ class Con:
     observability: str = "E2"
     high: bool = False
     basis: list[str] = field(default_factory=list)
+    evidence: str | None = None  # rule, documented or demonstrated (attributes.evidence)
 
 
 @dataclass
@@ -149,17 +159,23 @@ def steps(view: View) -> list[Step]:
     """Every step of the precedence that holds, in order; if none of 1–4 holds, step 5 where the case was assessed for
     a requirement, else not applicable."""
     out: list[Step] = []
-    found = _od(view, None)
+    found = [r for r in _od(view, None) if not r.omission]
     if found:
         out.append(Step(DISCREPANCY, _list([_aspect(r) for r in found]), [r.id for r in found]))
-    supported = [c for c in view.concerns if c.status == "supported" and c.condition != SOURCE]
+    supported = [c for c in view.concerns if c.status == "supported" and c.condition not in (SOURCE, APPLICABILITY)]
     under_fact = _od(view, FACT)
-    if supported or under_fact:
+    omitted = [r for r in _od(view, None) if r.omission]
+    if supported or under_fact or omitted:
         parts = [
-            f"{c.requirement} ({c.step.replace('_', ' ')})" + (" if " + ", ".join(c.conditions) if c.conditions else "")
+            f"{c.requirement} ({c.step.replace('_', ' ')}"
+            + (f", {c.evidence}" if c.step == "less_invasive_alternative" and c.evidence else "")
+            + ")"
+            + (" if " + ", ".join(c.conditions) if c.conditions else "")
             for c in supported
         ] + [f"{_aspect(r)} if {r.text or 'a condition holds'}" for r in under_fact]
-        out.append(Step(CONCERN, _list(parts), [c.id for c in supported] + [r.id for r in under_fact]))
+        parts += [f"{_aspect(r)}: an omission, not a denial" for r in omitted]
+        rests = [c.id for c in supported] + [r.id for r in under_fact] + [r.id for r in omitted]
+        out.append(Step(CONCERN, _list(parts), rests))
     parts, rests = [], []
     conflicts = [r for r in view.relations if r.symbol == symbols.CONFLICT]
     if conflicts:
@@ -171,6 +187,9 @@ def steps(view: View) -> list[Step]:
             rests.append(c.id)
         elif c.status == "supported" and c.condition == SOURCE:
             parts.append(f"{c.requirement} supported only if {', '.join(c.conditions)}")
+            rests.append(c.id)
+        elif c.status == "supported" and c.condition == APPLICABILITY:
+            parts.append(f"{c.requirement} supported only if it applies: {', '.join(c.conditions)}")
             rests.append(c.id)
     for r in _od(view, SOURCE):
         unread = [c.split(":", 1)[-1].replace("_", " ") for c in (r.text or "").split(", ") if c]

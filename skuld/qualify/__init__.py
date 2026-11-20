@@ -6,7 +6,7 @@ requirements and the data vocabulary, and writes `qualification` into the report
     placement.py   cases and sections, and what is unplaced (§2.1)
     attributes.py  the case attributes (§2.3)
     symbols.py     relations as ≈, ≠, ?, conflict; a case's pattern and its reading (§2.2)
-    conditions.py  source and fact conditions (§2.4)
+    conditions.py  source, applicability and fact conditions (§2.4)
     results.py     the qualified result with its reason and secondary reasons (§3)
     nextsteps.py   next steps with whether they could change a result (§4.1)
     triggers.py    review triggers with their weight (§5)
@@ -20,7 +20,7 @@ from skuld.qualify import attributes, conditions, nextsteps, placement, results,
 from skuld.qualify.placement import Holding, Index
 from skuld.qualify.results import Con, Gap, Rel, Unassessed, View
 
-VERSION = "1"
+VERSION = "2"  # 2: only a declared purpose's specificity is set aside, not concern (iii)
 COMPONENT = {"role": "method", "id": "skuld.qualify", "version": VERSION}
 COMPONENTS = [
     COMPONENT,
@@ -75,7 +75,11 @@ def _requirements_of(index: Index, coverage: _Coverage, holding: Holding, with_d
 
     if holding.kind == "practice":
         purpose_gap = next(
-            (g["id"] for g in index.report["gaps"] if g.get("of") == holding.subject and g["reason"] == "own_knowledge"),
+            (
+                g["id"]
+                for g in index.report["gaps"]
+                if g.get("of") == holding.subject and g["reason"] == "own_knowledge"
+            ),
             None,
         )
         for r, kind in kinds.items():
@@ -97,6 +101,22 @@ def _requirements_of(index: Index, coverage: _Coverage, holding: Holding, with_d
     return assessed, missing, inapplicable
 
 
+def _omission(relation: dict) -> bool:
+    """Whether an O–D relation of symbol ≠ is an omission: it reads only the silence of channels not exhaustive for
+    the aspect's predicate (observed without declaration where no silent channel is exhaustive), or a correspondence
+    with a sibling node only (related), which reads the silence on the observed node."""
+    if relation.get("type") != "O-D":
+        return False
+    if relation.get("outcome") == "observed_without_declaration":
+        from skuld.assessment import exhaustive
+        from skuld.correspondence import PREDICATE
+
+        predicate = PREDICATE.get(relation.get("aspect") or "data", "collection")
+        silent = [c for line in relation.get("silence") or () for c in line.removeprefix("D: ").split(", ") if c]
+        return not any(exhaustive(c, predicate) for c in silent)
+    return relation.get("partial") == "related"
+
+
 def _view(index: Index, holding: Holding, assessed: list, missing: list, inapplicable: list) -> View:
     rels = []
     for rid in holding.relations:
@@ -112,6 +132,7 @@ def _view(index: Index, holding: Holding, assessed: list, missing: list, inappli
                 r.get("condition"),
                 _high(r.get("uncertainty")),
                 r.get("partial"),
+                _omission(r),
             )
         )
     cons, aside = [], []
@@ -119,21 +140,26 @@ def _view(index: Index, holding: Holding, assessed: list, missing: list, inappli
         c = index.concerns[cid]
         if c["status"] == "not_applicable":
             continue
-        elsewhere = holding.kind != "declared_purpose" and index.requirements.get(c["requirement"]) == "declaration"
+        # a declared purpose's specificity is decided in its own row; other concerns about declarations (a declaration
+        # the observation contradicts, concern iii) count for the case that holds them
+        elsewhere = holding.kind != "declared_purpose" and c["requirement"] == "purpose_specific"
         (aside if elsewhere else cons).append(
             Con(
                 cid,
                 c["requirement"],
                 c["step"],
                 c["status"],
-                conditions.of_concern(c),
+                conditions.of_concern(c, getattr(index, "applicability", frozenset())),
                 list(c.get("condition") or []),
                 c.get("observability", "E2"),
                 _high(c.get("uncertainty")),
                 list(c.get("basis") or []),
+                attributes.evidence(c, index.claims),
             )
         )
-    gaps = [Gap(g, index.gaps[g]["reason"], index.gaps[g]["observability"], index.gaps[g].get("of")) for g in holding.gaps]
+    gaps = [
+        Gap(g, index.gaps[g]["reason"], index.gaps[g]["observability"], index.gaps[g].get("of")) for g in holding.gaps
+    ]
     return View(rels, cons, gaps, missing, assessed, inapplicable, aside)
 
 
@@ -158,10 +184,12 @@ def _pattern(view: View) -> dict:
     return {**parts, "reading": symbols.reading(parts["O-D"]["symbol"], parts["O-E"]["symbol"], parts["D-E"]["symbol"])}
 
 
-def qualify(report: dict, requirements: dict[str, str], data=None, registry=None) -> dict:
+def qualify(report: dict, requirements: dict[str, str], data=None, registry=None, applicability=frozenset()) -> dict:
     """The qualification of an assessment: `requirements` gives each requirement of the frame the kind of its subject
-    (practice, declaration, collection); `data` is the data vocabulary, `registry` the recipient register."""
+    (practice, declaration, collection); `data` is the data vocabulary, `registry` the recipient register;
+    `applicability` the frame's applicability conditions (`applies_if`), whose kind is applicability."""
     index = Index(report, requirements)
+    index.applicability = frozenset(applicability)
     from skuld import select as selection  # select reads qualification's steps; import here, not at module load
 
     index.experiments = {}
@@ -217,20 +245,28 @@ def qualify(report: dict, requirements: dict[str, str], data=None, registry=None
     out_cases.sort(key=lambda c: (results.CASE_ORDER.index(c["result"]), c["subject"]))
 
     def rows(hs: list[Holding], extra) -> list[dict]:
-        out = [{"id": h.id, "subject": h.subject if h.kind != "collection" else h.id.removeprefix("row:collection:"),
-                **extra(h), **entry(h)} for h in hs]
+        out = [
+            {
+                "id": h.id,
+                "subject": h.subject if h.kind != "collection" else h.id.removeprefix("row:collection:"),
+                **extra(h),
+                **entry(h),
+            }
+            for h in hs
+        ]
         return sorted(out, key=lambda r: (results.CASE_ORDER.index(r["result"]), r["id"]))
 
-    transparency = {
-        s["requirement"]: s for s in (report["subjects"].get("collection") or {}).get("transparency", [])
-    }
+    transparency = {s["requirement"]: s for s in (report["subjects"].get("collection") or {}).get("transparency", [])}
 
     def collection_extra(h: Holding) -> dict:
         s = transparency[h.id.removeprefix("row:collection:")]
-        return {"status": s["status"], "applicability": s["applicability"],
-                **({"conditions": s["conditions"]} if s.get("conditions") else {})}
+        return {
+            "status": s["status"],
+            "applicability": s["applicability"],
+            **({"conditions": s["conditions"]} if s.get("conditions") else {}),
+        }
 
-    declared = {"assessed": with_d, "rows": rows(purposes, lambda h: {})}
+    declared = {"assessed": with_d, "rows": rows(purposes, lambda _: {})}
     collected = {"assessed": with_d and bool(transparency), "rows": rows(collection, collection_extra)}
     if not with_d:
         declared["reason"] = collected["reason"] = f"not assessed: {NO_D}"
@@ -240,7 +276,7 @@ def qualify(report: dict, requirements: dict[str, str], data=None, registry=None
     return {
         "header": {"components": COMPONENTS},
         "scope": _scope(report, with_d),
-        "profile": _profile(report, out_cases, declared["rows"], collected["rows"], index),
+        "profile": _profile(report, out_cases, declared["rows"], collected["rows"]),
         "cases": out_cases,
         "declared_purposes": declared,
         "collection": collected,
@@ -257,7 +293,7 @@ def _count(items: list[dict]) -> dict:
     return {k: out[k] for k in results.CASE_ORDER if k in out}
 
 
-def _profile(report: dict, cases: list, purposes: list, collection: list, index: Index) -> dict:
+def _profile(report: dict, cases: list, purposes: list, collection: list) -> dict:
     by_channel: dict[str, dict[str, int]] = {}
     for r in report["relations"]:
         if r["type"] != "O-D":
@@ -281,8 +317,12 @@ def _profile(report: dict, cases: list, purposes: list, collection: list, index:
 def _scope(report: dict, with_d: bool) -> dict:
     documents = (report["subjects"].get("collection") or {}).get("documents", [])
     channels = [
-        {"channel": d["channel"], "status": "analysed", "complete": d.get("complete", True),
-         **({"reason": d["incomplete"]} if d.get("incomplete") else {})}
+        {
+            "channel": d["channel"],
+            "status": "analysed",
+            "complete": d.get("complete", True),
+            **({"reason": d["incomplete"]} if d.get("incomplete") else {}),
+        }
         for d in documents
     ]
     named = {d["channel"] for d in documents}
@@ -306,9 +346,7 @@ def _scope(report: dict, with_d: bool) -> dict:
 
 def _limitations(scope: dict, cases: list[Holding]) -> list[str]:
     out = [LIMITATION_FLOWS]
-    unexplained = sorted(
-        {h.subject for h in cases if any(u.why == "not assessed" for u in scope[h.id][1])}
-    )
+    unexplained = sorted({h.subject for h in cases if any(u.why == "not assessed" for u in scope[h.id][1])})
     if unexplained:
         out.append(
             f"{len(unexplained)} practices were not assessed for a requirement of practices without a gap saying why: "

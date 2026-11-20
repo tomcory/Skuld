@@ -25,10 +25,20 @@ concerns:
     compatibility  per specified purpose: not compatible, supported if a factor step remains and every step cites the
                    context, something other than declarations among it; compatible or undecided names no concern
     minimisation   Alternative claims of the assessment stage: supported if technically supported and every step cites
-                   the context, a passage of documentation among it
+                   the context, a passage of documentation among it; an entry whose alternative names none ("none")
+                   states that there is no alternative, and is no Alternative claim (READING 1). Since READING 2, a
+                   documented alternative passes three gates (Expectation report 0.9, def:status): (a) its component is
+                   identified and the change its text names is less invasive (a removal, or every datum it names
+                   coarser than the component's by the data vocabulary: `recognised`, `less_invasive`); (b) a cited
+                   passage is about the component (tagged with its datum's node or one above it, or with its
+                   recipient's entity or type, never the root); (c) that passage was checked against its source by a
+                   person (`verified: {by, date}`). Otherwise the alternative is plausible and not established, with
+                   the gate as its reason; gate (d), a majority of the question's samples, is the combination's
+                   (combine.alternatives)
 """
 
 import json
+import re
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
@@ -40,7 +50,7 @@ from ratatoskr.vocabularies import Vocabulary
 from skuld import ask, combine, config, correspondence, expectation
 from skuld import context as ctx
 from skuld.assessment import Practice, Subjects
-from skuld.common import DATA, OWN, PURPOSES, cited, ref, vocabulary
+from skuld.common import DATA, OWN, PURPOSES, RECIPIENT_TYPES, cited, ref, vocabulary
 from skuld.context import Context, ContextError
 from skuld.context import part as _part
 from skuld.corpus import Corpus
@@ -50,6 +60,59 @@ SPECIFICITY, COMPATIBILITY, MINIMISATION = "specificity", "compatibility", "mini
 QUESTIONS = (SPECIFICITY, COMPATIBILITY, MINIMISATION)
 #: The context procedure's and the prompt's version per question
 VERSIONS = {SPECIFICITY: "1", COMPATIBILITY: "1", MINIMISATION: "2"}
+#: The readings' own version, apart from the prompts' (VERSIONS identify the kept samples, so a change of reading must
+#: not change them). 1: a minimisation entry whose alternative names none is not an alternative (15 Nov 2026).
+#: 2 (18 Nov 2026): specificity first, a declared purpose judged not specific specifies nothing; a documented alternative
+#: passes gates (a) to (c) here and (d) in the combination (combine.alternatives). A report names its reading, and a rebuild
+#: (`skuld check`) reads with the one it names, so that reports made before a reading changed still rebuild.
+#: 3 (20 Nov 2026): a minimisation alternative has the strength and uncertainty of documents only where its steps
+#: cite a passage of documentation, not wherever every step cites some part of the context.
+READING = "3"
+READINGS = ("1", "2", "3")
+
+
+def reading_component(reading: str = READING) -> dict:
+    """The reading as a component of a report."""
+    if reading not in READINGS:
+        raise ValueError(f"unknown reading {reading!r} of skuld.judge (known: {', '.join(READINGS)})")
+    return {"role": "method", "id": "skuld.judge.reading", "version": reading}
+
+
+def gated(reading: str = READING) -> bool:
+    """Whether a reading is 2 or later: specificity first, vague declarations, gates (a) to (d). Compared as numbers,
+    since "10" sorts before "2" as text."""
+    reading_component(reading)
+    return int(reading) >= 2
+
+
+#: Why a documented alternative is not supported, per gate; its sufficiency's reason is the framework's
+#: `not_admitted` (documentation that fails a gate is not admitted for the status), and the claim's reason names
+#: the gate
+GATES = {
+    "gate_a_component": "gate (a): the component is not identified "
+    "(a datum of unknown kind, or an unresolved recipient)",
+    "gate_a_change": "gate (a): the alternative names no change that is less invasive by the configuration's orders "
+    "(removing the datum or the recipient, or a datum the vocabulary states to be coarser)",
+    "gate_b": "gate (b): no cited passage is about the component (its datum's node or one above it, or its recipient)",
+    "gate_c": "gate (c): the cited passage about the component is not checked against its source",
+}
+#: An alternative that names none: the prompt asks to "give none" for a component without an alternative, which the
+#: models wrote as "none", "No less invasive alternative identified." and the like (study 2026-11: gemma 2,411, qwen
+#: 560 entries), mostly as plausible, some as technically supported. Not "No recipient: ..." or "No persistent
+#: storage; ...", which name one.
+_NO_ALTERNATIVE = re.compile(
+    r"\s*(none|n/?a|not applicable|nothing|no (?:less invasive |suitable |viable )?alternative\b[^.;]*"
+    r"|there is no (?:less invasive )?alternative\b[^.;]*)\s*[.;]?\s*",
+    re.IGNORECASE,
+)
+
+
+def names_alternative(text) -> bool:
+    """Whether a minimisation entry's alternative names one (see _NO_ALTERNATIVE)."""
+    text = str(text or "")
+    return bool(text.strip()) and not _NO_ALTERNATIVE.fullmatch(text)
+
+
 REQUIREMENT = {
     SPECIFICITY: "purpose_specific",
     COMPATIBILITY: "purpose_compatible",
@@ -67,6 +130,15 @@ KINDS = {
 #: Statements per specificity batch, characters of the sentence a statement is quoted with
 BATCH, SENTENCE = 20, 400
 ATTEMPTS = 2
+
+
+def attempts(question: str) -> int:
+    """Attempts per sample of a question: config.json's judge.attempts per question (e.g. {"compatibility": 3}), else
+    ATTEMPTS. A later attempt is asked only where the earlier ones were refused, so raising it re-asks only those (12 Nov
+    2026: gemma's compatibility answers looping on whitespace to max_tokens)."""
+    return int(((config.load().get("judge") or {}).get("attempts") or {}).get(question, ATTEMPTS))
+
+
 LACKING = ("action", "object", "outcome")
 JUDGED = {"COMPATIBLE": "compatible", "NOT_COMPATIBLE": "not_compatible", "UNDECIDED": "undecided"}
 #: The uncertainty of a stage-2 result from documents, and of one the samples disagree on
@@ -175,6 +247,7 @@ class Specified:
     pointers: list[str]
     data: list[str]
     texts: list[str]
+    unplaced: list[str] = field(default_factory=list)  # its declarations for data D could not place (Urda 2.1.0)
 
 
 @dataclass
@@ -235,9 +308,14 @@ def statements(a: Assessment, subjects: Subjects) -> list[Statement]:
     return list(out.values())
 
 
-def specified(subjects: Subjects, said: list[Statement], purposes: Vocabulary) -> list[Specified]:
+def specified(
+    subjects: Subjects, said: list[Statement], purposes: Vocabulary, vague: frozenset = frozenset()
+) -> list[Specified]:
     """The specified purposes: per node D declares as a purpose (not the vocabulary's root, which says only that there
-    is one), the declarations, the data they are declared for and the statements that say it."""
+    is one, nor one D could not place), the declarations, the data they are declared for (data D could not place is
+    for no data in particular: such declarations are listed apart, `unplaced`) and the statements that say it. A declaration in
+    `vague`, whose statement E judged not specific, specifies nothing (E 0.9, def:concern; author 18 Nov 2026)."""
+    data_root = vocabulary(DATA).root
     texts: dict[str, list[str]] = {}
     for st in said:
         for d in st.declarations:
@@ -246,12 +324,14 @@ def specified(subjects: Subjects, said: list[Statement], purposes: Vocabulary) -
     for d in subjects.declarations:
         if d.type != "declares_purpose" or d.polarity != "+" or not isinstance(d.value, str):
             continue
-        if d.value == purposes.root:
+        if d.value == purposes.root or d.id in vague:
             continue
         s = found.setdefault(d.value, Specified(d.value, [], [], [], []))
         s.declarations.append(d.id)
         s.pointers.append(d.claim["claim"])
-        if d.data not in s.data:
+        if d.unplaced_data(data_root):  # declared for data D could not place: for no data in particular, not all
+            s.unplaced.append(d.id)
+        elif d.data not in s.data:
             s.data.append(d.data)
         for t in texts.get(d.id, []):
             if t not in s.texts:
@@ -285,12 +365,19 @@ class Limitation:
     relevant: list[Specified]
     covering: list[Specified]
     question: str | None = None  # the compatibility question's subject
+    # the specified purposes declared for data D could not place, which could be the practice's (Urda 2.1.0): with
+    # them, that no purpose is specified for its data, or that none covers it, is undecided
+    unplaced: list[Specified] = field(default_factory=list)
+    unplaced_covering: list[Specified] = field(default_factory=list)
 
 
-def limitation(subjects: Subjects, said: list[Statement], hypotheses: list[dict]) -> list[Limitation]:
-    """Per practice and supported inferred purpose, its specified purposes and those covering it (rule part)."""
+def limitation(
+    subjects: Subjects, said: list[Statement], hypotheses: list[dict], vague: frozenset = frozenset()
+) -> list[Limitation]:
+    """Per practice and supported inferred purpose, its specified purposes and those covering it (rule part); the
+    declarations in `vague` specify nothing."""
     data, purposes = vocabulary(DATA), vocabulary(PURPOSES)
-    spec = specified(subjects, said, purposes)
+    spec = specified(subjects, said, purposes, vague)
     practices = {p.id: p for p in subjects.practices}
     out = []
     for h in hypotheses:
@@ -299,7 +386,10 @@ def limitation(subjects: Subjects, said: list[Statement], hypotheses: list[dict]
         for_data = relevant(practices[h["subject"]], spec, data)
         covers = covering(h["purpose"], for_data, purposes)
         subject = f"{h['subject']}-{h['id'].rsplit(':', 1)[1]}" if for_data and not covers else None
-        out.append(Limitation(h["subject"], h, for_data, covers, subject))
+        unplaced = [s for s in spec if s.unplaced]
+        out.append(
+            Limitation(h["subject"], h, for_data, covers, subject, unplaced, covering(h["purpose"], unplaced, purposes))
+        )
     return out
 
 
@@ -354,14 +444,17 @@ def questions(
     norms: Corpus,
     hypotheses: list[dict],
     names: dict[str, str] | None = None,
+    vague: frozenset = frozenset(),
+    kinds: tuple[str, ...] = QUESTIONS,
 ) -> list[Question]:
-    """The questions of the reasoning tier for an assessment, each with its context."""
+    """The questions of the reasoning tier for an assessment, each with its context, of the `kinds` asked for; the
+    declarations in `vague` specify no purpose for the compatibility questions."""
     names = names or {}
     data, purposes = vocabulary(DATA), vocabulary(PURPOSES)
     out = []
 
     found = statements(a, subjects)
-    for n in range(0, len(found), BATCH):
+    for n in range(0, len(found) if SPECIFICITY in kinds else 0, BATCH):
         batch = found[n : n + BATCH]
         parts = [_application(a)]
         for s in batch:
@@ -382,8 +475,8 @@ def questions(
 
     practices = {p.id: p for p in subjects.practices}
     supported = [h for h in hypotheses if h["type"] == "purpose" and h["status"] == "supported"]
-    if a.declaration is not None and subjects.comparability.get("comparable") is not False:
-        for case in limitation(subjects, found, hypotheses):
+    if COMPATIBILITY in kinds and a.declaration is not None and subjects.comparability.get("comparable") is not False:
+        for case in limitation(subjects, found, hypotheses, vague):
             if case.question is None:
                 continue
             p, h = practices[case.practice], case.purpose
@@ -408,7 +501,7 @@ def questions(
                 )
             )
 
-    for p in subjects.practices:
+    for p in subjects.practices if MINIMISATION in kinds else ():
         mine = [h for h in supported if h["subject"] == p.id]
         if not mine:
             continue
@@ -472,8 +565,13 @@ def sample_folder(root: Path, question: Question, seed: int, attempt: int = 1) -
     return folder if attempt == 1 else folder / f"a{attempt}"
 
 
+def _objects(value) -> list[dict]:
+    """The objects of a list an answer gives; nothing for a list the schema did not hold."""
+    return [x for x in value if isinstance(x, dict)] if isinstance(value, list) else []
+
+
 def _cites(item: dict) -> list[str]:
-    return list(item.get("cites") or ()) + [c for s in item.get("steps") or () for c in s.get("cites") or ()]
+    return list(item.get("cites") or ()) + [c for s in _objects(item.get("steps")) for c in s.get("cites") or ()]
 
 
 def refusals(question: Question, text: str | None, factors: list[str]) -> list[str]:
@@ -487,21 +585,23 @@ def refusals(question: Question, text: str | None, factors: list[str]) -> list[s
         return ["the answer is not an object"]
     ids, out = question.context.ids, []
     section = {SPECIFICITY: "statements", COMPATIBILITY: "pairs", MINIMISATION: "alternatives"}[question.question]
-    items = [i for i in answer.get(section) or () if isinstance(i, dict)]
+    items = _objects(answer.get(section))
+    if len(items) != len(answer.get(section) or ()):
+        out.append(f"{section}: not a list of objects")
     key = {SPECIFICITY: "statement", COMPATIBILITY: "specified"}.get(question.question)
     if key:
         answered = {ref(i.get(key)) for i in items}
         out += [f"{x} is not answered" for x in question.answers if x not in answered]
         out += [f"{x} is not in the context" for x in answered - set(question.answers)]
     for i in items:
-        cites = _cites(i) + [c for f in i.get("factors") or () for c in f.get("cites") or ()]
+        cites = _cites(i) + [c for f in _objects(i.get("factors")) for c in f.get("cites") or ()]
         unknown = {ref(c) for c in cites if ref(c).lower() != OWN} - ids
         if unknown:
             out.append(f"{ref(i.get(key)) if key else section}: cites {', '.join(sorted(unknown))}, not in the context")
         if question.question == COMPATIBILITY:
             out += [
                 f"{ref(i.get('specified'))}: {f.get('factor')!r} is not a factor ({', '.join(factors)})"
-                for f in i.get("factors") or ()
+                for f in _objects(i.get("factors"))
                 if f.get("factor") not in factors
             ]
         if question.question == MINIMISATION:
@@ -528,16 +628,65 @@ def judge(
     provider=None,
     names: dict[str, str] | None = None,
     only: tuple[str, ...] = QUESTIONS,
+    reading: str = READING,
 ) -> list[tuple[Question, ask.Sample]]:
     """The samples of the reasoning tier: per question and seed, kept or asked, as many at a time as the server
-    takes."""
+    takes. From reading 2 the specificity samples come first: a declared purpose they judge not specific specifies
+    nothing, so the compatibility questions are formed only after them."""
     seeds = seeds or config.load()["assessment"]["seeds"]
     think = config.load()["assessment"].get("think")
     model = model or a.models.get("assessment") or a.models["expectation"]
+    if gated(reading):
+        first = questions(a, subjects, corpus, norms, hypotheses, names, kinds=(SPECIFICITY,))
+        specific = _samples(
+            a, first, factors, seeds, think, model, api, offline or SPECIFICITY not in only, provider, corpus, norms
+        )
+        vague = vague_declarations(
+            [j for q, sample in specific for j in specificity(_answer(sample), _name(a, sample), q) if sample.text]
+        )
+        rest = questions(
+            a, subjects, corpus, norms, hypotheses, names, vague, tuple(q for q in only if q != SPECIFICITY)
+        )
+        out = (specific if SPECIFICITY in only else []) + _samples(
+            a, rest, factors, seeds, think, model, api, offline, provider, corpus, norms
+        )
+    else:
+        qs = questions(a, subjects, corpus, norms, hypotheses, names, kinds=only)
+        out = _samples(a, qs, factors, seeds, think, model, api, offline, provider, corpus, norms)
+    if not offline:
+        current = {a.root / "assessment" / q.question / q.subject for q, _ in out}
+        for question in only:
+            ask.supersede(a.root / "assessment" / question, current)
+    return out
+
+
+def _answer(sample) -> dict:
+    try:
+        answer = json.loads(sample.text)
+    except (TypeError, ValueError):
+        return {}
+    return answer if isinstance(answer, dict) else {}
+
+
+def _name(a: Assessment, sample) -> str:
+    return sample.folder.relative_to(a.root).as_posix()
+
+
+def vague_declarations(judgements: list[dict]) -> frozenset:
+    """The declarations of the statements whose specificity judgements combine to a supported concern that they are
+    not specific (combine.decide, the combination's rule)."""
+    by_statement: dict[str, list[dict]] = {}
+    for j in judgements:
+        by_statement.setdefault(j["statement"], []).append(j)
+    return frozenset(
+        d for mine in by_statement.values() if combine.decide(mine)[0] == "supported" for d in mine[0]["declarations"]
+    )
+
+
+def _samples(a, qs, factors, seeds, think, model, api, offline, provider, corpus, norms):
+    """The samples of the questions `qs`, per seed, kept or asked."""
     jobs = []
-    for q in questions(a, subjects, corpus, norms, hypotheses, names):
-        if q.question not in only:
-            continue
+    for q in qs:
         text = prompt(q, factors)
         for seed in seeds:
             record = {
@@ -559,7 +708,7 @@ def judge(
                     lambda asked: {**record, "prompt": {**record["prompt"], "sha256": ask.sha256(asked)}},
                     ("question", "subject", "procedure", "prompt", "corpus", "norms", "context"),
                     lambda answer: refusals(q, answer, factors),
-                    attempts=ATTEMPTS,
+                    attempts=attempts(q.question),
                     seed=seed,
                     model=model,
                     api=api,
@@ -574,12 +723,7 @@ def judge(
                 return q, sample
 
             jobs.append(one)
-    out = ask.concurrently(jobs, model)
-    if not offline:
-        current = {a.root / "assessment" / q.question / q.subject for q, _ in out}
-        for question in only:
-            ask.supersede(a.root / "assessment" / question, current)
-    return out
+    return ask.concurrently(jobs, model)
 
 
 def kept(
@@ -590,18 +734,13 @@ def kept(
     hypotheses: list[dict],
     factors: list[str],
     names: dict[str, str] | None = None,
+    reading: str = READING,
 ) -> list[tuple[str, Question, dict]]:
     """The kept samples of the current questions: (sample name, question, answer), without asking."""
     out = []
-    for q, sample in judge(a, subjects, corpus, norms, hypotheses, factors, offline=True, names=names):
-        if sample.text is None:
-            continue
-        try:
-            answer = json.loads(sample.text)
-        except ValueError:
-            answer = {}
-        name = sample.folder.relative_to(a.root).as_posix()
-        out.append((name, q, answer if isinstance(answer, dict) else {}))
+    for q, sample in judge(a, subjects, corpus, norms, hypotheses, factors, offline=True, names=names, reading=reading):
+        if sample.text is not None:
+            out.append((_name(a, sample), q, _answer(sample)))
     return out
 
 
@@ -636,11 +775,11 @@ def specificity(answer: dict, name: str, q: Question) -> list[dict]:
     rule above; a statement judged specific names no concern (not established)."""
     ids, norms = q.context.ids, _norms(q.context)
     out = []
-    for item in answer.get("statements") or ():
+    for item in _objects(answer.get("statements")):
         sid = ref(item.get("statement"))
         if sid not in q.answers:
             continue
-        steps = [[ref(c) for c in s.get("cites") or ()] for s in item.get("steps") or ()]
+        steps = [[ref(c) for c in s.get("cites") or ()] for s in _objects(item.get("steps"))]
         cites = {c for s in steps for c in s}
         lacking = [x for x in item.get("lacking") or () if x in LACKING]
         specific = bool(item.get("specific"))
@@ -677,14 +816,14 @@ def compatibility(answer: dict, name: str, q: Question) -> list[dict]:
     per specified purpose: supported by the rule above; compatible or undecided names no concern (not established)."""
     ids, declarations = q.context.ids, q.context.of_kind("declaration")
     out = []
-    for item in answer.get("pairs") or ():
+    for item in _objects(answer.get("pairs")):
         qid = ref(item.get("specified"))
         if qid not in q.answers:
             continue
         judgement = JUDGED.get(str(item.get("judgement")).upper(), "undecided")
         steps, dropped = [], []
         for n, f in enumerate(item.get("factors") or ()):
-            cites = [ref(c) for c in f.get("cites") or ()]
+            cites = [ref(c) for c in f.get("cites") or ()] if isinstance(f, dict) else []
             if judgement == "compatible" and set(cites) & declarations:
                 dropped.append({"step": n, "reason": "cites a declaration as a reason that processing is compatible"})
             else:
@@ -718,21 +857,133 @@ def compatibility(answer: dict, name: str, q: Question) -> list[dict]:
     return out
 
 
-def minimisation(answer: dict, name: str, q: Question, hypotheses: dict[str, dict]) -> list[dict]:
-    """The Alternative claims of a minimisation sample, of the assessment stage and the reasoning tier."""
+#: Words by which an alternative removes the component; storing less or for shorter is no removal (retention is no
+#: dimension the instance imposes)
+REMOVAL = re.compile(
+    r"\b(?:remov\w*|omit\w*|drop\w*|block\w*|disabl\w*|exclud\w*"
+    r"|(?:do not|don't|never|stop|no longer|not|without) (?:send|collect|share|transmit|use|read|access|request)\w*"
+    r"|without (?:the |this |that |any |an? )?(?:\w+ )?(?:id|identifier|data|datum|location)s?)\b",
+    re.IGNORECASE,
+)
+#: Names an alternative may give a datum besides the vocabulary's titles (gate a)
+ALIASES = {
+    "device-or-other-ids.installation-id": (
+        "installation id",
+        "firebase installation",
+        "fid",
+        "guid",
+        "uuid",
+        "app-generated id",
+        "app-generated identifier",
+        "app-scoped id",
+        "app-scoped identifier",
+        "app-specific id",
+    ),
+    "device-or-other-ids.app-set-id": ("app set id",),
+    "device-or-other-ids.advertising-id": ("advertising id", "advertising identifier", "gaid", "aaid", "ad id"),
+    "device-or-other-ids.android-id": ("android id", "ssaid", "android_id"),
+    "location.approximate-location": ("approximate location", "coarse location", "coarser location"),
+    "location.postal-code": ("postal code", "zip code"),
+}
+
+
+def recognised(text, kind: str, value: str, data) -> tuple[str, set[str]] | None:
+    """
+    The change an alternative's text names for its component (gate a): ("replace", nodes) where it names nodes of the
+    component's family of the data vocabulary other than the component's own and those above it, by title or alias;
+    else ("remove", set()) where it names a removal; else None. A recipient is only removed, never replaced: replacing
+    it by another changes no inclusion.
+    """
+    t = str(text or "")
+    if kind == "D" and data is not None and value in data:
+        family = value.split(".")[0]
+        above = {value, *data.ancestors(value)}
+        named = set()
+        for node in data:
+            if node.id in above or not (node.id == family or node.id.startswith(family + ".")):
+                continue
+            names = (node.title, *ALIASES.get(node.id, ()))
+            if any(re.search(r"(?<![\w-])" + re.escape(n) + r"(?![\w-])", t, re.IGNORECASE) for n in names):
+                named.add(node.id)
+        if named:
+            return "replace", named
+    return ("remove", set()) if REMOVAL.search(t) else None
+
+
+def less_invasive(change, value: str, data) -> bool:
+    """Whether a recognised change is less invasive than the component (E def:alternative): a removal always; a
+    replacement if every node it names is coarser than the component's by the vocabulary (configuration.coarser)."""
+    if change is None:
+        return False
+    how, nodes = change
+    if how == "remove":
+        return True
+    from skuld.configuration import coarser
+
+    return all(n != value and coarser(n, value, data) for n in nodes)
+
+
+def gate_a(text, kind: str | None, value, data) -> str | None:
+    """Gate (a) for a documented alternative: None if passed, else why it failed."""
+    if kind is None or not value or (kind == "D" and (data is None or value == data.root or value not in data)):
+        return "gate_a_component"
+    if kind == "R" and str(value).startswith("domain:"):
+        return "gate_a_component"
+    return None if less_invasive(recognised(text, kind, value, data), value, data) else "gate_a_change"
+
+
+def gate(citations: set[str], context: Context, kind: str, value, categories, corpus: Corpus | None, data, types):
+    """Gates (b) and (c) for a documented alternative of a component: None if passed, else the gate that failed."""
+    files = {
+        p["id"]: Path(p["provenance"][0]["record"]).name
+        for p in context.parts
+        if p["kind"] == "passage" and not p["provenance"][0]["record"].startswith("norms/")
+    }
+    by_file = {p.path.name: p for p in corpus.passages} if corpus is not None else {}
+    about = [
+        by_file[files[c]]
+        for c in citations
+        if c in files and files[c] in by_file and by_file[files[c]].concerns(kind, value, categories, data, types)
+    ]
+    if not about:
+        return "gate_b"
+    if not any(p.checked for p in about):
+        return "gate_c"
+    return None
+
+
+def minimisation(
+    answer: dict,
+    name: str,
+    q: Question,
+    hypotheses: dict[str, dict],
+    reading: str = READING,
+    practice: Practice | None = None,
+    corpus: Corpus | None = None,
+) -> list[dict]:
+    """The Alternative claims of a minimisation sample, of the assessment stage and the reasoning tier; `reading`
+    is the version to read with, and READING 2's gates read the practice's components and the corpus's passages."""
+    reading_component(reading)
+    gates = gated(reading)
+    parts_of = expectation.components(practice) if practice is not None else {}
+    data, types = (vocabulary(DATA), vocabulary(RECIPIENT_TYPES)) if gates else (None, None)
     ids, documentation = q.context.ids, _documentation(q.context)
     declarations = q.context.of_kind("declaration")
     channel = f"reasoning:{name}"
     out = []
     for n, item in enumerate(answer.get("alternatives") or ()):
+        if not isinstance(item, dict):  # an answer the schema did not hold; the claims' numbers keep their places
+            continue
         label = ref(item.get("purpose"))
         basis = hypotheses.get(q.record["purposes"].get(label, ""))
         component = ref(item.get("component"))
         if basis is None or component not in q.record["components"]:
             continue
+        if not names_alternative(item.get("alternative")):  # "none": the sample states no alternative (READING 1)
+            continue
         steps, dropped = [], []
         for i, s in enumerate(item.get("steps") or ()):
-            cites = [ref(c) for c in s.get("cites") or ()]
+            cites = [ref(c) for c in s.get("cites") or ()] if isinstance(s, dict) else []
             if set(cites) & declarations:
                 dropped.append({"step": i, "reason": "cites a declaration as a reason that processing is needed"})
             else:
@@ -741,8 +992,19 @@ def minimisation(answer: dict, name: str, q: Question, hypotheses: dict[str, dic
         technical = str(item.get("level")).upper() == "TECHNICALLY_SUPPORTED"
         grounded = _grounded(steps, ids)
         documented = technical and grounded and bool(cites & documentation)
+        strong = grounded and bool(cites & documentation) if int(reading) >= 3 else grounded
+        failed = None
+        if documented and gates:
+            kind, value = parts_of.get(component, (None, None))
+            categories = practice.recipient_categories if practice is not None else ()
+            failed = gate_a(item.get("alternative"), kind, value, data) or gate(
+                cites & documentation, q.context, kind, value, categories, corpus, data, types
+            )
+            documented = failed is None
         if basis["purpose"]["specificity"] == "vague":
             status, why, reason = "not_assessable", "purpose_vague", "the purpose is too vague"
+        elif failed:
+            status, why, reason = "not_established", "not_admitted", GATES[failed]
         elif documented:
             status, why, reason = "supported", None, None
         elif technical:
@@ -771,8 +1033,9 @@ def minimisation(answer: dict, name: str, q: Question, hypotheses: dict[str, dic
                 "parts": sorted(cites & ids),
                 "supporting": [],
                 "challenging": [],
-                "strength": "doc" if grounded else "own",
-                "uncertainty": FROM_DOC if grounded else expectation.FROM_OWN,
+                # from reading 3, an alternative stands on documents only where it cites one, not any part
+                "strength": "doc" if strong else "own",
+                "uncertainty": FROM_DOC if strong else expectation.FROM_OWN,
                 "sufficiency": {"sufficient": status == "supported", **({"reason": why} if why else {})},
                 **({"dropped_steps": dropped} if dropped else {}),
                 **({"reason": reason} if reason else {}),
@@ -782,7 +1045,9 @@ def minimisation(answer: dict, name: str, q: Question, hypotheses: dict[str, dic
 
 
 def stage1(a: Assessment, subjects: Subjects, corpus: Corpus, registry=None) -> list[dict]:
-    """The expectation stage's hypotheses from its kept samples, as the assessment reads them."""
+    """The expectation stage's hypotheses from its kept samples, as the assessment reads them, with the current notice
+    definition (expectation.NOTICES): `skuld judge`, like `skuld assess`, works under the current methods, and only
+    `skuld check` rebuilds with the versions a report names."""
     practices = {p.id: p for p in subjects.practices}
     claims = [
         c
@@ -798,7 +1063,7 @@ def independent(root: Path, report: dict) -> list[str]:
     rest on what D specified; that one is compatible is never stated, and its steps citing declarations are dropped
     by the reading."""
     problems = []
-    for path in sorted((root / "assessment").glob("*/*/s*/context.json")):
+    for path in sorted((root / "assessment").rglob("context.json")):  # later attempts' too (s<seed>/a<n>/)
         try:
             check(Context(tuple(json.loads(path.read_text(encoding="utf-8"))["parts"])))
         except ContextError as e:

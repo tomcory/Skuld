@@ -1,0 +1,15 @@
+id: android-id-reinstall
+title: Android 8.0 behavior changes, ANDROID_ID (Android Developers)
+source: https://developer.android.com/about/versions/oreo/android-8.0-changes
+retrieved: 2026-11-18
+verified: {by: Thomas Cory, date: 2026-11-18}
+kind: platform
+about:
+  nodes: [device-or-other-ids.android-id]
+  entities: []
+# Verbatim from the section "Privacy" (page last updated 2024-05-20); omissions marked […]. That the Android ID
+# survives the app's reinstallation is what makes it finer than an installation ID.
+text: >-
+  For apps installed on a device running Android 8.0, the value of ANDROID_ID is now scoped per app signing key, as
+  well as per user. […] The value of ANDROID_ID does not change on package uninstall or reinstall, as long as the
+  signing key is the same (and the app was not installed prior to an OTA to a version of Android 8.0).

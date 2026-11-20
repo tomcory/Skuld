@@ -8,9 +8,9 @@ A *sample* is a folder that keeps what was asked and what came back:
     prompt.txt    the prompt
     answer.json   the answer, as the model gave it
 
-A sample is reused while the keys its caller names as its identity, and the model's name, are unchanged; a request
-whose sample is missing or changed is asked, unless offline. Asking goes through Ratatoskr's client with the model's
-default reasoning and a streamed response, and with the client's own response cache off: the samples are Skuld's
+A sample is reused while the keys its caller names as its identity, the model's name and the options it records
+(temperature, seed, top_p/top_k/min_p where set, think) are unchanged; a request whose sample is missing or changed is
+asked, unless offline. Asking goes through Ratatoskr's client with the configured thinking and a streamed response, and with the client's own response cache off: the samples are Skuld's
 record of every answer, which a report is rebuilt from (EV-E-REPLAY).
 
 `ask_with_feedback` asks again where the caller refuses an answer, with the refusal appended to the prompt, a sample of
@@ -50,6 +50,7 @@ class Usage:
     calls: int = 0
     cached: int = 0
     missing: int = 0  # offline, and no sample kept
+    truncated: int = 0  # cut off at the token limit (after Ratatoskr's re-asks up to max_tokens_cap): refused
     failed: int = 0
     retries: int = 0
     prompt_tokens: int = 0
@@ -90,7 +91,7 @@ def _count(**added) -> None:
 class Sample:
     folder: Path
     record: dict
-    text: str | None  # None: offline, and no kept answer for this request
+    text: str | None  # None: offline and no kept answer, or an answer cut off at the token limit (refused)
     reused: bool
 
 
@@ -126,13 +127,14 @@ def ask(
     offline: bool = False,
     provider: Provider | None = None,
     files: dict[str, str] | None = None,
-    think: bool | None = None,
+    think: bool | str | None = None,
 ) -> Sample:
     """
     The sample of a request in `folder`: kept, or asked now. `record` holds the request's identity under the keys
     `identity` names, and gets the model, the options, the answer's digest and the time; `files` are written into the
-    folder beside the answer (a context, for example). `think` switches a thinking model's reasoning on or off; None
-    leaves the model's default and is not recorded, so that samples asked before the setting existed stay kept.
+    folder beside the answer (a context, for example). `think` switches a thinking model's reasoning on or off, or sets
+    its level ("low", "xhigh": on the gateway an effort for Qwen, a cap on thinking tokens for Gemma); None leaves the model's default and is not recorded, so that
+    samples asked before the setting existed stay kept.
     """
     record = {**record, "model": {"api": api, "name": model}, "options": _options(options, think)}
     text = _kept(folder, record, (*identity, "options"))
@@ -165,8 +167,12 @@ def ask(
         "output_tokens": result.output_tokens,
         "thinking_chars": len(result.thinking or ""),
     }
+    if getattr(result, "finish_reason", None):
+        record["finish_reason"] = result.finish_reason  # 'length': the token limit cut the answer off
+    cut_off = record.get("finish_reason") == "length"
     _count(
         calls=1,
+        truncated=1 if cut_off else 0,
         retries=asking.stats.retries,
         models={model: digest},
         **{k: record["cost"][k] or 0 for k in ("seconds", "prompt_tokens", "output_tokens", "thinking_chars")},
@@ -176,6 +182,15 @@ def ask(
     for name, content in (files or {}).items():
         (folder / name).write_text(content, encoding="utf-8", newline="\n")
     (folder / "prompt.txt").write_text(prompt, encoding="utf-8", newline="\n")
+    if cut_off:
+        # an answer cut off at the token limit is no sample: kept aside, with its record, and asked again next time
+        record["refused"] = "cut off at the token limit (finish_reason length)"
+        (folder / "answer.length.json").write_text(result.content, encoding="utf-8", newline="\n")
+        (folder / "record.length.json").write_text(
+            json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+        )
+        (folder / "answer.json").unlink(missing_ok=True)
+        return Sample(folder, record, None, False)
     (folder / "answer.json").write_text(result.content, encoding="utf-8", newline="\n")
     (folder / "record.json").write_text(
         json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
@@ -210,16 +225,20 @@ def ask_with_feedback(
     offline: bool = False,
     provider: Provider | None = None,
     files: dict[str, str] | None = None,
-    think: bool | None = None,
+    think: bool | str | None = None,
 ) -> tuple[Sample | None, list[str], int]:
     """
     Ask until `refuse` finds nothing wrong with an answer, at most `attempts` times: attempt n has its own folder
     (`folders(n)`), samples with seed + n - 1, and its prompt carries the previous attempt's refusals. Returns the
     last sample, its refusals (empty if accepted) and the attempts made; the samples of later attempts, kept from an
-    earlier request, are removed. Offline, an attempt that is not kept ends the asking: the last kept attempt stands,
-    with its refusals, or, if none is kept, a sample whose text is None, and nothing is removed.
+    earlier request, are removed. An answer cut off at the token limit is refused (the next attempt is asked, told
+    so); it is kept aside, not kept, so it is asked again next time. If the last attempt is cut off, the last attempt
+    that answered stands, with its refusals (no answer only where every attempt was cut off). Offline, an attempt that is not kept and was not
+    cut off ends the asking: the last kept attempt stands, with its refusals, or, if none is kept, a sample whose text
+    is None, and nothing is removed.
     """
-    sample, previous, refused = None, None, []
+    sample, refused = None, []
+    answered = None  # the last attempt that gave an answer: (sample, its refusals, attempt)
     for attempt in range(1, attempts + 1):
         asked = prompt
         if refused:
@@ -240,16 +259,33 @@ def ask_with_feedback(
             think=think,
         )
         if sample.text is None:
-            if previous is not None:  # offline: the last kept attempt stands, with its refusals
-                return previous, refused, attempt - 1
+            cut = _cut_off(sample, folders(attempt), offline)
+            if cut:  # an answer cut off at the token limit is refused like any other: the next attempt is asked
+                refused = [cut]
+                continue
+            if answered is not None:  # offline: the last kept answer stands, with its refusals
+                return answered
             return sample, refused, attempt
-        previous = sample
         refused = refuse(sample.text)
+        answered = (sample, refused, attempt)
         if not refused:
             if not offline:
                 _drop_later(folders, attempt, attempts)
             return sample, [], attempt
+    if sample is not None and sample.text is None and answered is not None:
+        return answered  # the last attempt was cut off: the last answer stands, with its refusals
     return sample, refused, attempts
+
+
+def _cut_off(sample: Sample, folder: Path, offline: bool) -> str | None:
+    """Why an attempt has no answer if the token limit cut it off: asked now, from its record; offline, from the
+    record kept aside beside it (record.length.json)."""
+    if not offline:
+        return sample.record.get("refused")
+    kept_aside = folder / "record.length.json"
+    if not kept_aside.is_file():
+        return None
+    return json.loads(kept_aside.read_text(encoding="utf-8")).get("refused")
 
 
 def _drop_later(folders: Callable[[int], Path], accepted: int, attempts: int) -> None:
@@ -260,9 +296,15 @@ def _drop_later(folders: Callable[[int], Path], accepted: int, attempts: int) ->
             shutil.rmtree(folder)
 
 
-def _options(options: Options, think: bool | None = None) -> dict:
-    """The options a sample records: those that identify the request (as samples recorded them before)."""
-    return {"temperature": options.temperature, "seed": options.seed, **({"think": think} if think is not None else {})}
+def _options(options: Options, think: bool | str | None = None) -> dict:
+    """The options a sample records: those that identify the request (as samples recorded them before). top_p, top_k
+    and min_p are recorded where they are set (a model's recommended sampling, 12 Nov 2026); unset, as in every sample
+    before, they are left out, so that those samples keep their identity."""
+    out = {"temperature": options.temperature, "seed": options.seed}
+    for key in ("top_p", "top_k", "min_p"):
+        if getattr(options, key, None) is not None:
+            out[key] = getattr(options, key)
+    return {**out, **({"think": think} if think is not None else {})}
 
 
 def supersede(root: Path, current: set[Path], when: str | None = None) -> list[Path]:

@@ -1,12 +1,17 @@
 id: android-advertising-id
 title: Advertising ID (Google Play Console Help)
-source: https://support.google.com/googleplay/android-developer/answer/6048248
-retrieved: 2026-10-21
+source: https://support.google.com/googleplay/android-developer/answer/6048248?hl=en
+retrieved: 2026-11-18
+verified: {by: Thomas Cory, date: 2026-11-18}
 kind: platform
 about:
-  nodes: [device-or-other-ids.advertising-id]
+  nodes: [device-or-other-ids.advertising-id, device-or-other-ids.app-set-id]
   entities: []
-# In our own words: the page states no licence.
+# Verbatim, three sentences of the section on the advertising ID; omissions marked […]. The page states no licence:
+# a short quotation for analysis (§ 51 UrhG), to confirm. The earlier version was in our own words.
 text: >-
-  The advertising ID is a unique, user-resettable and user-deletable ID for advertising, provided by Google Play
-  services. When a user deletes it, apps that request it receive a string of zeros in its place.
+  The advertising ID is a unique, user-resettable, and user-deletable ID for advertising, provided by Google Play
+  services. […] As part of Google Play services update in late 2021, the advertising ID will be removed when a user
+  deletes their advertising ID in Android Settings. Any attempts to access the identifier will receive a string of
+  zeros instead of the identifier. […] For essential non ads use-cases such as analytics and fraud prevention, use App
+  Set ID.

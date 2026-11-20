@@ -93,7 +93,46 @@ def test_any_disagreement_wins_within_a_relation_type():
     declared(a, p, "corresponds_partially", partial="related", aspect="recipient")
     c = case(qualified(a), p)
     assert c["pattern"]["O-D"]["symbol"] == "disagree"
-    assert c["result"] == DISCREPANCY
+    # a correspondence with a sibling node only reads the silence on the observed one: an omission (framework 0.6)
+    assert c["result"] == CONCERN
+
+
+def test_a_denial_establishes_a_discrepancy_and_an_omission_does_not():
+    a = Assessment()
+    p = a.practice()
+    a.assessed_for_practice(p)
+    declared(a, p, "contradicts")
+    assert case(qualified(a), p)["result"] == DISCREPANCY
+
+
+def test_observed_without_declaration_is_established_only_on_an_exhaustive_channels_silence():
+    def result(silent: str) -> str:
+        a = Assessment()
+        p = a.practice()
+        a.assessed_for_practice(p)
+        a.relation("O-D", "observed_without_declaration", p, silence=[f"D: {silent}"])
+        c = case(qualified(a), p)
+        return c["result"], c["reason"]
+
+    established, _ = result("data_safety, policy")
+    assert established == DISCREPANCY
+    omitted, why = result("policy")
+    assert omitted == CONCERN and "an omission, not a denial" in why
+
+
+def test_a_concern_under_an_applicability_condition_is_insufficient_evidence():
+    def result(applicability) -> str:
+        a = Assessment()
+        p = a.practice()
+        a.assessed_for_practice(p)
+        declared(a, p, "corresponds_exactly")
+        a.concern(p, condition=["dpo_designated"])
+        report = a.build()
+        return case(qualify(report, REQUIREMENTS, applicability=applicability), p)["result"]
+
+    assert result({"dpo_designated"}) == INSUFFICIENT
+    # the same condition read as a fact about the processing leaves the concern supported
+    assert result(set()) == CONCERN
 
 
 def test_a_partial_correspondence_is_read_by_its_alignment():
@@ -165,6 +204,24 @@ def test_a_purpose_goes_with_the_declaration_it_is_nested_under():
     assert [r["subject"] for r in q["declared_purposes"]["rows"]] == [j, orphan]
 
 
+def test_a_legal_basis_is_no_declared_purposes_row():
+    """209 legal bases per family appeared as purposes "the reasoning tier did not judge" (POST_PAPER_FIXES 3)."""
+    a = Assessment()
+    p = a.practice()
+    a.assessed_for_practice(p)
+    declared(a, p, "corresponds_exactly")
+    j = a.declaration("D-9", f"policy:/dataDisclosed/{p}/purposes/0", "justification", "declares_purpose", value="x")
+    basis = a.declaration("D-10", "policy:/legalBases/0", "justification", "declares_legal_basis", value="consent")
+    said = a.declaration("D-11", f"policy:/dataDisclosed/{p}/legalBases/0", "justification", "declares_legal_basis")
+    for d in a.report["subjects"]["declarations"]:
+        if d["id"] in (j, said):
+            d["statement"] = "Q1"  # said in one sentence with the purpose
+    a.covered("purpose_specific", [j])
+    q = qualified(a)
+    assert [r["subject"] for r in q["declared_purposes"]["rows"]] == [j]
+    assert basis not in json.dumps(q["declared_purposes"]) and said not in json.dumps(q["declared_purposes"])
+
+
 def test_a_vague_purpose_is_decided_in_its_statements_row_never_in_the_practice():
     a = Assessment()
     p, other = a.practice(), a.practice()
@@ -173,7 +230,9 @@ def test_a_vague_purpose_is_decided_in_its_statements_row_never_in_the_practice(
         declared(a, x, "corresponds_exactly")
     # one statement said for both practices' data: two declarations, one row
     j1 = a.declaration("D-9", f"policy:/dataDisclosed/{p}/purposes/0", "justification", "declares_purpose", value="x")
-    j2 = a.declaration("D-10", f"policy:/dataDisclosed/{other}/purposes/0", "justification", "declares_purpose", value="x")
+    j2 = a.declaration(
+        "D-10", f"policy:/dataDisclosed/{other}/purposes/0", "justification", "declares_purpose", value="x"
+    )
     for d in a.report["subjects"]["declarations"]:
         if d["id"] in (j1, j2):
             d["statement"] = "Q1"
@@ -419,3 +478,21 @@ def test_the_fixtures_are_qualified_whole(name):
     steps = {s["target"]["purpose"]: s for s in q["next_steps"] if "purpose" in s.get("target", {})}
     assert {c["purpose"] for c in listed if c["eligible"]} == set(steps)
     assert all(c["could_change"] == steps[c["purpose"]]["could_change"] for c in listed if c["eligible"])
+
+
+def test_a_concerns_evidence_is_rule_documented_or_demonstrated_and_a_minimisation_reason_names_it():
+    from skuld.qualify import attributes, results
+
+    claims = {
+        "claim:P:doc": {"id": "claim:P:doc", "strength": "doc", "level": "technically_supported"},
+        "claim:P:run": {"id": "claim:P:run", "strength": "run", "level": "demonstrated"},
+    }
+    minimise = {"step": "less_invasive_alternative", "tier": "reasoning"}
+    assert attributes.evidence({**minimise, "basis": ["claim:P:doc"]}, claims) == "documented"
+    assert attributes.evidence({**minimise, "basis": ["claim:P:doc", "claim:P:run"]}, claims) == "demonstrated"
+    assert attributes.evidence({"step": "information_not_given", "tier": "rule"}, claims) == "rule"
+    assert attributes.evidence({"step": "not_specific", "tier": "reasoning"}, claims) == "documented"
+    con = results.Con("concern:P:1", "data_minimised", "less_invasive_alternative", "supported", evidence="documented")
+    found = results.steps(results.View(concerns=[con]))
+    assert found[0].result == results.CONCERN
+    assert "data_minimised (less invasive alternative, documented)" in found[0].reason

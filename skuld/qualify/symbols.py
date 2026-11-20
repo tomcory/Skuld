@@ -53,7 +53,10 @@ TABLES = {"O-D": O_D, "O-E": O_E, "D-E": D_E}
 READINGS = (
     ((AGREE, AGREE, AGREE), "no discrepancy or justificatory challenge identified within the scope"),
     ((DISAGREE, AGREE, None), "behaviour differs from the declaration but is independently supported"),
-    ((AGREE, DISAGREE, DISAGREE), "behaviour and declaration correspond, but the justification is independently challenged"),
+    (
+        (AGREE, DISAGREE, DISAGREE),
+        "behaviour and declaration correspond, but the justification is independently challenged",
+    ),
     ((DISAGREE, DISAGREE, None), "behaviour is inconsistent with the declaration and independently challenged"),
 )
 E_UNRESOLVED = "the independent justification is unresolved or not externally assessable"

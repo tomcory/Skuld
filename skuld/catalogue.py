@@ -53,6 +53,7 @@ from pathlib import Path
 
 import yaml
 
+from skuld import yamlio
 from skuld.oracles import METRICS, PREDICATES
 
 SLOT_KINDS = ("text", "screen", "activity")
@@ -146,7 +147,7 @@ def load(root: str | Path) -> Catalogue:
     families = []
     for path in sorted((root / "families").glob("*.yaml")):
         text = path.read_text(encoding="utf-8")
-        data = yaml.safe_load(text)
+        data = yamlio.load(text)
         if not isinstance(data, dict):
             raise CatalogueError(f"{path.name}: not a mapping")
         try:

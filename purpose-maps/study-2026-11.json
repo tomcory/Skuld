@@ -1,0 +1,56 @@
+{
+ "entries": {
+  "ContentDelivery": {
+   "node": "ServicePersonalisation",
+   "similarity": 0.6515,
+   "runner_up": {
+    "node": "ProvidePersonalisedRecommendations",
+    "similarity": 0.6454
+   },
+   "occurrences": 1
+  },
+  "Identification": {
+   "node": "IdentityVerification",
+   "similarity": 0.6237,
+   "runner_up": {
+    "node": "Personalisation",
+    "similarity": 0.5966
+   },
+   "occurrences": 79
+  },
+  "Profiling": {
+   "node": "Personalisation",
+   "similarity": 0.6244,
+   "runner_up": {
+    "node": "ServicePersonalisation",
+    "similarity": 0.6128
+   },
+   "occurrences": 11
+  },
+  "Communication": {
+   "node": "CommunicationManagement",
+   "similarity": 0.5838,
+   "runner_up": {
+    "node": "CommercialPurpose",
+    "similarity": 0.5835
+   },
+   "occurrences": 2
+  },
+  "Personalization": {
+   "node": "Personalisation",
+   "similarity": 0.7019,
+   "runner_up": {
+    "node": "ServicePersonalisation",
+    "similarity": 0.6969
+   },
+   "occurrences": 2
+  }
+ },
+ "method": "nearest dpv-purposes node by cosine similarity of embeddings (author, 11 Nov 2026)",
+ "embedding_model": "qwen3-embedding:8b-fp16",
+ "embedding_digest": "aa924958585e7b0268debccaf7138cd7e2475de0b2cc2e01c09cc347963ea203",
+ "instruction": "Instruct: Given the name of a purpose for processing personal data, retrieve the matching purpose category\nQuery: ",
+ "vocabulary": "dpv-purposes",
+ "vocabulary_sha256": "6fa52c3e26bc1bbd9bdcbff002bc92f11296f35855006f71e437427472d2b2d2",
+ "built": "2026-11-11T19:51:24+00:00"
+}

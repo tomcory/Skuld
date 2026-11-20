@@ -1,0 +1,36 @@
+{
+  "description": "qwen3.8:27b with its vendor's recommended sampling for thinking (temperature 1.0, top_p 0.95, top_k 20, min_p 0; the model card's and the gateway's; 0.6 was Qwen3's) and thinking xhigh (20 Nov 2026), on the TU gateway (Ollama) like gemma4:31b; otherwise as the study's final qwen run (study-2026-11-qwen-low-traffic-topup, temperature 0.4, thinking low).",
+  "model": "qwen3.8:27b",
+  "sampling": {
+    "default": {
+      "max_tokens": 32768
+    },
+    "tasks": {
+      "expect": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "min_p": 0.0
+      },
+      "judge": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "min_p": 0.0
+      }
+    }
+  },
+  "expectation": {
+    "think": "xhigh",
+    "traffic": true,
+    "topup": true
+  },
+  "assessment": {
+    "think": "xhigh",
+    "known_data_only": true
+  },
+  "purpose_map": {
+    "path": "purpose-maps/study-2026-11.json",
+    "sha256": "2c8e24b1ddb8e20e0aaf216ff635ffa4d9b32f3c89fe1b26a565561ede8cc252"
+  }
+}

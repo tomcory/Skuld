@@ -251,3 +251,40 @@ def test_the_fixtures_subjects(name, tmp_path):
         assert out["collection"] and out["declarations"]
         policy = [d for d in out["collection"]["documents"] if d["channel"] == "policy"]
         assert all(d["status"] != "analysed" for d in policy)
+
+
+def test_practices_of_an_unidentified_datum_are_left_out_with_a_gap_when_configured(tmp_path, monkeypatch):
+    from skuld import assess as assess_
+    from skuld import config
+
+    report = o_report(
+        [
+            claim("c1", "device-or-other-ids.advertising-id", "adco", "AdSDK"),
+            claim("c2", "data", "adco", "AdSDK"),  # O saw the connection, not what it carried
+        ]
+    )
+    a = workspace(tmp_path, [report])
+    kept, left_out = assessment.known_data(assessment.build(a, REGISTRY))
+    assert [p.data for p in kept.practices] == ["device-or-other-ids.advertising-id"]
+    assert [p.data for p in left_out] == ["data"]
+
+    # off by default: every practice is assessed
+    every = assess_.assess(a.root, write=False)
+    assert {p["data"] for p in every["subjects"]["practices"]} == {"device-or-other-ids.advertising-id", "data"}
+    assert not any(g["reason"] == "source_not_analysable" for g in every["gaps"])
+
+    loaded = config.load()
+    monkeypatch.setattr(
+        config, "load", lambda: {**loaded, "assessment": {**loaded["assessment"], "known_data_only": True}}
+    )
+    known = assess_.assess(a.root)
+    assert [p["data"] for p in known["subjects"]["practices"]] == ["device-or-other-ids.advertising-id"]
+    unknown = left_out[0].id
+    assert not any(x["subject"] == unknown for x in known["claims"] + known["concerns"])
+    gap = next(g for g in known["gaps"] if g["reason"] == "source_not_analysable")
+    assert unknown in gap["proposition"] and "of" not in gap and gap["observability"] == "E3"
+    from skuld.provenance import check_assessment
+
+    assert check_assessment(a, known) == []
+    written = json.loads((a.root / SUBJECTS).read_text())
+    assert [p["id"] for p in written["left_out"]] == [unknown]

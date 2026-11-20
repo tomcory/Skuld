@@ -1,3 +1,4 @@
+import pytest
 from ratatoskr.vocabularies import Vocabulary
 
 from skuld import corpus
@@ -45,3 +46,31 @@ def test_coverage_lists_what_os_claims_name_that_no_passage_is_about(tmp_path):
         "node:location.coordinates": {"applications": ["a", "b"], "claims": 2},
         "entity:adjust": {"applications": ["b"], "claims": 1},
     }
+
+
+def test_passages_about_the_datum_never_push_out_those_about_its_recipient(tmp_path):
+    from ratatoskr.vocabularies import Vocabulary
+
+    from skuld import corpus
+
+    for n in range(4):
+        (tmp_path / f"a{n}.yaml").write_text(
+            f"id: a{n}\ntitle: t\nsource: https://example.org\nkind: platform\n"
+            "about: {nodes: [device-or-other-ids.advertising-id]}\ntext: x\n"
+        )
+    (tmp_path / "z.yaml").write_text(
+        "id: z\ntitle: t\nsource: https://example.org\nkind: component\nabout: {entities: [adco]}\ntext: x\n"
+    )
+    found = corpus.load(tmp_path).about("device-or-other-ids.advertising-id", "adco", Vocabulary.load("asgard-data"))
+    assert [p.id for p in found] == ["a0", "a1", "a2", "z"]
+    # three or fewer: as before, in the corpus's order
+    (tmp_path / "a3.yaml").unlink()
+    (tmp_path / "a2.yaml").unlink()
+    found = corpus.load(tmp_path).about("device-or-other-ids.advertising-id", "adco", Vocabulary.load("asgard-data"))
+    assert [p.id for p in found] == ["a0", "a1", "z"]
+
+
+def test_a_passage_without_its_title_or_text_is_named_not_a_traceback(tmp_path):
+    (tmp_path / "ids.yaml").write_text(PASSAGE.format(id="ids", entity="appsflyer").replace("title: Identifiers\n", ""))
+    with pytest.raises(corpus.CorpusError, match="ids.yaml: no title"):
+        corpus.load(tmp_path)

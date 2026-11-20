@@ -1,0 +1,127 @@
+"""Asking a model: an answer cut off at the token limit is asked again with a raised limit, then refused."""
+
+from ratatoskr.llm import LLMResponse, Options, Provider
+
+from skuld import ask, config
+
+
+class CutOff(Provider):
+    """Cut off at the limit until `fits` tokens are allowed."""
+
+    api = "fake"
+
+    def __init__(self, fits: int | None):
+        super().__init__()
+        self.fits, self.limits = fits, []
+
+    async def complete(self, model, prompt, response_format="text", params=None, model_options=None, on_text=None):
+        limit = getattr(params, "max_tokens", None)
+        self.limits.append(limit)
+        whole = self.fits is not None and limit is not None and limit >= self.fits
+        return LLMResponse(text='{"a": 1}' if whole else '{"a": ', finish_reason=None if whole else "length")
+
+
+def _ask(tmp_path, provider):
+    ask.reset_usage()
+    return ask.ask(
+        tmp_path / "s1",
+        "prompt",
+        {"type": "object"},
+        {"question": "q"},
+        ("question",),
+        model="m",
+        api="fake",
+        options=Options(max_tokens=8192),
+        provider=provider,
+    )
+
+
+def test_config_json_raises_the_limit_for_a_cut_off_answer():
+    assert config.load()["client"]["max_tokens_cap"] == 32768
+
+
+def test_an_answer_that_fits_under_a_raised_limit_is_kept(tmp_path):
+    provider = CutOff(fits=16384)
+    sample = _ask(tmp_path, provider)
+    assert sample.text == '{"a": 1}' and (tmp_path / "s1" / "answer.json").is_file()
+    assert ask.usage().truncated == 0
+
+
+def test_an_answer_cut_off_at_the_cap_is_refused_and_kept_aside(tmp_path):
+    sample = _ask(tmp_path, CutOff(fits=None))
+    assert sample.text is None
+    folder = tmp_path / "s1"
+    assert not (folder / "answer.json").exists() and (folder / "answer.length.json").read_text() == '{"a": '
+    assert "cut off" in sample.record["refused"] and ask.usage().truncated == 1
+    # not kept: the next run asks again
+    again = _ask(tmp_path, CutOff(fits=8192))
+    assert again.text == '{"a": 1}' and ask.usage().calls == 1
+
+
+class CutOffFirst(Provider):
+    """Cut off at any limit while the prompt carries no refusal; answers once told it was cut off."""
+
+    api = "fake"
+
+    async def complete(self, model, prompt, response_format="text", params=None, model_options=None, on_text=None):
+        told = "cut off" in str(prompt)
+        return LLMResponse(text='{"a": 1}' if told else '{"a": ', finish_reason=None if told else "length")
+
+
+def _feedback(tmp_path, offline=False):
+    return ask.ask_with_feedback(
+        lambda n: tmp_path / "s1" if n == 1 else tmp_path / "s1" / f"a{n}",
+        "prompt",
+        {"type": "object"},
+        lambda asked: {"question": "q", "prompt": ask.sha256(asked)},
+        ("question", "prompt"),
+        lambda text: [],
+        attempts=2,
+        seed=1,
+        model="m",
+        api="fake",
+        options=Options(max_tokens=8192),
+        offline=offline,
+        provider=CutOffFirst(),
+    )
+
+
+def test_an_answer_cut_off_is_refused_and_the_next_attempt_asked_also_when_read_offline(tmp_path):
+    sample, refused, attempts = _feedback(tmp_path)
+    assert sample.text == '{"a": 1}' and refused == [] and attempts == 2
+    # offline, the attempt kept aside as cut off leads on to the kept second one
+    sample, refused, attempts = _feedback(tmp_path, offline=True)
+    assert sample.text == '{"a": 1}' and attempts == 2
+
+
+class RefusedThenCutOff(Provider):
+    """Answers the first prompt; cut off once told the answer was refused."""
+
+    api = "fake"
+
+    async def complete(self, model, prompt, response_format="text", params=None, model_options=None, on_text=None):
+        told = "refused" in str(prompt)
+        return LLMResponse(text='{"a": ' if told else '{"a": 1}', finish_reason="length" if told else None)
+
+
+def test_a_last_attempt_cut_off_leaves_the_last_answer_standing_with_its_refusals(tmp_path):
+    def run(offline=False):
+        return ask.ask_with_feedback(
+            lambda n: tmp_path / "s1" if n == 1 else tmp_path / "s1" / f"a{n}",
+            "prompt",
+            {"type": "object"},
+            lambda asked: {"question": "q", "prompt": ask.sha256(asked)},
+            ("question", "prompt"),
+            lambda text: ["wrong"],
+            attempts=2,
+            seed=1,
+            model="m",
+            api="fake",
+            options=Options(max_tokens=8192),
+            offline=offline,
+            provider=RefusedThenCutOff(),
+        )
+
+    for offline in (False, True):
+        sample, refused, attempts = run(offline)
+        assert sample.text == '{"a": 1}' and refused == ["wrong"] and attempts == 1

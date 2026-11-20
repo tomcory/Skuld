@@ -1,0 +1,34 @@
+{
+  "description": "gemma4:31b with its vendor's recommended sampling (temperature 1.0, top_p 0.95, top_k 64) and thinking xhigh (20 Nov 2026); otherwise as the study's final gemma run (study-2026-11-gemma-vendor, whose thinking was low).",
+  "model": "gemma4:31b",
+  "sampling": {
+    "default": {
+      "max_tokens": 32768
+    },
+    "tasks": {
+      "expect": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64
+      },
+      "judge": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64
+      }
+    }
+  },
+  "expectation": {
+    "think": "xhigh",
+    "traffic": true,
+    "topup": true
+  },
+  "assessment": {
+    "think": "xhigh",
+    "known_data_only": true
+  },
+  "purpose_map": {
+    "path": "purpose-maps/study-2026-11.json",
+    "sha256": "2c8e24b1ddb8e20e0aaf216ff635ffa4d9b32f3c89fe1b26a565561ede8cc252"
+  }
+}

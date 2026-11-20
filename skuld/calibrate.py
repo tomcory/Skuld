@@ -55,6 +55,8 @@ QUESTIONS = {
     "data covers it or is compatible with it?",
     "less_invasive_alternative": "Could the practice achieve this purpose with less: less or coarser data, a narrower "
     "identifier, fewer or less invasive recipients?",
+    "declaration_contradicted": "Does the processing observed contradict this declaration: does the app do what the "
+    "provider declares it does not do?",
 }
 #: The practice requirements, grouped as E's concerns state them: one concern per practice, purpose and principle
 PRACTICE_STEPS = {"purpose_limitation": "no_specified_purpose", "data_minimisation": "less_invasive_alternative"}
@@ -84,7 +86,7 @@ def units(root: Path, report: dict, registry=None) -> list[dict]:
         concerns[(c["principle"], c["subject"], grain)].append(c)
     coverage = {e["requirement"]: e for e in report["coverage"]}
 
-    def unit(principle, step, subject, purpose, requirements, tier_if_silent, shown):
+    def unit(principle, step, subject, purpose, requirements, tier_if_silent, shown, grain):
         mine = concerns.get((principle, subject, requirements[0] if subject == "collection" else purpose), [])
         not_applicable = all(subject in coverage.get(r, {}).get("not_applicable", []) for r in requirements)
         if mine:
@@ -105,6 +107,10 @@ def units(root: Path, report: dict, registry=None) -> list[dict]:
                     "provisions": list(r.provisions),
                 },
                 "question": QUESTIONS[step],
+                # what the unit is in any assessment of the same inputs, whatever its model: the requirement for the
+                # collection, the declaration for a statement, the practice and its purpose's vocabulary node (None
+                # where the purpose has no node, which then aligns with nothing)
+                "grain": grain,
                 **shown,
             }
         )
@@ -113,7 +119,16 @@ def units(root: Path, report: dict, registry=None) -> list[dict]:
     for r in frame.requirements.values():
         if r.subject != "collection" or r.id not in coverage:
             continue
-        unit(r.principle, r.steps[0], "collection", None, [r.id], "rule", {"subject": {"kind": "collection"}})
+        unit(
+            r.principle,
+            r.steps[0],
+            "collection",
+            None,
+            [r.id],
+            "rule",
+            {"subject": {"kind": "collection"}},
+            ("collection", r.id),
+        )
 
     # declared purpose statements
     specific = coverage.get("purpose_specific")
@@ -123,7 +138,16 @@ def units(root: Path, report: dict, registry=None) -> list[dict]:
             if s.declarations[0] not in specific.get("assessed", []) + specific.get("not_applicable", []):
                 continue
             shown = {"subject": {"kind": "statement", "text": s.text, "sentence": s.sentence, "channels": s.channels}}
-            unit("transparency", "not_specific", s.declarations[0], None, ["purpose_specific"], "reasoning", shown)
+            unit(
+                "transparency",
+                "not_specific",
+                s.declarations[0],
+                None,
+                ["purpose_specific"],
+                "reasoning",
+                shown,
+                ("statement", s.declarations[0]),
+            )
 
     # practices and their supported purposes
     practices = {p["id"]: p for p in report["subjects"]["practices"]}
@@ -132,7 +156,7 @@ def units(root: Path, report: dict, registry=None) -> list[dict]:
         for c in report["claims"]
         if c["type"] == "purpose" and c["stage"] == "expectation" and c["status"] == "supported"
     ]
-    read = _stage_one(root)
+    read = stage_one(root)
     for principle, step in PRACTICE_STEPS.items():
         requirements = [
             r.id for r in frame.requirements.values() if r.principle == principle and r.subject == "practice"
@@ -158,11 +182,13 @@ def units(root: Path, report: dict, registry=None) -> list[dict]:
                 | {"node": h["purpose"].get("node")},
                 "context": read.get(h["subject"], {"screens": [], "passages": []}),
             }
-            unit(principle, step, h["subject"], h["id"], requirements, "+".join(channels), shown)
+            node = h["purpose"].get("node")
+            grain = ("practice", h["subject"], node) if node else None
+            unit(principle, step, h["subject"], h["id"], requirements, "+".join(channels), shown, grain)
     return out
 
 
-def _stage_one(root: Path) -> dict[str, dict]:
+def stage_one(root: Path) -> dict[str, dict]:
     """Per practice, what the expectation stage read with it: the screens and corpus passages of every stage-1 context
     that held the practice, each once, in the order first read."""
     out: dict[str, dict] = {}
@@ -202,7 +228,7 @@ def draw(folder: str | Path, workspaces: list[str | Path], registry_path=None, p
     if folder.exists():
         raise CalibrationError(f"{folder} exists: a drawn sample is fixed, draw a new one into another folder")
     s = settings()
-    per_stratum = per_stratum or s["per_stratum"]
+    per_stratum = s["per_stratum"] if per_stratum is None else per_stratum
     seed = s["seed"] if seed is None else seed
     registry = load_registry(registry_path)
 
@@ -223,11 +249,18 @@ def draw(folder: str | Path, workspaces: list[str | Path], registry_path=None, p
                 "components": identity(report["report"]["components"]),
             }
         )
+        assessments[-1]["family"] = _family(report)
+        assessments[-1]["inputs"] = _inputs(root)
         for u in units(root, report, registry):
             u["assessment"], u["application"] = key, assessments[-1]["application"]
             every.append(u)
 
     rng = random.Random(seed)
+    # several assessments of one application: the same inputs assessed by different model families, whose units are
+    # merged, so that one decision of the reviewers scores every family
+    families = _families(assessments)
+    if families:
+        every = _merge(every, assessments, families, rng)
     strata = defaultdict(list)
     for u in every:
         strata[_stratum_key(u["stratum"])].append(u)
@@ -238,11 +271,19 @@ def draw(folder: str | Path, workspaces: list[str | Path], registry_path=None, p
     rng.shuffle(drawn)  # the order of review says nothing of the stratum
 
     folder.mkdir(parents=True)
-    documents = {a["key"]: _copy_documents(Path(a["workspace"]), folder / DOCUMENTS / a["key"]) for a in assessments}
+    # across families, an application's documents are copied once, from its first assessment (D is the same for all)
+    sources = {u["assessment"] for u in every}
+    documents = {
+        a["key"]: copy_documents(Path(a["workspace"]), folder / DOCUMENTS / a["key"])
+        for a in assessments
+        if a["key"] in sources
+    }
     items, key = [], {}
     for n, u in enumerate(drawn, 1):
         iid = f"u{n:03d}"
         key[iid] = {"stratum": u["stratum"], "concerns": u["concerns"]}
+        if families:
+            key[iid] |= {"outcomes": u["outcomes"], "tiers": u["tiers"], "shown_from": u["shown_from"]}
         items.append(
             {
                 "id": iid,
@@ -256,8 +297,8 @@ def draw(folder: str | Path, workspaces: list[str | Path], registry_path=None, p
                 "assessment": u["assessment"],
             }
         )
-    _write(folder / SAMPLE, {"items": items})
-    _write(folder / KEY, key)
+    write_json(folder / SAMPLE, {"items": items})
+    write_json(folder / KEY, key)
     manifest = {
         "id": folder.name,
         "created": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -265,6 +306,7 @@ def draw(folder: str | Path, workspaces: list[str | Path], registry_path=None, p
         "method": {"id": "skuld.calibrate", "version": VERSION},
         "seed": seed,
         "per_stratum": per_stratum,
+        **({"mode": "families", "families": families} if families else {}),
         "assessments": assessments,
         "strata": [
             {
@@ -274,17 +316,144 @@ def draw(folder: str | Path, workspaces: list[str | Path], registry_path=None, p
             }
             for k in sorted(strata)
         ],
-        "files": {SAMPLE: _sha(folder / SAMPLE), KEY: _sha(folder / KEY)},
+        "files": {SAMPLE: file_sha256(folder / SAMPLE), KEY: file_sha256(folder / KEY)},
     }
-    _write(folder / MANIFEST, manifest)
+    write_json(folder / MANIFEST, manifest)
     return manifest
 
 
+def stratum_name(s: dict) -> str:
+    """A stratum for printing: its principle, tier, step and outcome, or across families how many raise a concern."""
+    parts = [str(s[k]) for k in ("principle", "tier", "step", "outcome") if k in s]
+    return " ".join(parts + ([f"raised by {s['raised']}"] if "raised" in s else []))
+
+
 def _stratum_key(s: dict) -> tuple:
-    return (s["principle"], s["tier"], s["step"], s["outcome"])
+    """One model: principle, tier, step and E's outcome. Across families: principle, step and how many families
+    support a concern on the unit (`raised`)."""
+    return tuple(s.get(k) for k in ("principle", "tier", "step", "outcome", "raised"))
 
 
-def _copy_documents(root: Path, target: Path) -> list[dict]:
+# -- across model families --------------------------------------------------------------------------------------------
+
+#: A family's outcome for a unit it has no unit for: a practice's purpose (by vocabulary node) it did not infer
+ABSENT = "absent"
+
+
+def _family(report: dict) -> str | None:
+    """The model family an assessment's stages asked, or None where they asked several; a reasoning setting is part
+    of it (`qwen3.8:27b (think low)`), as the same model with reasoning off and on are two configurations."""
+    models = {model_identity(c) for c in report["report"]["components"] if c["role"] == "model"}
+    return next(iter(models)) if len(models) == 1 else None
+
+
+def model_identity(component: dict) -> str:
+    """A model component's name with its reasoning setting, where one was set."""
+    think = component.get("think")
+    if think is None:
+        return component["id"]
+    return f"{component['id']} (think {str(think).lower()})"
+
+
+def _inputs(root: Path) -> dict:
+    """What an assessment assessed, by digest: its O reports, D's report, the exploration, the frame and the corpus.
+    Assessments of one application by different families must agree on all of it."""
+    data = inputs._yaml(Path(root) / inputs.ASSESSMENT)
+    return {
+        "observation": sorted(e["sha256"] for e in data["observation"]),
+        "declaration": (data.get("declaration") or {}).get("sha256"),
+        "exploration": (data.get("exploration") or {}).get("sha256"),
+        "frame": [data["frame"]["id"], str(data["frame"]["version"]), data["frame"]["sha256"]],
+        "corpus": data["corpus"]["sha256"],
+    }
+
+
+def _families(assessments: list[dict]) -> list[str]:
+    """The model families of a draw across families, or [] where every application has one assessment. Across
+    families, every application is assessed once by each family, on the same inputs."""
+    by_app = defaultdict(list)
+    for a in assessments:
+        by_app[a["application"]].append(a)
+    if all(len(g) == 1 for g in by_app.values()):
+        return []
+    families = None
+    for app, group in sorted(by_app.items()):
+        named = [a["family"] for a in group]
+        if None in named:
+            raise CalibrationError(f"{app}: an assessment asked several models; one family per assessment")
+        if len(set(named)) != len(named):
+            raise CalibrationError(f"{app}: two assessments by the same family ({', '.join(sorted(named))})")
+        if families is None:
+            families = sorted(named)
+        elif sorted(named) != families:
+            raise CalibrationError(f"{app}: assessed by {sorted(named)}, the others by {families}")
+        first = group[0]["inputs"]
+        for a in group[1:]:
+            differ = sorted(k for k in first if a["inputs"][k] != first[k])
+            if differ:
+                raise CalibrationError(f"{app}: the assessments differ in their inputs ({', '.join(differ)})")
+    return families
+
+
+def _outcome(outcomes) -> str:
+    """One family's outcome for a merged unit from its units there (two purposes of a practice on one node)."""
+    found = set(outcomes)
+    if found - set(SILENT):
+        return _strongest(found - set(SILENT))
+    return "silent" if "silent" in found else "not_applicable"
+
+
+def _merge(every: list[dict], assessments: list[dict], families: list[str], rng: random.Random) -> list[dict]:
+    """The units of all families merged by grain: one unit per application, principle, step and grain, with each
+    family's outcome (`absent` where it has no such unit) and its stratum by how many families support a concern.
+    A practice's purpose without a vocabulary node aligns with nothing and stays its family's alone. The reviewers
+    read the purpose as one family worded it, chosen at random (the seed is recorded); the key keeps which."""
+    family = {a["key"]: a["family"] for a in assessments}
+    first = {}
+    for a in assessments:
+        first.setdefault(a["application"], a["key"])
+    grouped: dict[tuple, dict[str, list[dict]]] = defaultdict(lambda: defaultdict(list))
+    for n, u in enumerate(every):
+        grain = u["grain"] if u["grain"] is not None else ("unaligned", u["assessment"], n)
+        k = (u["application"], u["stratum"]["principle"], u["stratum"]["step"], grain)
+        grouped[k][family[u["assessment"]]].append(u)
+    merged = []
+    for k in sorted(grouped, key=repr):
+        got = grouped[k]
+        outcomes = {f: _outcome(u["stratum"]["outcome"] for u in got[f]) if f in got else ABSENT for f in families}
+        shown_from = rng.choice(sorted(got))
+        base = got[shown_from][0]
+        u = {
+            "stratum": {
+                "principle": base["stratum"]["principle"],
+                "step": base["stratum"]["step"],
+                "raised": sum(o == "supported" for o in outcomes.values()),
+            },
+            "outcomes": outcomes,
+            "concerns": {f: sorted({c for x in got.get(f, []) for c in x["concerns"]}) for f in families},
+            "tiers": {
+                f: "+".join(sorted({x["stratum"]["tier"] for x in got[f]})) if f in got else None for f in families
+            },
+            "shown_from": shown_from,
+            "requirement": base["requirement"],
+            "question": base["question"],
+            "subject": base["subject"],
+            "assessment": first[k[0]],
+            "application": k[0],
+        }
+        if "purpose" in base:
+            u["purpose"] = base["purpose"]
+        if "context" in base:
+            context = {"screens": [], "passages": []}
+            for x in (x for f in sorted(got) for x in got[f]):
+                for part, texts in x["context"].items():
+                    context[part] += [t for t in texts if t not in context[part]]
+            u["context"] = context
+        merged.append(u)
+    return merged
+
+
+def copy_documents(root: Path, target: Path) -> list[dict]:
     """The collection's documents the assessment's D report names, copied from Sága's collection for the expert,
     with D's status of each (a document D could not analyse is shown too: the expert reads what the provider gives)."""
     a = inputs.load_assessment(root)
@@ -326,7 +495,9 @@ def identity(components: list[dict]) -> list[list]:
     for c in components:
         role, cid = c["role"], c["id"]
         if role == "model":
-            out.add((role, cid, c.get("sha256") or "", c.get("stage") or ""))
+            # the reasoning setting where one was set: the same model with reasoning off and on are two configurations
+            think = (str(c["think"]),) if "think" in c else ()
+            out.add((role, cid, c.get("sha256") or "", c.get("stage") or "", *think))
         elif role in ("prompt", "method"):
             extra = json.dumps(
                 {k: v for k, v in c.items() if k not in ("role", "id", "version", "sha256", "stage", "seed")},
@@ -343,11 +514,11 @@ def identity(components: list[dict]) -> list[list]:
 def check(folder: str | Path, workspaces: list[str | Path]) -> list[str]:
     """Whether the calibration holds for these assessments: every component they name that the calibrated ones do not
     (a changed model or prompt, another D configuration) is a problem."""
-    manifest = _read(Path(folder) / MANIFEST)
+    manifest = read_json(Path(folder) / MANIFEST)
     calibrated = {tuple(x) for a in manifest["assessments"] for x in a["components"]}
     problems = []
     for root in map(Path, workspaces):
-        report = _read(root / REPORT)
+        report = read_json(root / REPORT)
         for x in identity(report["report"]["components"]):
             if tuple(x) not in calibrated:
                 problems.append(f"{root.name}: {x[0]} {x[1]} {' '.join(str(v) for v in x[2:] if v)} is not calibrated")
@@ -361,12 +532,14 @@ def score(folder: str | Path) -> dict:
     """Error rates from the expert's decisions: per stratum, and per principle and step weighted by the strata's
     populations. The sample's files must be those drawn."""
     folder = Path(folder)
-    manifest = _read(folder / MANIFEST)
+    manifest = read_json(folder / MANIFEST)
     for name, sha in manifest["files"].items():
-        if _sha(folder / name) != sha:
+        if file_sha256(folder / name) != sha:
             raise CalibrationError(f"{name} is not the file drawn (digest differs)")
-    key = _read(folder / KEY)
-    reviews = _read(folder / REVIEWS) if (folder / REVIEWS).is_file() else {}
+    key = read_json(folder / KEY)
+    reviews = decisions(folder / REVIEWS) if (folder / REVIEWS).is_file() else {}
+    if manifest.get("mode") == "families":
+        return _score_families(folder, manifest, key, reviews)
     by_stratum = defaultdict(lambda: {"fails": 0, "holds": 0, "unsure": 0})
     for iid, entry in key.items():
         r = reviews.get(iid)
@@ -415,7 +588,160 @@ def score(folder: str | Path) -> dict:
             for (p, step, m), t in sorted(totals.items())
         ],
     }
-    _write(folder / SCORES, out)
+    write_json(folder / SCORES, out)
+    return out
+
+
+def _measure(outcome: str) -> str:
+    """What a reviewed unit measures of the family with this outcome: the precision of its concerns, its misses among
+    its silences, its misses among the purposes it did not infer, or how often what it could not establish is one."""
+    if outcome == "supported":
+        return "precision"
+    if outcome in SILENT:
+        return "miss_rate"
+    return "miss_rate_absent" if outcome == ABSENT else "concern_rate"
+
+
+def _score_families(folder: Path, manifest: dict, key: dict, reviews: dict) -> dict:
+    """Across families: per stratum (principle, step, families raising) the share the reviewers confirm as concerns;
+    per family, principle and step its precision and misses, each unit weighted by its stratum's population over the
+    units decided in it. The intervals are Wilson's on the unweighted counts, so a guide only where the weights differ."""
+    strata = []
+    weight = {}
+    by_stratum = defaultdict(lambda: {"fails": 0, "holds": 0, "unsure": 0})
+    for iid, entry in key.items():
+        r = reviews.get(iid)
+        if r and r.get("decision") in DECISIONS:
+            by_stratum[_stratum_key(entry["stratum"])][r["decision"]] += 1
+    for s in manifest["strata"]:
+        k = _stratum_key(s)
+        counts = by_stratum[k]
+        n = counts["fails"] + counts["holds"]
+        # over the units decided (not those drawn): a stratum with unsure units counts for its whole population
+        weight[k] = s["population"] / n if n else 0.0
+        strata.append(
+            {
+                **s,
+                **counts,
+                "measure": "confirmed",
+                "rate": round(counts["fails"] / n, 3) if n else None,
+                "interval": [round(x, 3) for x in wilson(counts["fails"], n)] if n else None,
+            }
+        )
+    totals = defaultdict(lambda: {"fails": 0, "n": 0, "w_fails": 0.0, "w_n": 0.0})
+    for iid, entry in key.items():
+        decision = (reviews.get(iid) or {}).get("decision")
+        if decision not in ("fails", "holds"):
+            continue
+        w = weight[_stratum_key(entry["stratum"])]
+        s = entry["stratum"]
+        for fam, outcome in entry["outcomes"].items():
+            t = totals[(fam, s["principle"], s["step"], _measure(outcome))]
+            t["n"] += 1
+            t["w_n"] += w
+            if decision == "fails":
+                t["fails"] += 1
+                t["w_fails"] += w
+    out = {
+        "calibration": manifest["id"],
+        "scored": datetime.now(UTC).isoformat(timespec="seconds"),
+        "mode": "families",
+        "families": manifest["families"],
+        "reviewed": sum(1 for iid in key if (reviews.get(iid) or {}).get("decision") in ("fails", "holds")),
+        "unsure": sum(1 for iid in key if (reviews.get(iid) or {}).get("decision") == "unsure"),
+        "items": len(key),
+        "strata": strata,
+        "estimates": [
+            {
+                "family": fam,
+                "principle": p,
+                "step": step,
+                "measure": m,
+                "rate": round(t["w_fails"] / t["w_n"], 3) if t["w_n"] else None,
+                "interval": [round(x, 3) for x in wilson(t["fails"], t["n"])],
+                "reviewed": t["n"],
+            }
+            for (fam, p, step, m), t in sorted(totals.items())
+        ],
+    }
+    write_json(folder / SCORES, out)
+    return out
+
+
+# -- two reviewers ----------------------------------------------------------------------------------------------------
+
+AGREEMENT = "agreement.json"
+
+
+def decisions(path: Path, missing_ok: bool = False) -> dict:
+    """A reviews file's decisions by item: the review tool's form (by id at the top), or `{"items": {...}}`; with
+    `missing_ok`, none where the file is not there yet (a sample's own reviews.json before adjudication)."""
+    if missing_ok and not path.is_file():
+        return {}
+    data = read_json(path)
+    return data["items"] if isinstance(data.get("items"), dict) else data
+
+
+def kappa(pairs: list[tuple[str, str]]) -> float | None:
+    """Cohen's kappa of two reviewers' decisions on the same items; None where it is undefined (no items, or both
+    reviewers gave one decision throughout, so that chance agreement is 1)."""
+    n = len(pairs)
+    if not n:
+        return None
+    observed = sum(a == b for a, b in pairs) / n
+    labels = {x for pair in pairs for x in pair}
+    expected = sum((sum(a == c for a, _ in pairs) / n) * (sum(b == c for _, b in pairs) / n) for c in labels)
+    return None if expected == 1 else (observed - expected) / (1 - expected)
+
+
+def agree(folder: str | Path, first: str | Path, second: str | Path) -> dict:
+    """Two reviewers' independent decisions on one sample: Cohen's kappa overall and per principle (on all three
+    decisions, and on fails and holds where both decided one), and the items they disagree on, for adjudication.
+    Where the sample has no reviews.json yet, it is seeded with the decisions both reviewers agree on, so that the
+    review tool's next undecided item is the next to adjudicate."""
+    folder = Path(folder)
+    key = read_json(folder / KEY)
+    a, b = decisions(Path(first)), decisions(Path(second))
+
+    def decided(r, iid):
+        return (r.get(iid) or {}).get("decision") in DECISIONS
+
+    both = [iid for iid in sorted(key) if decided(a, iid) and decided(b, iid)]
+    principles = sorted({key[iid]["stratum"]["principle"] for iid in key})
+
+    def kappas(ids):
+        pairs = [(a[i]["decision"], b[i]["decision"]) for i in ids]
+        binary = [p for p in pairs if "unsure" not in p]
+        k3, k2 = kappa(pairs), kappa(binary)
+        return {
+            "items": len(pairs),
+            "agreed": sum(x == y for x, y in pairs),
+            "kappa": round(k3, 3) if k3 is not None else None,
+            "kappa_fails_holds": round(k2, 3) if k2 is not None else None,
+            "items_fails_holds": len(binary),
+        }
+
+    disagreements = [
+        {"id": iid, "first": a[iid], "second": b[iid]} for iid in both if a[iid]["decision"] != b[iid]["decision"]
+    ]
+    out = {
+        "calibration": folder.name,
+        "compared": datetime.now(UTC).isoformat(timespec="seconds"),
+        "reviews": [str(Path(first)), str(Path(second))],
+        "undecided": {"first": sum(not decided(a, i) for i in key), "second": sum(not decided(b, i) for i in key)},
+        "overall": kappas(both),
+        "principles": {p: kappas([i for i in both if key[i]["stratum"]["principle"] == p]) for p in principles},
+        "disagreements": disagreements,
+    }
+    write_json(folder / AGREEMENT, out)
+    if not (folder / REVIEWS).exists():
+        seeded = {}
+        for iid in both:
+            if a[iid]["decision"] == b[iid]["decision"]:
+                notes = " | ".join(n for n in (a[iid].get("note"), b[iid].get("note")) if n)
+                seeded[iid] = {"decision": a[iid]["decision"], "note": notes, "reviewed": out["compared"]}
+        write_json(folder / REVIEWS, seeded)
+        out["seeded"] = len(seeded)
     return out
 
 
@@ -430,13 +756,13 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
 # -- files ------------------------------------------------------------------------------------------------------------
 
 
-def _write(path: Path, data) -> None:
+def write_json(path: Path, data) -> None:
     path.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
 
-def _read(path: Path):
+def read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _sha(path: Path) -> str:
+def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()

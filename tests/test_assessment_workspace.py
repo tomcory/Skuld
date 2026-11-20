@@ -110,9 +110,7 @@ def test_the_case_studys_fixtures_load(name):
     if a.declaration:
         store_version = a.declaration.load()["collection"]["store_version"]
         # an unknown store version (WetterOnline's collection) is comparable, with the version recorded unknown
-        assert (
-            store_version in (None, a.version) or frozenset((store_version, a.version)) in a.compatible_pairs()
-        )
+        assert store_version in (None, a.version) or frozenset((store_version, a.version)) in a.compatible_pairs()
 
 
 def test_skuld_describe_writes_the_assessment_workspace(tmp_path):
@@ -123,3 +121,82 @@ def test_skuld_describe_writes_the_assessment_workspace(tmp_path):
     assert main(["describe", str(root), "--package", "app.example", "--version", "2.0", "--observation", str(o)]) == 0
     a = inputs.load_assessment(root)
     assert a.observations[0].run == "r9" and a.declaration is None and a.exploration is None
+
+
+def test_an_assessment_is_read_with_the_frame_version_it_names(tmp_path):
+    """Workspaces assessed before frame 1.1.0 name 1.0.1; they load with it, not with the current frame."""
+    o = write(tmp_path / "o" / "observation_report.json", {"claims": []})
+    root = tmp_path / "ws"
+    inputs.describe_assessment(root, "app.example", "1.0", [(o, "r0")], None, None, CORPUS, frame_version="1.0.1")
+    named = yaml.safe_load((root / "assessment.yaml").read_text(encoding="utf-8"))["frame"]
+    assert named["version"] == "1.0.1"
+    a = inputs.load_assessment(root)
+    assert a.frame.version == "1.0.1" and a.frame.digest() == named["sha256"]
+    assert "declaration_corresponds" not in a.frame.requirements
+
+
+def test_a_frame_version_that_is_not_bundled_is_refused(tmp_path):
+    o = write(tmp_path / "o" / "observation_report.json", {"claims": []})
+    root = tmp_path / "ws"
+    inputs.describe_assessment(root, "app.example", "1.0", [(o, "r0")], None, None, CORPUS)
+    text = (root / "assessment.yaml").read_text(encoding="utf-8")
+    from ratatoskr.frames import Frame
+
+    current = Frame.load("gdpr-art5").version  # the bundled frame a new workspace names
+    assert f"version: {current}" in text
+    (root / "assessment.yaml").write_text(text.replace(f"version: {current}", "version: 0.9.0"), encoding="utf-8")
+    from ratatoskr.errors import ConfigError
+
+    with pytest.raises(ConfigError, match="not available in version 0.9.0"):
+        inputs.load_assessment(root)
+
+
+def test_a_key_given_twice_is_refused(workspace):
+    """A second `compatible_versions:` silently replaced the first (qwen's Remini: 351 concerns to 1)."""
+    root = workspace[0]
+    text = (root / "assessment.yaml").read_text(encoding="utf-8")
+    (root / "assessment.yaml").write_text(text + "corpus: {path: x, sha256: y}\n", encoding="utf-8")
+    with pytest.raises(inputs.InputError, match="the key 'corpus' is given twice"):
+        inputs.load_assessment(root)
+
+
+def test_the_strict_loader_reads_what_yaml_reads_otherwise():
+    from skuld import yamlio
+
+    assert yamlio.load("a: 1\nb: {c: [1, 2]}\n") == {"a": 1, "b": {"c": [1, 2]}}
+    assert yamlio.load("- {a: 1}\n- {a: 2}\n") == [{"a": 1}, {"a": 2}]  # equal keys in different mappings
+    with pytest.raises(yamlio.DuplicateKeyError, match="first at line 2"):
+        yamlio.load("x: 0\nb:\n  c: 1\nb: 2\n")
+
+
+def test_describe_again_keeps_the_compatibility_statements_and_the_models(workspace):
+    """The study re-applied them with add_compat.py and set_models.py after every describe (POST_PAPER_FIXES 3)."""
+    root, o, d, run = workspace
+    statement = inputs.add_compatible_versions(root, "1.0", "1.1", "the author compared them", "tomcory")
+    assert statement["versions"] == ["1.0", "1.1"] and statement["author"] == {"kind": "person", "id": "tomcory"}
+    inputs.describe_assessment(root, "app.example", "1.0", [(o, "r0")], d, run, CORPUS, model="qwen3.8:27b")
+    inputs.describe_assessment(root, "app.example", "1.0", [(o, "r0")], d, run, CORPUS)  # again, without --model
+    a = inputs.load_assessment(root)
+    assert a.models == {"expectation": "qwen3.8:27b", "assessment": "qwen3.8:27b"}
+    assert [s["versions"] for s in a.compatible_versions] == [["1.0", "1.1"]]
+
+
+def test_a_compatibility_statement_is_refused_twice_or_without_a_reason(workspace):
+    root = workspace[0]
+    inputs.add_compatible_versions(root, "1.0", "1.1", "checked", "tomcory")
+    with pytest.raises(inputs.InputError, match="stated compatible already"):
+        inputs.add_compatible_versions(root, "1.1", "1.0", "again", "tomcory")
+    with pytest.raises(inputs.InputError, match="two different versions"):
+        inputs.add_compatible_versions(root, "1.0", "1.0", "same", "tomcory")
+    with pytest.raises(inputs.InputError, match="gives its reason"):
+        inputs.add_compatible_versions(root, "1.0", "2.0", "  ", "tomcory")
+    assert (root / "assessment.yaml").read_text(encoding="utf-8").startswith("# a test\n")  # the comment kept
+
+
+def test_compat_add_on_the_command_line(workspace, capsys):
+    from skuld.cli import main
+
+    root = workspace[0]
+    assert main(["compat", "add", str(root), "--o", "1.0", "--d", "1.2", "--reason", "r", "--author", "a"]) == 0
+    assert "1.0 ~ 1.2" in capsys.readouterr().out
+    assert main(["compat", "add", str(root), "--o", "1.0", "--d", "1.2", "--reason", "r", "--author", "a"]) == 1

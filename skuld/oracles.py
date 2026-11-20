@@ -7,6 +7,7 @@ and measurements, each by the name of a predicate or metric below with its argum
 ```yaml
 success:
   - first_screen: {activity_suffix: ui.guide.GuideFirstActivity}
+  - first_screen_ready: {}
   - replay_complete: {}
   - screen_reached: {exact_key: 3b169bc8d30a725e}
   - text_shown: {any: [Zürich]}
@@ -23,6 +24,7 @@ reported with every comparison and are not part of an oracle.
 """
 
 import builtins
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -30,7 +32,7 @@ from skuld.common import under
 from skuld.inputs import Oracle
 from skuld.runs import Run
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"  # 0.3.0: first_screen_ready; 0.2.1: first_screen skips the system's screens (permission dialog, starting window)
 
 
 @dataclass(frozen=True)
@@ -44,8 +46,22 @@ def screens(run: Run) -> list[dict]:
     return [e for e in run.events if e.get("type") == "screen"]
 
 
-def _first_screen(run: Run, activity_suffix: str | None = None, exact_keys: list[str] | None = None) -> bool:
+def _system(screen: dict) -> bool:
+    """A screen of the system over or before the app: Android's runtime permission dialog (API 33+ asks for
+    notifications at the first launch) or a window of the package 'android' (the starting window of a cold start
+    is reported so, with the app's activity and no text). Not a screen of the app, nor of another app."""
+    return screen.get("package") == "android" or ".permissioncontroller." in (screen.get("activity") or "")
+
+
+def _launched(run: Run) -> list[dict]:
+    """The run's screens from the first that is not the system's on."""
     shown = screens(run)
+    start = next((i for i, s in enumerate(shown) if not _system(s)), len(shown))
+    return shown[start:]
+
+
+def _first_screen(run: Run, activity_suffix: str | None = None, exact_keys: list[str] | None = None) -> bool:
+    shown = _launched(run)
     if not shown or shown[0].get("package") != run.package:
         return False
     first = shown[0]
@@ -54,8 +70,38 @@ def _first_screen(run: Run, activity_suffix: str | None = None, exact_keys: list
     return not exact_keys or first.get("exact_key") in exact_keys
 
 
+def _first_screen_ready(run: Run) -> bool:
+    """
+    Whether the app's first screen after a cold start, past the system's, is ready for input: a screen of the app
+    with at least one element Loki could act on (graph.json). Any such screen counts, not only the recorded one: an
+    app that shows its tour, a notice or an ad before its entry screen has started. A launcher or another app first,
+    or a screen with nothing to act on (a starting window, a blank screen), does not.
+    """
+    shown = _launched(run)
+    if not shown or shown[0].get("package") != run.package:
+        return False
+    return _actions(run).get(shown[0].get("screen_id"), 0) > 0
+
+
+def _actions(run: Run) -> dict[str, int]:
+    """The number of elements Loki found to act on, per screen id of the run's graph, merged screens included."""
+    path = run.directory / "graph.json"
+    if not path.is_file():
+        return {}
+    graph = json.loads(path.read_text(encoding="utf-8"))
+    counts = {sid: len(s.get("actions") or ()) for sid, s in (graph.get("screens") or {}).items()}
+    merged = graph.get("merged_into") or {}
+    for sid in merged:
+        target, seen = sid, set()
+        while target in merged and target not in seen:
+            seen.add(target)
+            target = merged[target]
+        counts[sid] = counts.get(target, 0)
+    return counts
+
+
 def _first_screen_not(run: Run, exact_keys: list[str]) -> bool:
-    shown = screens(run)
+    shown = _launched(run)
     return bool(shown) and shown[0].get("exact_key") not in exact_keys
 
 
@@ -116,6 +162,7 @@ def _hold_above_ms(run: Run, ms: float) -> bool:
 PREDICATES = {
     "first_screen": _first_screen,
     "first_screen_not": _first_screen_not,
+    "first_screen_ready": _first_screen_ready,
     "replay_complete": _replay_complete,
     "screen_reached": _screen_reached,
     "text_shown": _text_shown,

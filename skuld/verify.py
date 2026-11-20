@@ -8,7 +8,10 @@ removed recipient, every connection to its hosts dropped), and (ii) no substitut
 changed datum (every platform source of data of its kind is hooked and read no more often than in
 the baseline runs). It failed if (i) or (ii) fails. What no instrument of the run covers is an
 unverifiable part, which does not fail the run but is reported with it: an identifier source not
-hooked, or connections the capture recorded without a host.
+hooked, or connections the capture recorded without a host. A run's effect may hold because the
+application never read the source; it then decides nothing unless the case's baseline runs show the
+component (read its source, or transmit to its recipient): otherwise the analysis compares nothing
+for it (`experiments`, C2).
 
 Loki records whether every hooked source returned what its setting says; Heimdall records the
 connections it dropped; O's report gives the values read and the transmissions. Verification reads
@@ -133,7 +136,9 @@ def instrumented(report: dict) -> str | None:
 
 def baseline_problem(report: dict) -> str | None:
     """Why a run cannot serve as a baseline run: a source changed, a host blocked, or the instrumentation at fault."""
-    changed = [f"{s}={v}" for s, v in settings(report).items() if v != "pass"]
+    # 'record' hands the value on unchanged and records it (the base configuration's sinks, storage and crypto, are
+    # recorded in every condition, execute.configuration): no change of the source
+    changed = [f"{s}={v}" for s, v in settings(report).items() if v not in ("pass", "record")]
     if changed:
         return f"sources changed: {', '.join(changed)}"
     if blocked_hosts(report):
@@ -142,14 +147,14 @@ def baseline_problem(report: dict) -> str | None:
 
 
 def verify(
-    run: Run, report: dict, alternative: Alternative, case: Case, baseline_reads: dict[str, int]
+    run: Run, report: dict, alternative: Alternative, case: Case, baseline_reads: dict[str, list[int]]
 ) -> Verification:
     """
     The verification of a run under an alternative.
 
     Args:
         report: O's report of the run
-        baseline_reads: Per hooked source, the most reads of it in a baseline run of the case
+        baseline_reads: Per hooked source, the number of reads of it in each baseline run of the case
     """
     v = Verification(status="verified")
     hooked = settings(report)
@@ -175,10 +180,10 @@ def verify(
     for change in alternative.changes:
         component = case.component(change["component"])
         if component.dimension == "R":
-            v.effect.append(_recipient_removed(v, run, report, component.entity, blocks))
+            v.effect.append(_recipient_removed(v, report, component.entity, blocks))
             continue
         source = NODE_SOURCES[component.node]
-        v.effect.append(_source_imposed(v, run, report, component.id, source, wanted[source]))
+        v.effect.append(_source_imposed(v, report, component.id, source, wanted[source]))
         _substitution(v, run, report, component.node, hooked, baseline_reads)
 
     if any(c["holds"] is not True for c in v.effect) or any(c["holds"] is False for c in v.substitution):
@@ -220,7 +225,7 @@ def _hosts(report: dict) -> dict[str, dict]:
     return out
 
 
-def _source_imposed(v: Verification, run: Run, report: dict, component: str, source: str, setting: str) -> dict:
+def _source_imposed(v: Verification, report: dict, component: str, source: str, setting: str) -> dict:
     v.cite("o:scope", ["rt", "net"], "observation", "scopes", "context.instruments")
     status = hook_status(report, source)
     if status not in ("verified", "not_exercised"):
@@ -253,7 +258,7 @@ def _source_imposed(v: Verification, run: Run, report: dict, component: str, sou
     return {"component": component, "holds": True, "note": note, "evidence": [r["id"] for r in reads]}
 
 
-def _recipient_removed(v: Verification, run: Run, report: dict, entity: str, blocks: list[str]) -> dict:
+def _recipient_removed(v: Verification, report: dict, entity: str, blocks: list[str]) -> dict:
     v.cite("o:claims", ["net"], "observation", "claims", f"transmits to {entity}")
     v.cite("o:statuses", ["net"], "observation", "statuses", "the sources' part of the network channels' silence")
     open_ = sorted(
@@ -291,8 +296,13 @@ def _recipient_removed(v: Verification, run: Run, report: dict, entity: str, blo
 
 
 def _substitution(
-    v: Verification, run: Run, report: dict, node: str, hooked: dict, baseline_reads: dict[str, int]
+    v: Verification, run: Run, report: dict, node: str, hooked: dict, baseline_reads: dict[str, list[int]]
 ) -> None:
+    """
+    Whether the app read a substitute of the replaced or removed datum more than without the alternative: at most the
+    baseline runs' maximum plus their range (max - min), the variation the baselines show themselves. Identical
+    baselines leave no tolerance.
+    """
     sdk = int(((run.meta.get("device") or {}).get("ro.build.version.sdk")) or 0)
     for substitute in SUBSTITUTES.get(node, ()):
         source = NODE_SOURCES.get(substitute)
@@ -308,9 +318,14 @@ def _substitution(
         for r in found:
             v.cite(f"o:{r['id']}", r["kinds"], "observation", r["id"])
         reads = len(found)
-        most = baseline_reads.get(source, 0)
+        counts = baseline_reads.get(source) or [0]
+        most, tolerance = max(counts), max(counts) - min(counts)
         v.substitution.append(
-            {"node": substitute, "holds": reads <= most, "note": f"{reads} read(s), at most {most} in a baseline run"}
+            {
+                "node": substitute,
+                "holds": reads <= most + tolerance,
+                "note": f"{reads} read(s), at most {most} in a baseline run, tolerance {tolerance} (the baselines' range)",
+            }
         )
 
 

@@ -12,9 +12,9 @@ is asked here (`skuld expect` and `skuld judge` ask).
     experiments     the experimental channel's claims, read by the status rule (rules.py) from the case report's
                     measurements, per practice whose component a case varies (experiments.premises), combined with
                     the hypotheses of aligned purposes (combine.experimental)
-    reasoning tier  the judgements of its kept samples (judge.py), combined across samples: concerns (ii), (iii)
-                    and (iv) (concerns.py), the reasoning tier's Alternative claims (combine.alternatives)
-    relations       O–E and D–E (relations.py), which concern (iv) cites; pass-through and open conditions
+    reasoning tier  the judgements of its kept samples (judge.py), combined across samples: concerns (ii), (iv)
+                    and (v) (concerns.py), the reasoning tier's Alternative claims (combine.alternatives)
+    relations       O–E and D–E (relations.py), which concern (v) cites; pass-through and open conditions
     report          the combined claims (the claims they combine stay in the samples and the case report), the
                     concerns, E's coverage, the gaps someone could act on, the provenance check (provenance.py)
     qualification   the last stage (skuld.qualify, S-25): cases with their attributes, patterns and qualified
@@ -29,6 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import ratatoskr
+from ratatoskr import notices as notice_rules
 from ratatoskr.registry import Registry
 from ratatoskr.schemas import validate
 
@@ -37,6 +38,7 @@ from skuld import (
     assessment,
     combine,
     concerns,
+    config,
     correspondence,
     expectation,
     experiments,
@@ -62,9 +64,17 @@ MARKDOWN = "assessment.md"
 def subjects(root: str | Path, registry_path: str | Path | None = None, write: bool = True) -> dict:
     """Builds the subjects of an assessment workspace and writes subjects.json; returns what it wrote."""
     a = inputs.load_assessment(root)
-    built, decided = _subjects(a, load_registry(registry_path))
+    return _subjects_json(root, a, _subjects(a, load_registry(registry_path)), write)
+
+
+def _subjects_json(root: str | Path, a: inputs.Assessment, made: tuple, write: bool) -> dict:
+    """subjects.json from what _subjects made, written if `write`."""
+    built, decided, _, left_out = made
     out = {
         **built.to_json(),
+        **(
+            {"left_out": [{"id": p.id, "data": p.data, "recipient": p.recipient} for p in left_out]} if left_out else {}
+        ),
         "frame": a.frame.reference(),
         "reports": {
             "observation": [{"path": str(r.path), "sha256": r.sha256, "run": r.run} for r in a.observations],
@@ -80,10 +90,18 @@ def subjects(root: str | Path, registry_path: str | Path | None = None, write: b
     return out
 
 
+def known_data_only() -> bool:
+    """config.json's `assessment.known_data_only`: leave out the practices whose datum O could not identify."""
+    return bool((config.load().get("assessment") or {}).get("known_data_only"))
+
+
 def _subjects(a: inputs.Assessment, registry: Registry | None):
-    built = assessment.build(a, registry)
+    """The subjects the assessment judges, the frame's decisions on them, every practice (the expectation stage's
+    batches are made of all of them), and the practices left out."""
+    every = assessment.build(a, registry)
+    built, left_out = assessment.known_data(every) if known_data_only() else (every, [])
     e = frame.evidence(built, [r.load() for r in a.observations], a.declaration.load() if a.declaration else None)
-    return built, frame.decisions(a.frame, e)
+    return built, frame.decisions(a.frame, e), every, left_out
 
 
 class Evidence:
@@ -107,14 +125,42 @@ def assess(root: str | Path, registry_path: str | Path | None = None, write: boo
     return report
 
 
-def build(root: str | Path, registry_path: str | Path | None = None, write: bool = True) -> tuple[dict, list[dict]]:
-    """The report, and the claims its combined claims combine (`of`): the samples' and the experiments'."""
+def declared_text(d_report: dict | None, pointer: str) -> str | None:
+    """A declaration's text as D annotated it (its description), by its claim pointer `<channel>:/<path>`, or None."""
+    if not d_report or ":" not in pointer:
+        return None
+    channel, path = pointer.split(":", 1)
+    node = next((c.get("tilt") for c in d_report.get("channels", []) if c.get("channel") == channel), None)
+    for key in path.strip("/").split("/"):
+        if isinstance(node, list) and key.isdigit() and int(key) < len(node):
+            node = node[int(key)]
+        elif isinstance(node, dict) and key in node:
+            node = node[key]
+        else:
+            return None
+    text = node.get("description") if isinstance(node, dict) else None
+    return text.strip() if isinstance(text, str) and text.strip() else None
+
+
+def build(
+    root: str | Path,
+    registry_path: str | Path | None = None,
+    write: bool = True,
+    reading: str = judge.READING,
+    notices: str = expectation.NOTICES,
+) -> tuple[dict, list[dict]]:
+    """The report, and the claims its combined claims combine (`of`): the samples' and the experiments'. `reading`
+    is the version of the reasoning tier's reading (judge.READINGS), `notices` the version of Ratatoskr's notice
+    definition the stage-1 contexts leave notice screens out by; a rebuild passes the ones its report names."""
+    judge.reading_component(reading)
+    notice_rules.component(notices)
     started = time.monotonic()
     root = Path(root)
-    subjects(root, registry_path, write)
     a = inputs.load_assessment(root)
     registry = load_registry(registry_path)
-    built, decided = _subjects(a, registry)
+    made = _subjects(a, registry)
+    _subjects_json(root, a, made, write)
+    built, decided, every_practice, left_out = made
     d_report = a.declaration.load() if a.declaration else None
     o_reports = [r.load() for r in a.observations]
     data, purposes = vocabulary(DATA), vocabulary(PURPOSES)
@@ -144,21 +190,37 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
             json.dumps(ref, sort_keys=True), {"kind": "claim", "stage": "assessment", "channel": "rule", "claim": ref}
         )
 
+    def decided_item(cid: str, side: str, dimension: str, x) -> list[str]:
+        """What decided a condition, as evidence: a claim, or what a decision cites that is none (a derived document
+        of D, a legal basis D references, an absence O established)."""
+        found = refs([x])
+        if found:
+            return [rule_item(ref) for ref in found]
+        said = x if isinstance(x, str) else json.dumps(x, sort_keys=True, ensure_ascii=False)
+        method = f"{cid} {side} by {dimension}: {said}"
+        key = json.dumps([cid, side, dimension, x], sort_keys=True)
+        # cited from the assessment's inputs (the O and D reports assessment.yaml names), where it is found
+        citation = {"id": inputs.ASSESSMENT, "at": f"{dimension}: {said}"}
+        fields = {"kind": "doc", "stage": "assessment", "channel": "rule", "method": method, "citation": citation}
+        return [item(key, fields)]
+
     evidence_of = {
         s.requirement: [
-            rule_item(ref)
+            i
             for cid in a.frame.requirement(s.requirement).applies_if
             for side in ("holds", "fails")
-            for ref in refs([x for v in decided[cid].__dict__[side].values() for x in v])
+            for dimension, found in decided[cid].__dict__[side].items()
+            for x in found
+            for i in decided_item(cid, side, dimension, x)
         ]
         for s in statuses
     }
     stated, covered = concerns.information_not_given(a.frame, statuses, evidence_of)
     number = combine.Numbers()
-    stage1, components = _expectation(a, built, item, registry)
+    stage1, components = _expectation(a, every_practice, item, registry, {p.id for p in built.practices}, notices)
     hypotheses = combine.hypotheses(stage1, number)
     applicability = frame.applicability(a.frame, decided)
-    tier = _reasoning_tier(a, built, hypotheses, item, registry, applicability, number)
+    tier = _reasoning_tier(a, built, hypotheses, item, registry, applicability, number, reading)
     premises = experiments.premises(a.cases, root, built.practices, item)
     tested = combine.experimental(hypotheses, premises, purposes, number)
     more, cover = concerns.less_invasive_alternative(
@@ -166,6 +228,38 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
     )
     stated += tier["concerns"] + more
     covered += tier["covered"] + cover
+    # (iii): a declaration O contradicts (author, 14 Nov 2026)
+    contradicted: dict[str, list] = {}
+
+    def contradiction_items(d: str, rels: list) -> list[str]:
+        contradicted[d] = rels
+        declaration = next(x for x in built.declarations if x.id == d)
+        said = declared_text(d_report, declaration.claim["claim"])
+        out = [
+            item(
+                "declared:" + json.dumps(declaration.claim, sort_keys=True),
+                {
+                    "kind": "claim",
+                    "stage": "assessment",
+                    "channel": "rule",
+                    "claim": declaration.claim,
+                    **({"text": said} if said else {}),
+                    "method": "the declaration as D annotated it",
+                },
+            )
+        ]
+        return out + sorted({rule_item(rel.of) for rel in rels}, key=lambda i: int(i.split(":")[1]))
+
+    more, cover = concerns.declaration_contradicted(
+        a.frame,
+        [r for r in related if r.type == "O-D" and r.outcome == correspondence.CONTRADICTS],
+        {d.claim["claim"]: d.id for d in built.declarations},
+        contradiction_items,
+        applicability,
+        {d.id: t for d in built.declarations if (t := declared_text(d_report, d.claim["claim"]))},
+    )
+    stated += more
+    covered += cover
     # purpose specificity is a requirement of declared purposes: a legal basis is no subject of it (8.6)
     covered += [
         concerns.Covered("purpose_specific", d.id, "rule", False)
@@ -189,6 +283,8 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
     for c in stated:
         if c.step == "less_invasive_alternative":
             c.relations = [r.id for r in expected if r.type == "O-E" and {t["claim"] for t in r.to} & set(c.basis)]
+        elif c.step == "declaration_contradicted":
+            c.relations = [r.id for r in contradicted.get(c.subject, [])]
     claims = hypotheses + tier["alternatives"] + tested
     case_features = sorted({c.feature.id for c in a.cases.cases}) if a.cases else []
     open_ = relations.open_conditions(built, every, statuses, a.frame, stated, tested, case_features)
@@ -205,6 +301,9 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
             "components": [
                 *built.components,
                 correspondence.COMPONENT,
+                combine.COMPONENT,
+                judge.reading_component(reading),
+                notice_rules.component(notices),
                 relations.COMPONENT,
                 concerns.COMPONENT,
                 *_declaration_analysis(a),
@@ -264,14 +363,20 @@ def build(root: str | Path, registry_path: str | Path | None = None, write: bool
         "claims": [{k: v for k, v in c.items() if k != "uncertainty"} for c in claims],
         "concerns": concerns.to_json(stated),
         "coverage": concerns.coverage(a.frame, covered),
-        "passed_on": relations.passed_on(built, a.observations, a.declaration, every, expected=bool(hypotheses)),
+        "passed_on": relations.passed_on(
+            built, a.observations, a.declaration, every, expected=bool(hypotheses), left_out=left_out
+        ),
         "cases": _cases(a),
         "open": open_,
         "decided": settled,
-        "gaps": _gaps(stated, claims, tested, a, tier["absent"], item, built, hypotheses),
+        "gaps": _gaps(stated, claims, tested, a, tier["absent"], item, built, hypotheses, left_out),
     }
     report["qualification"] = qualify.qualify(
-        report, {r.id: r.subject for r in a.frame.requirements.values()}, data, registry
+        report,
+        {r.id: r.subject for r in a.frame.requirements.values()},
+        data,
+        registry,
+        {cid for r in a.frame.requirements.values() for cid in r.applies_if},
     )
     report["report"]["components"] += qualify.COMPONENTS
     validate("expectation_assessment", report)
@@ -301,16 +406,26 @@ def identity(report: dict) -> dict:
     return out
 
 
-def _expectation(a: inputs.Assessment, built, item: Evidence, registry) -> tuple[list[dict], list[dict]]:
+def _expectation(
+    a: inputs.Assessment,
+    built,
+    item: Evidence,
+    registry,
+    judged: set[str] | None = None,
+    notices: str | None = None,
+) -> tuple[list[dict], list[dict]]:
     """The expectation stage's claims from the kept samples, with an evidence item per context part a supported claim
-    rests on, and the samples' components."""
+    rests on, and the samples' components. The samples are read with all practices (`built`), as they were asked;
+    only the claims about the practices `judged` (all, if None) are kept."""
     claims, components = [], {}
     practices = {p.id: p for p in built.practices}
-    for name, context, answer in expectation.kept(a, built, load_corpus(a.corpus), registry):
+    for name, context, answer in expectation.kept(a, built, load_corpus(a.corpus), registry, notices):
         record = json.loads((a.root / "expectation" / name / "record.json").read_text(encoding="utf-8"))
         _record_components(components, record, "expectation")
         parts = {p["id"]: p for p in context.parts}
         for c in expectation.read(answer, name, context, practices):
+            if judged is not None and c["subject"] not in judged:
+                continue
             cited = c.pop("parts", [])
             if c["status"] == "supported":
                 c["supporting"] = [i for x in cited for i in _part_items(item, name, parts[x])]
@@ -393,19 +508,30 @@ def _record_components(components: dict, record: dict, stage: str) -> None:
         "stage": stage,
     }
     model = record["model"]
-    components[f"model:{stage}:{model['name']}:{record['options']['seed']}"] = {
+    # the reasoning setting the sample was asked with (ask.py records it where it was set): the same model with
+    # reasoning off and on is two configurations, which the report must tell apart
+    think = record["options"].get("think")
+    components[f"model:{stage}:{model['name']}:{record['options']['seed']}:{think}"] = {
         "role": "model",
         "id": model["name"],
         **({"sha256": model["digest"].removeprefix("sha256:")} if _sha(model.get("digest")) else {}),
         "stage": stage,
         "seed": record["options"]["seed"],
+        **({"think": think} if think is not None else {}),
     }
 
 
 def _reasoning_tier(
-    a: inputs.Assessment, built, hypotheses: list[dict], item: Evidence, registry, applicability, number
+    a: inputs.Assessment,
+    built,
+    hypotheses: list[dict],
+    item: Evidence,
+    registry,
+    applicability,
+    number,
+    reading: str = judge.READING,
 ) -> dict:
-    """The reasoning tier's combined Alternative claims, its concerns (ii) and (iii) and their coverage from its kept
+    """The reasoning tier's combined Alternative claims, its concerns (ii) and (iv) and their coverage from its kept
     samples, the samples' components, and the questions expected but not asked."""
     corpus = load_corpus(a.corpus)
     norms = load_corpus(a.corpus / NORMS)
@@ -414,7 +540,10 @@ def _reasoning_tier(
     d_sha = a.declaration.sha256 if a.declaration else None
     contexts, components = {}, {}
     specific, compatible, members, judged, asked = [], [], [], set(), {q: 0 for q in judge.QUESTIONS}
-    for name, q, answer in judge.kept(a, built, corpus, norms, hypotheses, factors, expectation.names(registry)):
+    minimisation_samples: dict[str, set[str]] = {}  # per practice, the kept samples of its question (gate d)
+    for name, q, answer in judge.kept(
+        a, built, corpus, norms, hypotheses, factors, expectation.names(registry), reading
+    ):
         record = json.loads((a.root / name / "record.json").read_text(encoding="utf-8"))
         _record_components(components, record, "assessment")
         components[f"procedure:{q.question}"] = {"role": "method", **judge.procedure(q.question), "stage": "assessment"}
@@ -426,7 +555,9 @@ def _reasoning_tier(
             compatible += judge.compatibility(answer, name, q)
         else:
             judged.add(q.record["practice"])
-            members += judge.minimisation(answer, name, q, by_id)
+            minimisation_samples.setdefault(q.record["practice"], set()).add(name)
+            practice = next((p for p in built.practices if p.id == q.record["practice"]), None)
+            members += judge.minimisation(answer, name, q, by_id, reading, practice, corpus)
 
     def items(sample: str, ids: list[str]) -> list[str]:
         parts = contexts[sample]
@@ -437,11 +568,13 @@ def _reasoning_tier(
         if c["status"] == "supported":
             c["supporting"] = items(c["channels"][0].removeprefix("reasoning:"), cited)
     said = judge.statements(a, built) if a.declaration else []
+    # from reading 2, a declared purpose judged not specific specifies nothing (E 0.9, def:concern)
+    vague = judge.vague_declarations(specific) if judge.gated(reading) else frozenset()
     stated, covered = concerns.not_specific(a.frame, said, specific, items, applicability)
     if a.declaration is not None and built.comparability.get("comparable") is not False:
         more, cover = concerns.purpose_limitation(
             a.frame,
-            judge.limitation(built, said, hypotheses),
+            judge.limitation(built, said, hypotheses, vague),
             compatible,
             items,
             applicability,
@@ -449,9 +582,11 @@ def _reasoning_tier(
         )
         stated += more
         covered += cover
-    expected = {q.question for q in judge.questions(a, built, corpus, norms, hypotheses, expectation.names(registry))}
+    expected = {
+        q.question for q in judge.questions(a, built, corpus, norms, hypotheses, expectation.names(registry), vague)
+    }
     return {
-        "alternatives": combine.alternatives(members, number),
+        "alternatives": combine.alternatives(members, number, minimisation_samples if judge.gated(reading) else None),
         "members": members,
         "judged": judged,
         "vague": {s.declarations[0]: s.declarations for s in said},
@@ -478,6 +613,7 @@ NEXT = {
     "precondition_failed": "correct the alternative against the baseline",
     "not_admitted": "repeat the comparison, or ask the reasoning tier again",
     "source_absent": "skuld judge",
+    "source_not_analysable": "decode the connection's content (TLS interception, the protocol's format), then observe again",
 }
 
 
@@ -505,6 +641,7 @@ def _gaps(
     item: Evidence,
     built=None,
     hypotheses: list[dict] = (),
+    left_out: list = (),
 ) -> list[dict]:
     """The gaps someone could act on: the conditions of concerns whose applicability is unknown; the premises of
     concerns not established; what the experiments could not settle; questions not asked; D's report absent; and
@@ -619,6 +756,17 @@ def _gaps(
                 f"documentation of {what} in the corpus, so that the expectation stage can establish a purpose",
                 of=p.id,
             )
+    for p in left_out:
+        gap(
+            p.id,
+            "source_not_analysable",
+            f"what practice {p.id} ({p.claim_type} {p.data}"
+            + (f" to {p.recipient}" if p.recipient else "")
+            + ") carries",
+            "the datum identified: O saw the connection, but its content is encrypted, binary or damaged; the practice "
+            "is left out of the assessment",
+            "E3",
+        )
     if a.declaration is None:
         requirements = [r.id for r in a.frame.requirements.values() if r.subject in ("collection", "declaration")]
         out.append(
@@ -723,7 +871,7 @@ def _cases(a: inputs.Assessment) -> list[dict]:
     return [{"path": experiments.CASE_REPORT, "sha256": inputs.digest(path), "schema": "expectation_report"}]
 
 
-def _what(report: dict, built):
+def _what(built):
     practices = {p.id: p for p in built.practices}
 
     def what(subject: str) -> str:
@@ -736,7 +884,7 @@ def _what(report: dict, built):
 def markdown(report: dict, built) -> str:
     """The report for a reader: the relations, the concerns, the experiments and the open conditions."""
     app = report["application"]
-    what = _what(report, built)
+    what = _what(built)
     claims = {c["id"]: c for c in report["claims"]}
     lines = [f"# Assessment of {app['package']} {app['version']}", ""]
     lines += [
@@ -834,7 +982,13 @@ def _qualification_markdown(q: dict, what) -> list[str]:
     from skuld.qualify.symbols import SIGN
 
     p = q["profile"]
-    lines = ["", "## Qualification", "", "Result profile: cases per qualified result, a fact about this application, not a rank.", ""]
+    lines = [
+        "",
+        "## Qualification",
+        "",
+        "Result profile: cases per qualified result, a fact about this application, not a rank.",
+        "",
+    ]
     lines += ["| Result | Practices | Declaration-only | Declared purposes | Collection |", "|---|---|---|---|---|"]
     for key, name in RESULT_NAMES.items():
         counts = [p[g].get(key, 0) for g in ("practice", "declaration", "declared_purposes", "collection")]
@@ -861,7 +1015,9 @@ def _qualification_markdown(q: dict, what) -> list[str]:
     for s in q["next_steps"]:
         kind = s["kind"] + (f" ({s['level'].replace('_', ' ')})" if s.get("level") else "")
         change = "yes" if s["could_change"] else "no"
-        lines.append(f"| {s['id']} | {kind} | {s['by']} | {change} | {len(s['cases'])} | {s['decides'].replace('|', '/')} |")
+        lines.append(
+            f"| {s['id']} | {kind} | {s['by']} | {change} | {len(s['cases'])} | {s['decides'].replace('|', '/')} |"
+        )
     if q["unplaced"]:
         lines += ["", "### Unplaced", ""] + [f"- {u['id']}: {u['reason']}" for u in q["unplaced"]]
     lines += ["", "### Limitations", ""] + [f"- {x}" for x in q["limitations"]]

@@ -1,5 +1,5 @@
 """Experiments in the assessment: the components a case varies, ≈ between case and hypothesis purposes, the
-combination deciding by strength, concern (iv) from a comparison, and the choice of experiments."""
+combination deciding by strength, concern (v) from a comparison, and the choice of experiments."""
 
 import json
 from types import SimpleNamespace
@@ -13,6 +13,16 @@ from skuld import combine, concerns, select, space
 DATA = Vocabulary.load("asgard-data")
 PURPOSES = Vocabulary.load("dpv-purposes")
 LOW = {"t": "moderate", "s": "low", "n": "not_applicable"}
+
+
+@pytest.fixture(autouse=True)
+def every_purpose_observable(request, monkeypatch):
+    """The selection's other rules are tested on purposes any experiment could observe; the tests of observability
+    (marked `catalogue`) read Skuld's catalogue."""
+    if "catalogue" not in request.keywords:
+        monkeypatch.setattr(
+            select, "observed_purposes", lambda: [("Purpose", b) for b in ("user", "provider", "other")]
+        )
 
 
 def practice(pid, data, recipient=None, claim_type="accesses", relation=None):
@@ -104,7 +114,7 @@ def test_a_hypothesis_aligns_with_the_nearest_case_purpose_above_it_of_its_benef
 
 
 def test_a_comparison_decides_over_reasoning_and_stands_alone_where_reasoning_is_silent():
-    h = hypothesis("claim:P-loc:1", "P-loc", "RequestedServiceProvision")
+    h = hypothesis("claim:P-loc:1", "P-loc", "ServiceProvision")
     guessed = {
         **h,
         "id": "claim:P-loc:2",
@@ -130,7 +140,7 @@ def test_a_comparison_decides_over_reasoning_and_stands_alone_where_reasoning_is
 
 def test_a_demonstrated_alternative_is_a_minimisation_concern():
     frame = Frame.load("gdpr-art5")
-    h = hypothesis("claim:P-loc:1", "P-loc", "RequestedServiceProvision")
+    h = hypothesis("claim:P-loc:1", "P-loc", "ServiceProvision")
     tested = combine.experimental(
         [h],
         [
@@ -161,6 +171,42 @@ def test_an_experiment_that_cannot_observe_the_purpose_leaves_the_concern_not_as
         t["basis"] = ["claim:P-ads:1"]
     stated, _ = concerns.less_invasive_alternative(frame, [h], [], set(), {}, tested)
     assert (stated[0].status, stated[0].reason, stated[0].observability) == ("not_assessable", reason, "E3")
+
+
+def test_an_experiment_that_decided_nothing_neither_merges_hypotheses_nor_gives_a_concern_a_premise():
+    """12 Nov 2026: pedometer's launch Marketing purpose (no oracle) merged E's Advertising (supported) and
+    TargetedAdvertising (not established) hypotheses into one claim; Weather's undecided comparison created a
+    minimisation concern E's reasoning had not raised. Neither happens now: such a premise stands alone."""
+    frame = Frame.load("gdpr-art5")
+    ads = hypothesis("claim:P-ads:1", "P-ads", "Advertising", "provider")
+    targeted = hypothesis("claim:P-ads:2", "P-ads", "TargetedAdvertising", "provider")
+    deps = [
+        {
+            **ads,
+            "id": "claim:P-ads:3",
+            "type": "dependency",
+            "basis": ["claim:P-ads:1"],
+            "component": "P-ads.data",
+            "status": "supported",
+        },
+        {
+            **targeted,
+            "id": "claim:P-ads:4",
+            "type": "dependency",
+            "basis": ["claim:P-ads:2"],
+            "component": "P-ads.data",
+            "status": "not_established",
+        },
+    ]
+    unobservable = premise(1, "dependency", "not_assessable", subject="P-ads", node="Marketing")
+    out = combine.experimental([ads, targeted, *deps], [unobservable], PURPOSES, combine.Numbers())
+    assert [(c["of"], c["basis"], c["status"]) for c in out] == [(["ex:forecast:1"], [], "not_assessable")]
+    loc = hypothesis("claim:P-loc:1", "P-loc", "RequestedServiceProvision")
+    undecided = premise(2, "alternative", "not_established", alternative="forecast:G1")
+    tested = combine.experimental([loc], [undecided], PURPOSES, combine.Numbers())
+    assert [c["basis"] for c in tested] == [[]]
+    stated, covered = concerns.less_invasive_alternative(frame, [loc], [], set(), {}, tested)
+    assert stated == [] and covered == []
 
 
 def report(claims, concerns_=()):
@@ -253,7 +299,7 @@ def test_a_combined_claims_uncertainty_ranks_not_applicable_lowest():
     assert combine._uncertainty(members, minimum=True) == {"t": "moderate", "s": "low", "n": "not_applicable"}
 
 
-def test_an_undecided_combination_gives_the_reason_of_the_claim_that_cannot_assess_it():
+def test_an_undecided_combination_gives_the_reason_of_the_claims_that_were_assessed():
     def sample(n, status, reason):
         return {
             **hypothesis(f"b/s{n}:p0", "P", "ServiceProvision", status=status),
@@ -269,7 +315,8 @@ def test_an_undecided_combination_gives_the_reason_of_the_claim_that_cannot_asse
         ],
         combine.Numbers(),
     )
-    assert (out[0]["status"], out[0]["reason"]) == ("not_assessable", "too vague")
+    # the sample that could not assess it abstains (combination 2, author 13 Nov 2026)
+    assert (out[0]["status"], out[0]["reason"]) == ("not_established", "its action is not shown by the context")
 
 
 def test_the_chosen_entries_name_their_reason(workspace, monkeypatch):
@@ -332,7 +379,8 @@ def test_an_extension_decides_again_what_an_earlier_budget_refused(workspace):
     by = {e["practice"]: e for e in second["entries"]}
     assert by["P-ads"] == {e["practice"]: e for e in first["entries"]}["P-ads"]  # the earlier choice, as it was
     assert by["P-loc"]["kind"] == select.CHOICE and "rank 1" in by["P-loc"]["reason"]
-    assert second["device_seconds"] == costs["P-ads"] + costs["P-loc"]
+    # the runs are shared: the baseline is counted once, so P-loc adds only its interventions (2 × repeats runs)
+    assert second["device_seconds"] == costs["P-ads"] + 2 * 3 * 100
     assert len(second["entries"]) == len(first["entries"])  # decided again, not added twice
 
 
@@ -343,8 +391,11 @@ def test_the_listing_says_whether_an_experiment_could_change_a_result(workspace)
     report_ = json.loads((workspace / "assessment.json").read_text(encoding="utf-8"))
     report_["qualification"] = {
         "next_steps": [
-            {"kind": "experiment", "target": {"practice": c["practice"], "purpose": c["purpose"]},
-             "could_change": c["practice"] != "P-ads"}
+            {
+                "kind": "experiment",
+                "target": {"practice": c["practice"], "purpose": c["purpose"]},
+                "could_change": c["practice"] != "P-ads",
+            }
             for c in listed
         ]
     }
@@ -370,4 +421,137 @@ def test_skuld_run_takes_every_condition_by_default_and_prints_json_lines(tmp_pa
     monkeypatch.setattr(execute, "run", run)
     cli.main(["run", str(tmp_path), "--recorded", "r", "--config", "c", "--device", "d", "--json"])
     assert seen["conditions"] == ["baseline", "G-round1", "R-block"]
-    assert json.loads(capsys.readouterr().out.strip()) == {"order": 1, "condition": "baseline", "exit": 0, "folder": "runs/x"}
+    assert json.loads(capsys.readouterr().out.strip()) == {
+        "order": 1,
+        "condition": "baseline",
+        "exit": 0,
+        "folder": "runs/x",
+    }
+
+
+# -- groups: data type × purpose node (author, 12 Nov 2026) -----------------------------------------------------------
+
+
+@pytest.fixture
+def grouped(workspace):
+    """A second and third recipient of the same data for the same purpose: one group of three candidates."""
+    subjects = json.loads((workspace / "subjects.json").read_text(encoding="utf-8"))
+    for n, entity in ((2, "adtwo"), (3, "adthree")):
+        subjects["practices"].append(
+            {
+                "id": f"P-ads{n}",
+                "claim_type": "transmits",
+                "data": "data",
+                "recipient": entity,
+                "episodes": [str(n + 2)],
+                "party": {"relation": "other"},
+            }
+        )
+    (workspace / "subjects.json").write_text(json.dumps(subjects))
+    report_ = json.loads((workspace / "assessment.json").read_text(encoding="utf-8"))
+    report_["claims"] += [hypothesis(f"claim:P-ads{n}:1", f"P-ads{n}", "Advertising", "provider") for n in (2, 3)]
+    (workspace / "assessment.json").write_text(json.dumps(report_))
+    return workspace
+
+
+def test_a_group_is_chosen_or_refused_as_one(grouped, monkeypatch):
+    (grouped / "inputs").mkdir()
+    (grouped / select.CHOSEN).write_text("chosen:\n  - {id: P-ads2, reason: pursue}\n")
+    selection = select.select(grouped)
+    by = {e["practice"]: e for e in selection["entries"]}
+    ads = [by[p] for p in ("P-ads", "P-ads2", "P-ads3")]
+    assert {e["group"] for e in ads} == {"group:data:Advertising"}
+    # one member pursued: the group is chosen together, whatever the budget (0)
+    assert all(
+        e["kind"] == select.CHOICE and "with its group group:data:Advertising (3 candidates)" in e["reason"]
+        for e in ads
+    )
+    assert by["P-loc"]["kind"] == select.REFUSAL and "experiments are off" in by["P-loc"]["reason"]
+    # the baseline once, then one recipient removal per member: (3 + 1) + 3 × 3 runs of 100 s
+    assert sum(e["cost_seconds"] for e in ads) == selection["device_seconds"] == (4 + 3 * 3) * 100
+    assert by["P-own"]["group"] == "group:data:ServiceOptimisation" and by["P-own"]["cost_seconds"] == 0
+
+
+def test_shared_interventions_are_counted_once(grouped, monkeypatch):
+    # P-loc's two roundings and the ads' removals are distinct; a second purpose of the same location practice shares
+    # P-loc's roundings, so it adds nothing but is its own group
+    report_ = json.loads((grouped / "assessment.json").read_text(encoding="utf-8"))
+    report_["claims"].append(hypothesis("claim:P-loc:2", "P-loc", "ServiceProvision"))
+    (grouped / "assessment.json").write_text(json.dumps(report_))
+    monkeypatch.setattr(select, "settings", lambda: {"budget_seconds": 10**6, "repeats": 3, "run_seconds": 100})
+    selection = select.select(grouped)
+    by = {e["purpose"]: e for e in selection["entries"]}
+    assert by["claim:P-loc:1"]["group"] != by["claim:P-loc:2"]["group"]
+    assert by["claim:P-loc:2"]["cost_seconds"] == 0  # its roundings are counted already
+    # baseline 4 runs, 2 roundings and 3 removals of 3 runs each
+    assert selection["device_seconds"] == (4 + 5 * 3) * 100
+
+
+def test_the_listings_name_the_group_and_odins_fields_stay(grouped):
+    listed = select.listing(grouped)
+    assert all(
+        {"id", "group", "practice", "purpose", "concern", "cost_seconds", "eligible", "could_change"} <= set(c)
+        for c in listed
+    )
+    ads = [c for c in listed if c["group"] == "group:data:Advertising"]
+    assert len(ads) == 3 and all(c["cost_seconds"] == ((1 + 1) * 3 + 1) * 100 for c in ads)  # alone, as before
+    groups = {g["id"]: g for g in select.group_listing(grouped)}
+    g = groups["group:data:Advertising"]
+    assert len(g["members"]) == 3 and g["interventions"] == ["R-adco", "R-adthree", "R-adtwo"]
+    assert g["cost_seconds"] == (4 + 3 * 3) * 100 and g["eligible"]
+    assert (
+        not groups["group:data:ServiceOptimisation"]["eligible"]
+        and groups["group:data:ServiceOptimisation"]["cost_seconds"] == 0
+    )
+    assert not (grouped / select.FILE).exists()
+
+
+# -- observability (author, 12 Nov 2026: 15 of the gemma run's 18 groups had no oracle for their purpose) -------------
+
+
+@pytest.mark.catalogue
+def test_a_purpose_no_family_observes_is_refused_and_one_a_family_observes_is_not():
+    from skuld.common import PURPOSES, vocabulary
+
+    purposes, observed = vocabulary(PURPOSES), select.observed_purposes()
+    assert ("ServiceProvision", "user") in observed  # the launch family's
+    why = select.unobservable("TargetedAdvertising", "provider", observed, purposes)
+    assert why and "provider at TargetedAdvertising" in why
+    assert select.unobservable("ServiceUsageAnalytics", "third parties", observed, purposes)
+    # the same node is observable for the user, through a family's purpose above it of that beneficiary
+    assert select.unobservable("RequestedServiceProvision", "user", observed, purposes) is None
+    assert select.unobservable("ServiceUsageAnalytics", "user", observed, purposes) is None  # ServiceManagement
+    assert select.unobservable("NoSuchNode", "provider", observed, purposes) is None  # left to the cases
+
+
+@pytest.mark.catalogue
+def test_the_selection_refuses_an_unobservable_group_with_its_reason():
+    report = {
+        "concerns": [],
+        "claims": [
+            hypothesis("h-ads", "P-ads", "TargetedAdvertising", who="provider"),
+            hypothesis("h-map", "P-map", "RequestedServiceProvision"),
+        ],
+    }
+    practices = [
+        vars(practice("P-ads", "device-or-other-ids.advertising-id")),
+        vars(practice("P-map", "location.coordinates")),
+    ]
+    found = {c["practice"]: c for c in select.candidates(report, practices)}
+    assert "no experiment could observe its purpose" in select.refusal(found["P-ads"])
+    assert "unobservable" not in found["P-map"]
+
+
+def test_a_preserved_purpose_reaches_its_own_node_only_and_a_broken_one_also_those_below():
+    """C1 (author, 14 Nov 2026): that a function survives without the data shows nothing for a narrower purpose; that
+    it breaks holds for every purpose it includes."""
+    narrower = hypothesis("claim:P-loc:1", "P-loc", "RequestedServiceProvision")
+    preserved = premise(1, "alternative", "supported", alternative="forecast:G1", level="demonstrated", broke=False)
+    broken = premise(2, "alternative", "refuted", alternative="forecast:G0", level="demonstrated", broke=True)
+    out = combine.experimental([narrower], [preserved, broken], PURPOSES, combine.Numbers())
+    by = {c["alternative"]: c for c in out}
+    assert by["forecast:G1"]["basis"] == []
+    assert by["forecast:G0"]["basis"] == ["claim:P-loc:1"] and by["forecast:G0"]["uncertainty"]["s"] == "moderate"
+    same = hypothesis("claim:P-loc:1", "P-loc", "ServiceProvision")
+    out = combine.experimental([same], [preserved], PURPOSES, combine.Numbers())
+    assert out[0]["basis"] == ["claim:P-loc:1"]

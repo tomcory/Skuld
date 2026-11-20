@@ -2,10 +2,15 @@
 skuld select: the choice of experiments, each choice and each refusal a named input with its reason
 (`inputs/selection.json`), made from an assessment report before any run it asks for.
 
-A candidate is a practice and a supported inferred purpose whose minimisation reasoning cannot decide: no concern (iv)
+A candidate is a practice and a supported inferred purpose whose minimisation reasoning cannot decide: no concern (v)
 is supported for it, and no experiment already decides it (an experimental Alternative claim, ≈ the purpose, that is
 supported or refuted). It is refused where Skuld can impose nothing on the practice's components (`space.imposable`),
-or where an experiment already ran and could not assess it (no oracle observes the purpose). Of the others, those
+or where an experiment already ran and could not assess it (no oracle observes the purpose), or where no experiment
+could observe the purpose at all: no family of Skuld's catalogue has a purpose with an oracle that the candidate's
+purpose would align with (`combine.aligned`: the same beneficiary, the family's node its own or one above it). Such a
+purpose is served, if at all, where no run shows it (an advertising network matching a profile, an analytics backend
+counting a use), so an experiment could only test another purpose of its case (author, 12 Nov 2026, after 15 of 18
+groups of the gemma run had no oracle for their purpose). Of the others, those
 `inputs/chosen.yaml` names (concern or practice ids, each with its reason: pursued by the author, or in the calibration
 sample) are chosen first, and their device time counts; the rest are chosen in order while their device time fits the
 budget (config.json's `experiments`: off at a budget of 0, the default), and refused with the budget as the reason
@@ -27,8 +32,13 @@ whether it is eligible, and whether an experiment could change a case's qualifie
 experiment step for the purpose (`qualify/nextsteps.py`), which qualifies the case under each outcome of the
 experiment; qualification proposes one per eligible candidate, by `refusal` here, so the two never disagree.
 
-A case's device time is estimated as (1 + its alternatives) × repeats runs, and one qualifying replay, of
-`run_seconds` each. A selection is fixed once: making another replaces it only on request (`--replace`), and keeps the
+Candidates are decided in groups (author, 12 Nov 2026): one per data type and purpose node of the application, the
+unit of the aggregated concerns (`skuld aggregate`). A group's eligible candidates are chosen or refused together, its
+ineligible ones are refused each with its own reason, as before. The runs an alternative needs are shared by every
+case that imposes it (`space`: a condition depends on the recording only), so the device time counts each
+intervention once: one baseline per selection, (repeats + 1) runs with its qualifying replay, and repeats runs per
+intervention not yet counted, of `run_seconds` each. A candidate's `cost_seconds` in a selection is what it adds; in
+the listing, what it would cost alone ((1 + its alternatives) × repeats runs and one replay), as Odin reads it. A selection is fixed once: making another replaces it only on request (`--replace`), and keeps the
 one it replaces. Within one investigation it may be extended (`--extend`), which keeps every earlier choice and
 refusal that does not depend on the budget, counts the device time already chosen, and decides the others again:
 the candidates it did not yet hold and those an earlier budget refused (the Investigator gives each batch just the
@@ -42,11 +52,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-import yaml
+from skuld import catalogue, combine, config, inputs, space, yamlio
 
-from skuld import combine, config, inputs, space
-
-VERSION = "2"
+VERSION = (
+    "4"  # 4: a datum below a hooked source's node is imposable, as cases vary it; 3: unobservable purposes refused
+)
 AUTHOR = {"kind": "rule", "id": "skuld.select", "version": VERSION}
 FILE = "inputs/selection.json"
 CHOSEN = "inputs/chosen.yaml"
@@ -77,7 +87,7 @@ def _chosen(root: Path) -> dict[str, tuple[str, int]]:
     path = root / CHOSEN
     if not path.is_file():
         return {}
-    entries = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("chosen") or ()
+    entries = (yamlio.load(path.read_text(encoding="utf-8")) or {}).get("chosen") or ()
     out = {}
     for e in entries:
         if e.get("reason") not in REASONS:
@@ -98,10 +108,36 @@ def _entry_id(c: dict) -> str:
     return f"selection:{c['practice']}:{c['purpose'].rsplit(':', 1)[1]}"
 
 
+def group_id(c: dict) -> str:
+    """A candidate's group: its data type and purpose node (the aggregated concerns' unit)."""
+    return f"group:{c['fields'].get('data') or '?'}:{c.get('node') or '?'}"
+
+
+def _alternatives(c: dict) -> set[str]:
+    return {a for x in c["components"] for a in x["alternatives"]}
+
+
+def _added(c: dict, counted: set[str], baseline: bool, s: dict) -> int:
+    """The device time a candidate adds to what is counted: the baseline if none is yet, and its interventions not
+    yet counted."""
+    new = _alternatives(c) - counted
+    return ((0 if baseline else s["repeats"] + 1) + len(new) * s["repeats"]) * s["run_seconds"]
+
+
+def _grouped(found: list[dict]) -> list[list[dict]]:
+    """The candidates in groups, in the order of each group's first candidate."""
+    groups: dict[str, list[dict]] = {}
+    for c in found:
+        groups.setdefault(group_id(c), []).append(c)
+    return list(groups.values())
+
+
 def refusal(candidate: dict) -> str | None:
     """Why no experiment is chosen for a candidate, or None where it is eligible."""
     if not candidate["components"]:
         return "Skuld can impose nothing on its components"
+    if candidate.get("unobservable"):
+        return candidate["unobservable"]
     if candidate.get("tried"):
         return f"an experiment could not assess it ({candidate['tried']})"
     return None
@@ -119,13 +155,13 @@ def _could_change(report: dict) -> dict[str, bool]:
     return out
 
 
-def listing(root: str | Path, budget_seconds: int | None = None) -> list[dict]:
+def listing(root: str | Path) -> list[dict]:
     """The candidates of an assessment workspace with their device time, eligibility and whether an experiment could
     change their case's result; writes nothing."""
     root = Path(root)
     report = json.loads((root / "assessment.json").read_text(encoding="utf-8"))
     practices = json.loads((root / "subjects.json").read_text(encoding="utf-8"))["practices"]
-    s = {**settings(), **({"budget_seconds": budget_seconds} if budget_seconds is not None else {})}
+    s = settings()  # a candidate's device time; the budget is select's, not the listing's
     change = _could_change(report)
     out = []
     for c in candidates(report, practices):
@@ -133,6 +169,7 @@ def listing(root: str | Path, budget_seconds: int | None = None) -> list[dict]:
         out.append(
             {
                 "id": _entry_id(c),
+                "group": group_id(c),
                 "practice": c["practice"],
                 "purpose": c["purpose"],
                 "concern": c["concern"],
@@ -146,8 +183,75 @@ def listing(root: str | Path, budget_seconds: int | None = None) -> list[dict]:
     return out
 
 
+def group_listing(root: str | Path) -> list[dict]:
+    """The candidates' groups (data type and purpose node): each with its members, its distinct interventions, what
+    it would cost alone with its runs shared (a baseline and repeats runs per intervention), whether any member is
+    eligible and whether any could change a case's result; writes nothing."""
+    root = Path(root)
+    report = json.loads((root / "assessment.json").read_text(encoding="utf-8"))
+    practices = json.loads((root / "subjects.json").read_text(encoding="utf-8"))["practices"]
+    s = settings()
+    listed = {x["id"]: x for x in listing(root)}
+    out = []
+    for members in _grouped(candidates(report, practices)):
+        eligible = [c for c in members if refusal(c) is None]
+        interventions = sorted({a for c in eligible for a in _alternatives(c)})
+        first = members[0]
+        out.append(
+            {
+                "id": group_id(first),
+                "data": first["fields"].get("data"),
+                "node": first.get("node"),
+                "members": [_entry_id(c) for c in members],
+                "eligible_members": [_entry_id(c) for c in eligible],
+                "interventions": interventions,
+                "cost_seconds": (s["repeats"] + 1 + len(interventions) * s["repeats"]) * s["run_seconds"]
+                if eligible
+                else 0,
+                "eligible": bool(eligible),
+                "could_change": any(listed[_entry_id(c)]["could_change"] for c in eligible),
+            }
+        )
+    return out
+
+
+#: Skuld's catalogue of case families
+CATALOGUE = Path(__file__).resolve().parents[1] / "catalogue"
+
+
+def observed_purposes(folder: Path = CATALOGUE) -> list[tuple[str, str]]:
+    """The (node, beneficiary) of every purpose with an oracle in the newest version of each family of the catalogue."""
+    return sorted(
+        {
+            (p["node"], combine.beneficiary(p.get("beneficiary")))
+            for f in catalogue.load(folder).latest()
+            for p in f.data.get("purposes") or ()
+            if p.get("oracle") and p.get("node")
+        }
+    )
+
+
+def unobservable(node: str | None, who: str | None, observed: list[tuple[str, str]], vocabulary) -> str | None:
+    """Why no experiment could observe a purpose, or None: no observed purpose of the same beneficiary at its node or
+    above it (the alignment of a case purpose with a hypothesis purpose, `combine.aligned`)."""
+    if not node or node not in vocabulary:
+        return None  # an unknown node is left to the cases, as before
+    lineage = {node, *vocabulary.ancestors(node)}
+    whom = combine.beneficiary(who)
+    if any(n in lineage and b == whom for n, b in observed):
+        return None
+    return (
+        f"no experiment could observe its purpose: no case family of the catalogue has an oracle for a purpose of the "
+        f"{whom} at {node} or above it"
+    )
+
+
 def candidates(report: dict, practices: list[dict]) -> list[dict]:
     """The practices and supported inferred purposes whose minimisation is undecided, with what Skuld could impose."""
+    from skuld.common import PURPOSES, vocabulary
+
+    purposes = vocabulary(PURPOSES)
+    observed = observed_purposes()
     by_id = {p["id"]: p for p in practices}
     concern = {c.get("purpose"): c for c in report["concerns"] if c["step"] == "less_invasive_alternative"}
     tested = [c for c in report["claims"] if c.get("case") and c["type"] == "alternative"]
@@ -177,6 +281,15 @@ def candidates(report: dict, practices: list[dict]) -> list[dict]:
                 **(
                     {"tried": f"case {tried[h['id']]['case']}: {tried[h['id']].get('reason', 'not assessable')}"}
                     if h["id"] in tried
+                    else {}
+                ),
+                **(
+                    {"unobservable": why}
+                    if (
+                        why := unobservable(
+                            h["purpose"].get("node"), h["purpose"].get("beneficiary"), observed, purposes
+                        )
+                    )
                     else {}
                 ),
             }
@@ -212,35 +325,66 @@ def select(
         spent = earlier["device_seconds"]
     held = {e["id"] for e in entries}
     found = [c for c in candidates(report, practices) if _entry_id(c) not in held]
+    # what earlier choices of an extended selection already count: their interventions, and the baseline
+    chosen_before = [e for e in entries if e["kind"] == CHOICE]
+    counted = {a for e in chosen_before for a in _alternatives(e)}
+    baseline = bool(chosen_before)
 
     def mark(c: dict) -> tuple[str, int] | None:
         return next((named[k] for k in (c["concern"], c["practice"]) if k in named), None)
 
-    first = sorted((c for c in found if mark(c)), key=lambda c: (mark(c)[0] == "investigate", mark(c)[1]))
-    for c in first + [c for c in found if c not in first]:
-        cost = _cost(c, s)
-        entry = {"id": _entry_id(c), **c, "cost_seconds": cost}
-        marked = mark(c)
-        undecided = f"reasoning does not decide it (concern (iv) {c['concern_status'] or 'not stated'})"
-        if not c["components"]:
-            entry.update(kind=REFUSAL, reason="Skuld can impose nothing on its components")
-        elif c.get("tried"):
-            entry.update(kind=REFUSAL, reason=f"an experiment could not assess it ({c['tried']})")
-        elif marked and marked[0] in UNBUDGETED:
-            entry.update(kind=CHOICE, reason=f"{REASONS[marked[0]]}; {undecided}")
+    def group_mark(members: list[dict]) -> tuple[str, int] | None:
+        marks = [m for m in map(mark, members) if m]
+        # a reason that is chosen whatever the budget comes first, then the best rank
+        return min(marks, key=lambda m: (m[0] not in UNBUDGETED, m[1])) if marks else None
+
+    groups = _grouped(found)
+    first = sorted(
+        (g for g in groups if group_mark(g)), key=lambda g: (group_mark(g)[0] == "investigate", group_mark(g)[1])
+    )
+    for members in first + [g for g in groups if g not in first]:
+        gid = group_id(members[0])
+        eligible = [c for c in members if refusal(c) is None]
+        for c in members:
+            if c in eligible:
+                continue
+            entry = {"id": _entry_id(c), **c, "group": gid, "cost_seconds": 0, "kind": REFUSAL, "reason": refusal(c)}
+            entries.append(entry)
+        if not eligible:
+            continue
+        # the group's device time: what its eligible members add together, each counting what the one before added
+        adds, seen, has_baseline = [], set(counted), baseline
+        for c in eligible:
+            adds.append(_added(c, seen, has_baseline, s))
+            seen |= _alternatives(c)
+            has_baseline = True
+        cost = sum(adds)
+        marked = group_mark(eligible)
+        statuses = sorted({c["concern_status"] or "not stated" for c in eligible})
+        undecided = f"reasoning does not decide it (concern (v) {', '.join(statuses)})"
+        together = f"with its group {gid} ({len(eligible)} candidate{'s' if len(eligible) > 1 else ''})"
+        if marked and marked[0] in UNBUDGETED:
+            kind, reason = CHOICE, f"{REASONS[marked[0]]}; {undecided}; {together}"
         elif marked and spent + cost <= s["budget_seconds"]:
-            entry.update(kind=CHOICE, reason=f"{REASONS[marked[0]]} (rank {marked[1]}); {undecided}; within the budget")
-        elif spent + cost <= s["budget_seconds"]:
-            entry.update(kind=CHOICE, reason=f"{undecided}; within the budget")
-        elif not s["budget_seconds"]:
-            entry.update(kind=REFUSAL, reason=f"{undecided}; experiments are off (budget 0)")
-        else:
-            entry.update(
-                kind=REFUSAL, reason=f"{undecided}; over the budget ({spent + cost} of {s['budget_seconds']} s)"
+            kind, reason = (
+                CHOICE,
+                f"{REASONS[marked[0]]} (rank {marked[1]}); {undecided}; {together}; within the budget",
             )
-        if entry["kind"] == CHOICE:
+        elif spent + cost <= s["budget_seconds"]:
+            kind, reason = CHOICE, f"{undecided}; {together}; within the budget"
+        elif not s["budget_seconds"]:
+            kind, reason = REFUSAL, f"{undecided}; {together}; experiments are off (budget 0)"
+        else:
+            kind, reason = (
+                REFUSAL,
+                f"{undecided}; {together}; over the budget ({spent + cost} of {s['budget_seconds']} s)",
+            )
+        for c, add in zip(eligible, adds, strict=True):
+            entries.append({"id": _entry_id(c), **c, "group": gid, "cost_seconds": add, "kind": kind, "reason": reason})
+        if kind == CHOICE:
             spent += cost
-        entries.append(entry)
+            counted |= seen
+            baseline = True
     created = (now or datetime.now(UTC)).isoformat(timespec="seconds")
     selection = {
         "created": created,
@@ -252,7 +396,12 @@ def select(
     }
     if path.is_file():
         old = json.loads(path.read_text(encoding="utf-8"))
-        path.rename(path.with_name(f"selection-{old['created'].replace(':', '')}.json"))
+        archived = path.with_name(f"selection-{old['created'].replace(':', '')}.json")
+        n = 1
+        while archived.exists():  # two selections fixed within one second keep both
+            n += 1
+            archived = path.with_name(f"selection-{old['created'].replace(':', '')}-{n}.json")
+        path.rename(archived)
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(selection, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     return selection

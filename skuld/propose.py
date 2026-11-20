@@ -19,7 +19,8 @@ proposals/e<episode>/a<attempt>/
 proposals/summary.json   per episode: the case written, or why none was
 ```
 
-and asked again only when one of these changes. A new family is added to the catalogue; the search space is derived
+and asked again only when the prompt, the model or its options change (the prompt holds the episode and the families
+offered; a new generator version or a change to the catalogue that the prompt does not show asks nothing again). A new family is added to the catalogue; the search space is derived
 by rules (`skuld.space`); the inputs are fixed with the generator, the model and the family as their author.
 """
 
@@ -383,8 +384,11 @@ def _slot_problems(kind: str, values: list[str], flow: Flow) -> list[str]:
             elif v in entry:
                 out.append(f"{v!r} is the flow's first screen")
     elif kind == "activity":
-        if not any(s.activity.endswith(v) for v in values for s in flow.screens):
-            out.append(f"{values} is not the activity of a screen of the flow")
+        if len(values) != 1:
+            out.append("an activity slot takes one activity")
+        for v in values:  # each, since the first is the one bound
+            if not any(s.activity.endswith(v) for s in flow.screens):
+                out.append(f"{v!r} is not the activity of a screen of the flow")
     return out
 
 
@@ -650,6 +654,8 @@ def _feature_case(
                     "kind": "model",
                     "name": model,
                     "prompt": f"skuld.propose {VERSION}",
+                    # a new family's author: the digest of the prompt as asked, for this episode (a case's
+                    # author, _author, names the template's instead)
                     "sha256": prompt_record["prompt"]["sha256"],
                 },
             )
@@ -774,7 +780,7 @@ def _author(generator: dict, model: dict | None, family: cat.Family, answer: str
     """
     if model:
         author = {"kind": "model", "name": model["name"], "prompt": f"skuld.propose {VERSION}"}
-        author["sha256"] = generator["prompt_sha256"]
+        author["sha256"] = generator["prompt_sha256"]  # the template's digest, alike for every case it made
     else:
         author = {k: v for k, v in (family.data.get("author") or {"kind": "person", "name": "?"}).items()}
     author |= {

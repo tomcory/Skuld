@@ -157,3 +157,53 @@ def test_granularity_is_ordered_by_precision_not_only_by_the_tree():
     assert coarser("location.city", "location.coordinates", v)  # below approximate, so coarser as well
     assert not coarser("location.coordinates", "location.approximate-location", v)
     assert not coarser("location.precise-location", "location.approximate-location", v)
+
+
+def test_the_first_screen_is_the_first_after_the_permission_dialogs():
+    """API 34 asks for notifications before the app's first screen (pedometer, 12 Nov): the dialog is not the app's
+    first screen, and an app that starts on another app's screen still fails."""
+    from types import SimpleNamespace
+
+    from skuld.oracles import _first_screen
+
+    dialog = "com.android.permissioncontroller.permission.ui.GrantPermissionsActivity"
+    run = SimpleNamespace(
+        package="p",
+        events=[
+            {"type": "screen", "package": "android", "activity": dialog},
+            {"type": "screen", "package": "com.google.android.permissioncontroller", "activity": dialog},
+            {"type": "screen", "package": "p", "activity": "p.ProfileActivity"},
+        ],
+    )
+    assert _first_screen(run, activity_suffix="ProfileActivity")
+    assert not _first_screen(run, activity_suffix="Welcome")
+    # CamScanner's cold start: the starting window, reported as the package android
+    run.events.insert(0, {"type": "screen", "package": "android", "activity": "p.MainActivity", "texts": []})
+    assert _first_screen(run, activity_suffix="ProfileActivity")
+    run.events.insert(0, {"type": "screen", "package": "launcher", "activity": "l.Home"})
+    assert not _first_screen(run, activity_suffix="ProfileActivity")
+
+
+def test_a_first_screen_ready_for_input_is_any_screen_of_the_app_with_something_to_act_on(tmp_path):
+    """launch@2 (12 Nov): Adobe's tour or its data notice, pedometer's ad or its profile, all count; the launcher or a
+    screen with nothing to act on does not. Merged screens take their target's actions."""
+    import json
+    from types import SimpleNamespace
+
+    from skuld.oracles import _first_screen_ready
+
+    graph = {
+        "screens": {"s1": {"actions": {"a": {}}}, "s2": {"actions": {}}, "s3": {"actions": {"a": {}, "b": {}}}},
+        "merged_into": {"s4": "s3"},
+    }
+    (tmp_path / "graph.json").write_text(json.dumps(graph))
+
+    def run(*screens):
+        events = [{"type": "screen", "package": pkg, "activity": f"{pkg}.A", "screen_id": sid} for pkg, sid in screens]
+        return SimpleNamespace(package="p", directory=tmp_path, events=events)
+
+    assert _first_screen_ready(run(("p", "s1")))
+    assert _first_screen_ready(run(("android", "s9"), ("p", "s4")))  # past the starting window, a merged screen
+    assert not _first_screen_ready(run(("p", "s2"), ("p", "s1")))  # nothing to act on first
+    assert not _first_screen_ready(run(("launcher", "s1"), ("p", "s1")))
+    assert not _first_screen_ready(run())

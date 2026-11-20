@@ -1,5 +1,5 @@
 """
-E's concerns (E def:concern), by four rules:
+E's concerns (E def:concern), by five rules:
 
     (i)   information not given, for the collection and a transparency requirement (rule tier): supported if its
           status is missing, citing what decides that it applies and D's silence on its label; supported under an
@@ -7,10 +7,17 @@ E's concerns (E def:concern), by four rules:
           channel of D is exhaustive for a transparency requirement (ratatoskr.channels), so U_s is moderate
     (ii)  not specific, for a declared purpose (reasoning tier): stated where a sample judges it not specific;
           supported if the samples' combined judgement is
-    (iii) no specified purpose covers it, for a practice and a supported inferred purpose: stated where no purpose
+    (iii) declaration contradicted, for a declaration O contradicts (rule tier; author, 14 Nov 2026): supported where
+          correspondence relates an observed practice to it as `contradicts` (a denial of what O observed); one
+          concern per declaration, citing the declaration's text and the O claims; under an open condition if every
+          contradiction is conditional (e.g., the denial is limited to some jurisdictions, or the recipient might be
+          a service provider), the condition being that one of them holds. Transparency (WP260 rev.01 para. 10: the
+          data subject cannot determine the scope of the processing in advance), secondarily fairness (EDPB
+          Guidelines 4/2019 para. 70)
+    (iv)  no specified purpose covers it, for a practice and a supported inferred purpose: stated where no purpose
           specified for the practice's data covers the inferred one; supported by rule if none is specified for its
           data, else by the reasoning tier if the combined judgement is that it is compatible with none of them
-    (iv)  a less invasive alternative, for a practice and a supported inferred purpose (reasoning tier): supported if a
+    (v)   a less invasive alternative, for a practice and a supported inferred purpose (reasoning tier): supported if a
           combined Alternative claim on one of its components is supported, technically supported by documents or
           demonstrated by an experiment for a case purpose ≈ it; not assessable if every premise is
 
@@ -34,7 +41,7 @@ from skuld.assessment import exhaustive
 from skuld.transparency import INCOMPLETE, MISSING, MISSING_IF, NOT_APPLICABLE, UNREAD, Status
 from skuld.uncertainty import highest
 
-VERSION = "9"
+VERSION = "12"  # 12: (iv) undecided where D specifies purposes for data it could not place (Urda 2.1.0); 11: concern (i) cites every item that decides it applies; 10: rule (iii), declaration contradicted
 COMPONENT = {"role": "method", "id": "skuld.concerns", "version": VERSION}
 
 #: Of a rule-tier concern of information not given: as certain as D's annotations and O's claims it reads
@@ -188,7 +195,7 @@ def not_specific(frame: Frame, statements, judgements: list[dict], items, applic
 def purpose_limitation(
     frame: Frame, cases, judgements: list[dict], items, applicability: dict, declared: dict[str, dict] | None = None
 ):
-    """Concerns (iii) and coverage per practice and supported inferred purpose (judge.Limitation), from the
+    """Concerns (iv) and coverage per practice and supported inferred purpose (judge.Limitation), from the
     compatibility samples' judgements. Both steps rest on D's classification of the specified purposes and their data,
     so a concern takes the semantic uncertainty `declared` gives each of them (D's, read leniently); one that rests on
     there being no specified purpose for the data reads the silence of channels exhaustive for no purpose, so U_s is at
@@ -218,17 +225,20 @@ def purpose_limitation(
             "purpose": h["id"],
             "silence": [f"D: no purpose specified for the practice's data covers {node}"],
         }
+        unplaced = getattr(case, "unplaced", None) or []
         if not case.relevant:
+            # purposes D specifies for data it could not place could be the practice's: then it is undecided
             concerns.append(
                 _concern(
                     frame,
                     r.id,
                     **common,
                     tier="rule",
-                    status="supported",
+                    status="not_established" if unplaced else "supported",
                     uncertainty={**BY_RULE, "s": highest(h["uncertainty"]["s"], "moderate")},
                     observability="E2",
-                    reason=f"no purpose is specified for {node}'s data",
+                    reason=f"no purpose is specified for {node}'s data"
+                    + (f"; {_unplaced(unplaced)}" if unplaced else ""),
                 )
             )
             continue
@@ -248,6 +258,10 @@ def purpose_limitation(
                 reasons.append(f"{s.node}: " + ", ".join(sorted({j["judgement"] for j in pair})))
         incompatible = statuses.count("supported")
         status = "supported" if incompatible == len(case.relevant) else "not_established"
+        covering_unplaced = getattr(case, "unplaced_covering", None) or []
+        if covering_unplaced:  # a purpose D specifies for data it could not place covers it: undecided
+            status = "not_established"
+            reasons.append(_unplaced(covering_unplaced))
         concerns.append(
             _concern(
                 frame,
@@ -271,6 +285,12 @@ def purpose_limitation(
     return concerns, covered
 
 
+def _unplaced(specified) -> str:
+    """Why purposes specified for data D could not place leave concern (iv) undecided."""
+    nodes = ", ".join(sorted({s.node for s in specified}))
+    return f"D specifies {nodes} for data it could not place, which could be the practice's"
+
+
 def less_invasive_alternative(
     frame: Frame,
     hypotheses: list[dict],
@@ -279,7 +299,7 @@ def less_invasive_alternative(
     applicability: dict,
     experimental: list[dict] = (),
 ):
-    """Concerns (iv) and coverage per practice and supported inferred purpose, from the assessment stage's combined
+    """Concerns (v) and coverage per practice and supported inferred purpose, from the assessment stage's combined
     Alternative claims and the experiments' (`combine.experimental`) whose basis names the purpose; `judged` names
     the practices whose minimisation samples are kept."""
     r = frame.requirement("data_minimised")
@@ -347,6 +367,66 @@ def less_invasive_alternative(
                 channels=sorted({ch for c in mine for ch in c["channels"]}),
                 purpose=h["id"],
                 supporting=sorted({x for c in decisive for x in c["supporting"]}),
+            )
+        )
+    return concerns, covered
+
+
+def declaration_contradicted(
+    frame: Frame,
+    contradictions: list,
+    declaration_of: dict[str, str],
+    items_of,
+    applicability: dict,
+    text_of: dict[str, str] | None = None,
+):
+    """
+    Concerns (iii) and coverage, one per declaration that an O-D relation `contradicts` (correspondence.Relation).
+
+    Args:
+        contradictions: the O-D relations whose outcome is contradicts
+        declaration_of: per D claim pointer (`<channel>:/<path>`), the declaration subject's id
+        items_of: (declaration id, its relations) -> the evidence items the concern cites
+        text_of: per declaration id, its text in the document, for the reason
+    A frame without the requirement (gdpr-art5 before 1.1.0) states none: an assessment made with it is read again
+    as it was made.
+    """
+    if "declaration_corresponds" not in frame.requirements:
+        return [], []
+    r = frame.requirement("declaration_corresponds")
+    text_of = text_of or {}
+    by_declaration: dict[str, list] = {}
+    for rel in contradictions:
+        for d in sorted({declaration_of[t["claim"]] for t in rel.to if t["claim"] in declaration_of}):
+            by_declaration.setdefault(d, []).append(rel)
+    concerns, covered = [], []
+    if not _applies(applicability, r.id):
+        return concerns, [Covered(r.id, d, "rule", False) for d in sorted(by_declaration)]
+    for d, rels in sorted(by_declaration.items()):
+        covered.append(Covered(r.id, d, "rule"))
+        unconditional = any(not rel.condition for rel in rels)
+        open_ = sorted({rel.condition for rel in rels if rel.condition})
+        condition = _condition(applicability, r.id) + ([] if unconditional else [" or ".join(open_)])
+        practices = sorted({rel.subject for rel in rels if rel.subject})
+        said = text_of.get(d)
+        reason = (f'"{said}": ' if said else "") + (
+            f"contradicted by {len(practices)} observed practice{'s' if len(practices) != 1 else ''}"
+            + ("" if unconditional else ", each under an open condition")
+        )
+        levels = [(rel.uncertainty or {}).get("s", "moderate") for rel in rels]
+        concerns.append(
+            _concern(
+                frame,
+                r.id,
+                subject=d,
+                step="declaration_contradicted",
+                tier="rule",
+                status="supported",
+                uncertainty={"t": "not_applicable", "s": highest(*levels), "n": "moderate" if condition else "low"},
+                observability="E1",
+                condition=condition,
+                supporting=items_of(d, rels),
+                reason=reason,
             )
         )
     return concerns, covered

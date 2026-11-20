@@ -40,9 +40,28 @@ def test_closed_sim_ids_are_skipped_unless_hooked():
     v = Verification(status="verified")
     run = _sdk33_run(sim_id="not_exercised")
     _substitution(v, run, report, "device-or-other-ids.advertising-id", {"sim_id": "pass"}, {})
-    assert {"node": "device-or-other-ids.sim-ids", "holds": True, "note": "0 read(s), at most 0 in a baseline run"} in (
-        v.substitution
-    )
+    assert {
+        "node": "device-or-other-ids.sim-ids",
+        "holds": True,
+        "note": "0 read(s), at most 0 in a baseline run, tolerance 0 (the baselines' range)",
+    } in v.substitution
+
+
+def test_substitution_allows_the_baselines_range(monkeypatch):
+    import skuld.verify as verify
+
+    found = [{"id": f"r{i}", "kinds": ["rt"]} for i in range(177)]
+    monkeypatch.setattr(verify, "source_reads", lambda report, source: found if source == "android_id" else [])
+    monkeypatch.setattr(verify, "hook_status", lambda report, source: "verified")
+
+    def android_id_holds(baseline):
+        v = Verification(status="verified")
+        node = "device-or-other-ids.advertising-id"
+        _substitution(v, _sdk33_run(), {"evidence": []}, node, {"android_id": "pass"}, {"android_id": baseline})
+        return [s["holds"] for s in v.substitution if s["node"] == "device-or-other-ids.android-id"]
+
+    assert android_id_holds([170, 176, 160]) == [True]  # 177 <= 176 + 16
+    assert android_id_holds([176, 176]) == [False]  # identical baselines: no tolerance
 
 
 def test_a_removed_recipient_needs_closed_sources(tmp_path):
@@ -87,3 +106,17 @@ def test_os_claims_are_read_once_each_a_combined_claim_for_those_it_combines():
     assert [c["id"] for c in claims(report)] == ["c3", "c4"]
     assert [c["id"] for c in transmissions_to(report, "tracky")] == ["c3", "c4"]
     assert [c["id"] for c in claims({"claims": [matched]})] == ["c1"]  # a report from before channel claims
+
+
+def test_recorded_sinks_do_not_keep_a_run_from_being_a_baseline(monkeypatch):
+    """The study's base configuration records storage and crypto in every condition (12 Nov 2026: every baseline was
+    excluded for 'sources changed: storage=record, crypto=record')."""
+    from skuld import verify
+
+    monkeypatch.setattr(verify, "blocked_hosts", lambda report: [])
+    monkeypatch.setattr(verify, "instrumented", lambda report: None)
+    monkeypatch.setattr(verify, "settings", lambda report: report)
+    assert verify.baseline_problem({"storage": "record", "crypto": "record", "advertising_id": "pass"}) is None
+    assert verify.baseline_problem({"storage": "record", "advertising_id": "replace:0"}) == (
+        "sources changed: advertising_id=replace:0"
+    )
