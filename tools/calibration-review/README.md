@@ -35,7 +35,15 @@ For declared purposes E holds not specific, the verdict is the phrases' (author,
 when the unit is saved (S): agree if every phrase judged is not specific, disagree if none is, partly if some are,
 unsure if every phrase is unsure; it refuses a verdict sent for such a unit. Partly counts as not agreeing.
 
-Some units are **shown blind first** (subject, question and documents only): the reviewer decides fails, holds or
+Units of **declared purposes** are judged blind first, phrase by phrase: the server serves only the unit's id,
+requirement, question and phrases until every phrase is judged specific, not specific or unsure (N: all not specific; S:
+save), and refuses any other part before then (409); the blind judgments go to `reviews.json` as `blind_phrases`, are
+never changed or removed, and the non-blind phrases then start from them, with E's output shown and "your blind
+judgment" under each phrase. `skuld review score` reports the blind phrases' agreement with E beside the non-blind
+agreement on the same phrases and how many judgments changed once E was shown; `agree` gives their κ. Samples drawn
+before 20 Nov 2026 carry no phrases and are reviewed as before.
+
+Some other units are **shown blind first** (subject, question and documents only): the reviewer decides fails, holds or
 unsure (F H U) before E's output is revealed; the server withholds the output until then, and a blind decision is never
 changed or removed. Once every unit of an application is judged, the **recall pass** (R) lists its practices and
 declared purposes for noting what E should have raised and did not; it is saved in `recall.json`. `key.json`, which
@@ -71,13 +79,24 @@ and reports, without refusing, unknown item ids and `reviewed` times that are ma
 `score` weights each stratum by its population over the units judged in it and gives the unweighted rate beside each
 estimate; `agree` reports Cohen's κ, also without the unsure verdicts (`overall_without_unsure`).
 
+The units are not shuffled but **interleaved by stratum** (`review.interleave`): each next place goes to the stratum
+furthest behind its share of the drawn units, ties broken at random, each stratum's units in random order, so every
+prefix of the order covers the strata in proportion (within one unit) and a partial return is itself a smaller
+stratified sample, while the order says nothing usable of a unit's run. For a partial return `score` and `expect-score`
+list per stratum the units drawn, reviewed and judged and the strata not reached: a stratum with no judged unit drops
+out of the weighted rates, which then stand for the strata reached (`population_covered`).
+
+The Windows launchers are generated and checked by a test on macOS (CRLF, ASCII, quoted paths, no Unix syntax, the
+files they name present in an exported package); they have not been run on Windows. A sample folder's name must be
+letters, digits, `-` or `_`.
+
 ## Review of the expectation stage's predictions
 
 A sample of what E's first stage predicted per practice (`Skuld/skuld/review_expectation.py`; author, 12 Nov 2026),
 reviewed before the aggregated concerns, whose units show the later reasoning:
 
 ```bash
-skuld review expect-draw reviews/<id> <workspaces of every run>…        # --per-stratum (default 8; the study: 12), --seed
+skuld review expect-draw reviews/<id> <workspaces of every run>…        # --per-stratum (default 8; the study: 12), --per-app, --seed
 cp -r reviews/<id> reviews/<id>-a; cp -r reviews/<id> reviews/<id>-b    # one copy per reviewer
 npm start -- ../../reviews/<id>-a                                       # http://localhost:3001
 skuld review expect-agree reviews/<id> reviews/<id>-a/reviews.json reviews/<id>-b/reviews.json
@@ -91,7 +110,11 @@ never sees them, and the predictions are judged against what it saw. Per purpose
 node), beneficiary, role, and for a supported purpose whether its citations show the outcome; per dependency the stage
 stated: the relationship and the steps; per practice, the purposes missed (functional ones ticked) and a note. **Done**
 (Enter) is accepted only once every question is answered; **Save** (S) keeps a unit half-done. The units are drawn per
-run × role × status and never name the run.
+run × role × status and never name the run. With `--per-app N` the draw takes about N units of an application per run
+at most (in the study two applications had 18 and 15 of 66): the cap is shared over the run's strata by their sizes,
+an application over its share is passed over within a stratum, and its units fill the stratum only where other
+applications cannot, so stratum sizes and weights are unchanged; within a stratum the rate then leans towards the
+average over applications. The manifest records each application's units and those drawn.
 
 Each dependency is shown as a *need*: whether the data or the recipient (its component) is essential, quality-dependent
 or not needed for the purpose. The parts a reasoning step cites are chips (traffic, screen, passage) that show their

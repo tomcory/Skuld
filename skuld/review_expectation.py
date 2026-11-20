@@ -28,7 +28,12 @@ Per practice: the purposes E missed (a note each; a functional one marked so), a
 
 Units are drawn per run, stratified by run, role (functional if any of the practice's purposes is) and status
 (supported if any is), up to `per_stratum` per stratum, independently of the review of concerns, practices without a
-concern included, and shuffled; the sample never names the run, which only key.json holds. The review of the stage
+concern included, and interleaved (skuld.review.interleave: every prefix of the review order covers the strata in
+proportion to their drawn sizes; until 20 Nov 2026 they were shuffled); the sample never names the run, which only
+key.json holds. With `per_app` (`--per-app`), a draw takes at most about that many units of one application per run,
+shared out over the run's strata in proportion to their sizes, without changing any stratum's size (`capped`; in the
+study, two applications had 18 and 15 of a run's 66 units). `expect-score` reports which strata a partial return
+reached. The review of the stage
 comes before the review of concerns, whose units show the later reasoning and D's declarations.
 
 A unit also shows what the stage was told of the practice: its sentence and, where the stage was shown the traffic
@@ -51,9 +56,14 @@ import skuld
 from skuld import inputs
 from skuld.assess import REPORT
 from skuld.calibrate import decisions, file_sha256, kappa, model_identity, read_json, stage_one, wilson, write_json
-from skuld.review import ReviewError, _given, _uncited, source
+from skuld.review import ReviewError, _given, _uncited, coverage, interleave, source
 
-VERSION = "1"
+#: 2 since the drawn units are interleaved by stratum instead of shuffled (every prefix of the sample covers the strata
+#: in proportion), and a draw may cap the units of one application (`per_app`; the manifest records the applications'
+#: units per run) (20 Nov 2026)
+VERSION = "2"
+#: What a unit's stratum is made of
+STRATUM = ("run", "role", "status")
 KIND = "expectation-review"
 MANIFEST, SAMPLE, KEY, REVIEWS, SCORES, AGREEMENT = (
     "manifest.json",
@@ -84,10 +94,11 @@ ASK = (
 
 
 def settings() -> dict:
-    """config.json's `expectation_review`: practices drawn per stratum, and the seed."""
+    """config.json's `expectation_review`: practices drawn per stratum, the cap per application (none), and the
+    seed."""
     from skuld import config
 
-    return {"per_stratum": 8, "seed": 1, **(config.load().get("expectation_review") or {})}
+    return {"per_stratum": 8, "per_app": None, "seed": 1, **(config.load().get("expectation_review") or {})}
 
 
 def asked(purpose: dict) -> list[str]:
@@ -256,7 +267,38 @@ def units(root: Path, known_data_only: bool = True) -> list[dict]:
 
 
 def _skey(s: dict) -> tuple:
-    return (s["run"], s["role"], s["status"])
+    return tuple(s[k] for k in STRATUM)
+
+
+def capped(strata: dict, sizes: dict, per_app: int, rng: random.Random) -> dict:
+    """
+    Each stratum's units, `sizes[k]` of them, with at most about `per_app` units of one application per run: the cap
+    is shared out over a run's strata in proportion to their sizes, each stratum's share rounded and at least one.
+    Within a stratum, its units are taken in random order, passing over a unit whose application has its share of
+    the stratum already; if that leaves the stratum short of its size, the units passed over fill it, in the same
+    random order (the cap gives way where a stratum has too few other applications). Each stratum keeps its size, so
+    the stratification and its weights are unchanged; within a stratum, a unit of an application with many units in
+    it is less likely to be drawn than one of an application with few, so a stratum's rate leans towards the average
+    over its applications rather than over its units.
+    """
+    total = defaultdict(int)
+    for k, n in sizes.items():
+        total[k[0]] += n
+    out = {}
+    for k in sorted(strata):
+        share = max(1, round(per_app * sizes[k] / total[k[0]])) if total[k[0]] else 1
+        order = rng.sample(strata[k], len(strata[k]))
+        taken, passed, per = [], [], defaultdict(int)
+        for u in order:
+            if len(taken) == sizes[k]:
+                break
+            if per[u["application"]] < share:
+                taken.append(u)
+                per[u["application"]] += 1
+            else:
+                passed.append(u)
+        out[k] = taken + passed[: sizes[k] - len(taken)]
+    return out
 
 
 def draw(
@@ -265,13 +307,18 @@ def draw(
     per_stratum: int | None = None,
     seed: int | None = None,
     prefix: str = "x",
+    per_app: int | None = None,
 ) -> dict:
-    """Draws the review's units from the workspaces' assessments and fixes them in `folder`, which must not exist."""
+    """Draws the review's units from the workspaces' assessments and fixes them in `folder`, which must not exist:
+    `per_stratum` per stratum, and with `per_app`, at most about that many of one application per run (`capped`)."""
     folder = Path(folder)
     if folder.exists():
         raise ReviewError(f"{folder} exists: a drawn sample is fixed, draw a new one into another folder")
     s = settings()
     per_stratum = s["per_stratum"] if per_stratum is None else per_stratum
+    per_app = s["per_app"] if per_app is None else per_app
+    if per_app is not None and per_app < 1:
+        raise ReviewError("per_app must be at least 1")
     seed = s["seed"] if seed is None else seed
 
     every, workspaces_out = [], []
@@ -314,11 +361,15 @@ def draw(
     strata = defaultdict(list)
     for u in every:
         strata[_skey(stratum(u))].append(u)
-    drawn = []
-    for k in sorted(strata):
-        members = strata[k]
-        drawn += members if len(members) <= per_stratum else rng.sample(members, per_stratum)
-    rng.shuffle(drawn)
+    if per_app:
+        chosen = capped(strata, {k: min(len(v), per_stratum) for k, v in strata.items()}, per_app, rng)
+    else:
+        chosen = {
+            k: strata[k] if len(strata[k]) <= per_stratum else rng.sample(strata[k], per_stratum)
+            for k in sorted(strata)
+        }
+    # every prefix covers the strata in proportion, so that a partial return is a smaller stratified sample
+    drawn = interleave([chosen[k] for k in sorted(chosen)], rng)
 
     folder.mkdir(parents=True)
     items, key = [], {}
@@ -351,6 +402,7 @@ def draw(
         "method": {"id": "skuld.review_expectation", "version": VERSION},
         "seed": seed,
         "per_stratum": per_stratum,
+        **({"per_app": per_app} if per_app else {}),
         "runs": runs,
         "run_models": {
             run: next((w["models"] for w in workspaces_out if w["run"] == run and w["models"]), []) for run in runs
@@ -363,6 +415,16 @@ def draw(
                 "drawn": sum(1 for u in drawn if _skey(stratum(u)) == k),
             }
             for k in sorted(strata)
+        ],
+        # per run and application, its units and those drawn: what the cap (per_app) did
+        "applications": [
+            {
+                "run": run,
+                "application": app,
+                "population": sum(1 for u in every if (u["_run"], u["application"]) == (run, app)),
+                "drawn": sum(1 for u in drawn if (u["_run"], u["application"]) == (run, app)),
+            }
+            for run, app in sorted({(u["_run"], u["application"]) for u in every})
         ],
         "files": {SAMPLE: file_sha256(folder / SAMPLE), KEY: file_sha256(folder / KEY)},
     }
@@ -444,6 +506,18 @@ def _judgments(item: dict, review: dict):
                         yield "dependency", d, q, b[q], role
 
 
+def _asks(item: dict):
+    """(level, question, role) of every question a unit asks, answered or not."""
+    for p in item["purposes"]:
+        role = p.get("role") or "?"
+        for q in asked(p):
+            yield "purpose", q, role
+        for d in p["dependencies"]:
+            if d["asked"]:
+                for q in DEPENDENCY_QUESTIONS:
+                    yield "dependency", q, role
+
+
 def _agrees(level: str, question: str, answer: str) -> bool:
     values = (PURPOSE_QUESTIONS if level == "purpose" else DEPENDENCY_QUESTIONS)[question]
     return answer == values[0]
@@ -459,7 +533,9 @@ def score(folder: str | Path) -> dict:
     """
     Agreement with the stage's predictions from one reviewer's judgments, per question: per run and role, unweighted
     with a Wilson interval and weighted by the strata's populations; `partly` counts as not agreeing and `unsure` is
-    left out. The node's answers and the purposes noted as missed are reported as they were given.
+    left out. The node's answers and the purposes noted as missed are reported as they were given. For a partial
+    return, `strata` gives per stratum the units drawn, reviewed (done) and judged, and `coverage` the strata it did
+    not reach, which the weighted rates do not represent.
     """
     folder = Path(folder)
     manifest = read_json(folder / MANIFEST)
@@ -474,7 +550,7 @@ def score(folder: str | Path) -> dict:
     # per stratum k and n, combined as the strata's populations weight their rates: a stratum with unsure answers or
     # units not yet done counts for its whole population
     totals = defaultdict(lambda: {"k": 0, "n": 0, "by": defaultdict(lambda: [0, 0]), "answers": defaultdict(int)})
-    missed, done = [], 0
+    missed, done, done_in, judged_in = [], 0, defaultdict(int), defaultdict(int)
     for iid, entry in key.items():
         r = reviews.get(iid) or {}
         if not r.get("done"):
@@ -482,6 +558,9 @@ def score(folder: str | Path) -> dict:
         done += 1
         s = entry["stratum"]
         sk = _skey(s)
+        # a unit done is reviewed; it is judged where at least one of its answers is not unsure
+        done_in[sk] += 1
+        judged_in[sk] += any(a != "unsure" for *_, a, _ in _judgments(items[iid], r))
         for level, _, q, answer, role in _judgments(items[iid], r):
             for scope in ((s["run"], level, q, role), (s["run"], level, q, "all")):
                 t = totals[scope]
@@ -495,6 +574,14 @@ def score(folder: str | Path) -> dict:
                 t["by"][sk][1] += 1
         for m in r.get("missed") or []:
             missed.append({"run": s["run"], "practice": entry["practice"], **m})
+    # per estimate, the strata whose drawn units ask its question: the population a weighted rate could stand for
+    asking = defaultdict(set)
+    for iid, entry in key.items():
+        sk = _skey(entry["stratum"])
+        for level, q, role in _asks(items[iid]):
+            asking[(sk[0], level, q, role)].add(sk)
+            asking[(sk[0], level, q, "all")].add(sk)
+    strata = [{**s, "reviewed": done_in[_skey(s)], "judged": judged_in[_skey(s)]} for s in manifest["strata"]]
     out = {
         "review": manifest["id"],
         "scored": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -511,10 +598,19 @@ def score(folder: str | Path) -> dict:
                 "rate": round(t["k"] / t["n"], 3) if t["n"] else None,
                 "interval": [round(x, 3) for x in wilson(t["k"], t["n"])] if t["n"] else None,
                 "weighted_rate": _weighted(t["by"], population),
+                # of the population of the strata whose units ask the question, the share in strata with an answer
+                # judged: what the weighted rate stands for
+                "population_covered": round(
+                    sum(population[sk] for sk, (_, n) in t["by"].items() if n)
+                    / sum(population[sk] for sk in asking[(run, level, q, role)]),
+                    3,
+                ),
                 "answers": dict(t["answers"]),
             }
             for (run, level, q, role), t in sorted(totals.items())
         ],
+        "strata": strata,
+        "coverage": coverage(strata, STRATUM, len(key), done),
         "missed": missed,
         "missed_functional": sum(1 for m in missed if m.get("functional")),
     }

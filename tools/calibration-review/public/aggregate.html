@@ -89,6 +89,10 @@
                     <li><b>Incomplete documents</b>: where a document is visibly incomplete (e.g. a policy captured only as its
                         headings) and the concern rests on what it does not say, answer <i>unsure</i>.</li>
                 </ul></li>
+            <li>Units of declared purposes show their <b>phrases blind first</b>: judge each phrase specific, not specific or
+                unsure (<kbd>N</kbd>: all not specific) and save (<kbd>S</kbd>) before E's output is revealed; these blind
+                judgments cannot be changed afterwards. With E's output shown, the phrases start from your blind judgments:
+                change any that you now judge differently.</li>
             <li>Some units are shown <b>blind first</b>: subject and question only. Decide <b>Fails</b> (<kbd>F</kbd>),
                 <b>Holds</b> (<kbd>H</kbd>) or <b>Unsure</b> (<kbd>U</kbd>) before E's output is revealed; the blind decision
                 cannot be changed afterwards.</li>
@@ -155,6 +159,7 @@
                         <span class="text-secondary small">unit {{ item.index + 1 }} of {{ item.total }} · {{ item.id }} · {{ item.application }}</span>
                         <span>
                             <span v-if="item.blind_first" class="badge text-bg-info me-1">blind first</span>
+                            <span v-if="item.blind_phrases_now || (item.review && item.review.blind_phrases)" class="badge text-bg-info me-1">phrases blind first</span>
                             <span v-if="item.review && item.review.overall" class="badge" :class="overallClass(item.review.overall)">{{ item.review.overall }}</span>
                         </span>
                     </div>
@@ -179,6 +184,38 @@
                                 <button class="btn btn-danger" @click="saveBlind('fails')">Fails <kbd>F</kbd></button>
                                 <button class="btn btn-success" @click="saveBlind('holds')">Holds <kbd>H</kbd></button>
                                 <button class="btn btn-outline-secondary" @click="saveBlind('unsure')">Unsure <kbd>U</kbd></button>
+                            </div>
+                            <div class="d-flex gap-2 mt-2">
+                                <button class="btn btn-sm btn-outline-dark" @click="go(item.index - 1)" :disabled="item.index === 0"><i class="bi bi-arrow-left"></i></button>
+                                <button class="btn btn-sm btn-outline-dark" @click="go(item.index + 1)" :disabled="item.index + 1 >= item.total"><i class="bi bi-arrow-right"></i></button>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- declared purposes: each phrase judged blind first -->
+                    <template v-else-if="item.blind_phrases_now">
+                        <div class="alert alert-info small mt-3 mb-2">Judge each phrase from the phrase and the documents, before E's
+                            output is revealed: is it a specific purpose?</div>
+                        <div class="d-flex justify-content-end">
+                            <button class="btn btn-sm btn-outline-secondary" @click="allNotSpecific()">all not specific <kbd>N</kbd></button>
+                        </div>
+                        <div class="members mt-1">
+                            <div v-for="m in item.members" class="member small" :key="m.concern">
+                                <div class="d-flex gap-2 align-items-start">
+                                    <span class="statement flex-grow-1" @click="query = m.statement" role="button" title="search the documents for it">“{{ m.statement }}”</span>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn" :class="blindPhrases[m.concern] === 'specific' ? 'btn-success' : 'btn-outline-success'" @click="setBlindPhrase(m.concern, 'specific')">specific</button>
+                                        <button class="btn" :class="blindPhrases[m.concern] === 'not_specific' ? 'btn-danger' : 'btn-outline-danger'" @click="setBlindPhrase(m.concern, 'not_specific')">not specific</button>
+                                        <button class="btn" :class="blindPhrases[m.concern] === 'unsure' ? 'btn-secondary' : 'btn-outline-secondary'" @click="setBlindPhrase(m.concern, 'unsure')">unsure</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="decide">
+                            <textarea class="form-control form-control-sm" rows="2" placeholder="Note on the blind judgments (optional)" v-model="blindNote" @keydown.stop></textarea>
+                            <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
+                                <button class="btn btn-primary" :disabled="!blindPhrasesReady" @click="saveBlindPhrases()"><i class="bi bi-check-lg"></i> Save, show E's output <kbd>S</kbd></button>
+                                <span v-if="!blindPhrasesReady" class="small text-secondary">To save, judge each phrase.</span>
                             </div>
                             <div class="d-flex gap-2 mt-2">
                                 <button class="btn btn-sm btn-outline-dark" @click="go(item.index - 1)" :disabled="item.index === 0"><i class="bi bi-arrow-left"></i></button>
@@ -217,6 +254,7 @@
                                         </div>
                                     </div>
                                     <div class="text-secondary">{{ m.reason }}</div>
+                                    <div v-if="blindOf(m.concern)" class="text-secondary">your blind judgment: <b>{{ blindOf(m.concern).replace('_', ' ') }}</b></div>
                                 </template>
                                 <template v-else-if="item.kind === 'contradicted'">
                                     <span v-if="m.statement" class="statement d-block" @click="query = m.statement" role="button" title="search the documents for it">“{{ m.statement }}”</span>
@@ -367,7 +405,7 @@ const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<':
 const app = createApp({
     provide() { return {openVocab: (kind, id) => this.openVocab(kind, id)}; },
     data: () => ({vocabs: {purpose: [], data: []}, browser: null, progress: null, item: null, help: false, shown: null, document: {}, query: '', titles, EVIDENCE, FOLLOWS,
-                  evidence: null, follows: null, phrases: {}, note: '', blindNote: '', evidenceShown: true,
+                  evidence: null, follows: null, phrases: {}, blindPhrases: {}, note: '', blindNote: '', evidenceShown: true,
                   recall: null, recallOpen: false, recallDue: false}),
     computed: {
         kind() {
@@ -377,7 +415,7 @@ const app = createApp({
         },
         // the criteria come before the overall judgment; for declared purposes, every phrase too
         missing() {
-            if (!this.item || this.item.blind_now) return '';
+            if (!this.item || this.item.blind_now || this.item.blind_phrases_now) return '';
             const left = [];
             if (!this.evidence) left.push('evidence exists');
             if (!this.follows) left.push("E's conclusion follows");
@@ -385,6 +423,7 @@ const app = createApp({
             return left.length ? 'To decide, first answer: ' + left.join(', ') : '';
         },
         ready() { return !this.missing; },
+        blindPhrasesReady() { return !!this.item && this.item.members.every(m => this.blindPhrases[m.concern]); },
         // declared purposes that E holds not specific: the verdict is the phrases' (agree, disagree, partly, unsure)
         derived() { return !!this.item && this.item.kind === 'declared' && this.item.status === 'supported'; },
         derivedVerdict() {
@@ -417,7 +456,9 @@ const app = createApp({
             const r = this.item.review || {};
             this.evidence = r.evidence || null;
             this.follows = r.follows || null;
-            this.phrases = {...(r.phrases || {})};
+            // with E's output shown, the phrases start from the blind judgments until they are saved
+            this.phrases = {...((r.blind_phrases && r.blind_phrases.phrases) || {}), ...(r.phrases || {})};
+            this.blindPhrases = {};
             this.note = r.note || '';
             this.blindNote = '';
             this.query = this.item.kind === 'declared' && this.item.members.length ? (this.item.members[0].statement || '') : '';
@@ -446,9 +487,24 @@ const app = createApp({
         escapeHtml: t => escape(t),
         traffic: t => escape(t).replace(/«([^»]*)»/g, '<mark class="datum">$1</mark>'),
         setPhrase(concern, value) { this.phrases = {...this.phrases, [concern]: value}; },
+        setBlindPhrase(concern, value) { this.blindPhrases = {...this.blindPhrases, [concern]: value}; },
+        blindOf(concern) {
+            const b = this.item && this.item.review && this.item.review.blind_phrases;
+            return b && b.phrases ? b.phrases[concern] : null;
+        },
         allNotSpecific() {
             if (this.item.kind !== 'declared') return;
-            this.phrases = Object.fromEntries(this.item.members.map(m => [m.concern, 'not_specific']));
+            const all = Object.fromEntries(this.item.members.map(m => [m.concern, 'not_specific']));
+            if (this.item.blind_phrases_now) this.blindPhrases = all;
+            else this.phrases = all;
+        },
+        async saveBlindPhrases() {
+            if (!this.blindPhrasesReady) return;
+            this.progress = await this.api(`/reviews/${this.item.id}`, {
+                method: 'PUT', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({blind_phrases: {phrases: this.blindPhrases, note: this.blindNote}}),
+            });
+            await this.go(this.item.index);  // now with E's output
         },
         async saveBlind(decision) {
             this.progress = await this.api(`/reviews/${this.item.id}`, {
@@ -515,6 +571,8 @@ const app = createApp({
             let action;
             if (this.item.blind_now) {
                 action = {f: () => this.saveBlind('fails'), h: () => this.saveBlind('holds'), u: () => this.saveBlind('unsure')}[k];
+            } else if (this.item.blind_phrases_now) {
+                action = {n: () => this.allNotSpecific(), s: () => this.saveBlindPhrases()}[k];
             } else {
                 const evidence = {1: 0, 2: 1, 3: 2, 4: 3}[k];
                 const follows = {q: 0, w: 1, e: 2}[k];

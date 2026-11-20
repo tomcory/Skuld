@@ -207,3 +207,59 @@ def test_weighted_rates_weigh_each_stratum_by_its_population_whatever_was_left_u
     by = {("a",): [10, 10], ("b",): [0, 5]}
     assert rx._weighted(by, {("a",): 100, ("b",): 100}) == 0.5
     assert rx._weighted({("a",): [0, 0]}, {("a",): 100}) is None
+
+
+def application(base: Path, run: str, package: str, practices: int) -> Path:
+    """A workspace of one application in a run, with `practices` ancillary supported practices (one stratum)."""
+    root = workspace(base / package, run, roles=("ancillary",) * practices)
+    report = read(root / "assessment.json")
+    report["application"] = {"package": package, "version": "1"}
+    (root / "assessment.json").write_text(json.dumps(report), encoding="utf-8")
+    return root
+
+
+def drawn_per_app(manifest):
+    return {a["application"]: a["drawn"] for a in manifest["applications"]}
+
+
+def test_a_cap_per_application_keeps_each_stratums_size(tmp_path):
+    """20 Nov 2026: in the study, two applications had 18 and 15 of a run's 66 units."""
+    roots = [application(tmp_path, "run", "big.app", 10), application(tmp_path, "run", "small.app", 3)]
+    plain = rx.draw(tmp_path / "plain", roots, per_stratum=6, seed=1)
+    assert "per_app" not in plain and sum(drawn_per_app(plain).values()) == 6
+    assert {a["application"]: a["population"] for a in plain["applications"]} == {"big.app@1": 10, "small.app@1": 3}
+    capped = rx.draw(tmp_path / "capped", roots, per_stratum=6, seed=1, per_app=3)
+    assert capped["per_app"] == 3 and drawn_per_app(capped) == {"big.app@1": 3, "small.app@1": 3}
+    assert [s["drawn"] for s in capped["strata"]] == [6]
+    # where the other applications cannot fill the stratum, the cap gives way: the stratum keeps its size
+    tight = rx.draw(tmp_path / "tight", roots, per_stratum=6, seed=1, per_app=2)
+    assert drawn_per_app(tight) == {"big.app@1": 4, "small.app@1": 2} and [s["drawn"] for s in tight["strata"]] == [6]
+    with pytest.raises(rx.ReviewError, match="at least 1"):
+        rx.draw(tmp_path / "zero", roots, per_app=0)
+
+
+def test_the_cap_is_shared_out_over_a_runs_strata_in_proportion():
+    strata = {
+        ("r", "a", "s"): [{"application": app, "n": i} for app in ("x", "y", "z") for i in range(10)],
+        ("r", "f", "s"): [{"application": app, "n": i} for app in ("x", "y") for i in range(10)],
+    }
+    out = rx.capped(strata, {("r", "a", "s"): 9, ("r", "f", "s"): 3}, 4, __import__("random").Random(1))
+    # shares: 4·9/12 = 3 in the first, max(1, round(4·3/12)) = 1 in the second, which y and x then fill
+    first = [u["application"] for u in out[("r", "a", "s")]]
+    assert len(first) == 9 and all(first.count(app) == 3 for app in "xyz")
+    assert len(out[("r", "f", "s")]) == 3
+
+
+def test_expect_score_reports_the_strata_a_partial_return_reached(tmp_path, runs):
+    folder = tmp_path / "x"
+    rx.draw(folder, runs, per_stratum=5, seed=2)
+    items = read(folder / rx.SAMPLE)["items"]
+    key = read(folder / rx.KEY)
+    reviews = {i["id"]: full_review(i) for i in items if key[i["id"]]["stratum"]["run"] == "model-x"}
+    (folder / rx.REVIEWS).write_text(json.dumps(reviews), encoding="utf-8")
+    s = rx.score(folder)
+    c = s["coverage"]
+    assert c["partial"] and c["reviewed"] == 2 and c["units"] == 4
+    assert {st["run"] for st in c["not_reviewed"]} == {"model-y"} and len(c["not_reviewed"]) == 2
+    assert {(st["run"], st["reviewed"], st["judged"]) for st in s["strata"]} == {("model-x", 1, 1), ("model-y", 0, 0)}
+    assert all(e["population_covered"] == 1.0 for e in s["estimates"])

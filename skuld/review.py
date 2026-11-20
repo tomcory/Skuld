@@ -7,7 +7,9 @@ A unit is one aggregated concern, shown in full: its label, status, tier and unc
 reasons, the alternatives and purposes E stated, the evidence items its members rest on, and the application's
 documents. Units of several runs of one application (one workspace each, the run named by the workspace's parent
 folder; a run's workspaces must name the same models, reasoning setting included) are drawn together, stratified by run, principle, tier, step and status, and
-shuffled; the sample never names the run, which only key.json holds. By default each run's units are allocated to its strata in
+interleaved (`interleave`: every prefix of the review order covers the strata in proportion to their drawn sizes, so
+that a partial return is a smaller stratified sample; until 20 Nov 2026 they were shuffled); the sample never names the
+run, which only key.json holds. By default each run's units are allocated to its strata in
 proportion to their size, `per_run` in all with at least `floor` per stratum (or all of a smaller one), so that the
 weighted estimate per run keeps nearly the precision of its sample (author, 12 Nov 2026: 70 per run); with
 `per_stratum`, every stratum gets that many instead (equal allocation, which roughly halves the effective sample of a
@@ -25,9 +27,14 @@ The reviewer records, before the overall judgment:
                 (author, 12 Nov 2026): agree if every phrase judged is not specific, disagree if none is, partly if some
                 are (partly counts as not agreeing), unsure if every phrase is unsure
 
-Some units (`--anchor`, drawn among supported units) are shown blind first: subject and question only, with a blind
-decision (fails, holds, unsure) recorded before E's output is revealed; the difference between the blind and the
-non-blind judgments on them estimates the anchoring. After an application's units, the reviewer scans its practices
+Some units (`--anchor`, drawn among supported units other than declared purposes) are shown blind first: subject and
+question only, with a blind decision (fails, holds, unsure) recorded before E's output is revealed; the difference
+between the blind and the non-blind judgments on them estimates the anchoring. Every unit of declared purposes (concern
+(ii), purpose not specific) carries its phrases (`blind_phrases`, since 20 Nov 2026): the reviewer first judges each
+phrase specific, not specific or unsure with E's output hidden (reviews.json: `blind_phrases`, kept apart from the
+non-blind `phrases` and never changed once saved), and then judges the unit with E's output as any other; the score
+gives the blind phrases' agreement with E beside the non-blind one on the same phrases. A sample drawn before carries
+no `blind_phrases`; it loads and scores as before. After an application's units, the reviewer scans its practices
 and declarations for what E should have raised and did not (the recall pass, recall.json): a lower bound on misses.
 
 The sample folder:
@@ -39,7 +46,8 @@ The sample folder:
     documents/      each application's collection, copied from Sága's collection
     reviews.json    the reviewer's judgments per unit (the review tool writes it)
     recall.json     the reviewer's recall pass per application
-    scores.json     agreement per unit and per member, per stratum, run, principle and step (`skuld review score`)
+    scores.json     agreement per unit and per member, per stratum, run, principle and step; which strata a partial
+                    return reached (`skuld review score`)
     agreement.json  two reviewers' κ per criterion and principle, and their disagreements (`skuld review agree`)
 """
 
@@ -65,7 +73,10 @@ from skuld.calibrate import (
     write_json,
 )
 
-VERSION = "1"
+#: 2 since the drawn units are interleaved by stratum instead of shuffled (every prefix of the sample covers the strata
+#: in proportion), a unit of declared purposes carries its phrases to be judged blind first (`blind_phrases`) and is no
+#: longer drawn as an anchoring unit (20 Nov 2026)
+VERSION = "2"
 KIND = "aggregate-review"
 MANIFEST, SAMPLE, KEY, REVIEWS, RECALL, SCORES, AGREEMENT = (
     "manifest.json",
@@ -281,6 +292,28 @@ def units(root: Path) -> tuple[list[dict], dict]:
 # -- drawing ----------------------------------------------------------------------------------------------------------
 
 
+def interleave(strata: list[list], rng: random.Random) -> list:
+    """
+    The drawn units of several strata in one review order such that every prefix of it covers the strata in proportion
+    to their drawn sizes: each stratum's units are shuffled, and each next position goes to the stratum furthest behind
+    its share (L·n/N less the units it has in the first L, for a stratum of n units in a sample of N), ties broken at
+    random. A prefix of length L then holds L·n/N units of a stratum of n to within one (in every case the tests try;
+    a stride schedule with random offsets, tried first, drifts by more where there are many strata). The order says
+    nothing usable of a unit's run or stratum: which stratum takes a position depends only on the strata's drawn
+    sizes, which the reviewer is not shown, and on random ties, and which of a stratum's units fills it is random.
+    """
+    queues = [rng.sample(list(members), len(members)) for members in strata if members]
+    total = sum(map(len, queues))
+    taken = [0] * len(queues)
+    out = []
+    for length in range(1, total + 1):
+        open_ = [k for k, q in enumerate(queues) if taken[k] < len(q)]
+        k = max(open_, key=lambda k: (length * len(queues[k]) / total - taken[k], rng.random()))
+        out.append(queues[k][taken[k]])
+        taken[k] += 1
+    return out
+
+
 def _stratum(run: str, u: dict) -> dict:
     return {
         "run": run,
@@ -291,8 +324,12 @@ def _stratum(run: str, u: dict) -> dict:
     }
 
 
+#: What a unit's stratum is made of
+STRATUM = ("run", "principle", "tier", "step", "status")
+
+
 def _skey(s: dict) -> tuple:
-    return tuple(s[k] for k in ("run", "principle", "tier", "step", "status"))
+    return tuple(s[k] for k in STRATUM)
 
 
 def draw(
@@ -364,12 +401,14 @@ def draw(
     for u in every:
         strata[_skey(_stratum(u["_run"], u))].append(u)
     sizes = {k: allocation(strata, k, per_stratum, per_run, floor) for k in strata}
-    drawn = []
+    chosen = []
     for k in sorted(strata):
         members = strata[k]
-        drawn += members if len(members) <= sizes[k] else rng.sample(members, sizes[k])
-    rng.shuffle(drawn)  # the order says nothing of the run or the stratum
-    supported = [u for u in drawn if u["status"] == "supported"]
+        chosen.append(members if len(members) <= sizes[k] else rng.sample(members, sizes[k]))
+    # every prefix covers the strata in proportion, so that a partial return is a smaller stratified sample
+    drawn = interleave(chosen, rng)
+    # a unit of declared purposes is judged blind phrase by phrase (blind_phrases), not by an anchoring decision
+    supported = [u for u in drawn if u["status"] == "supported" and u["kind"] != "declared"]
     anchored = {id(u) for u in rng.sample(supported, min(anchor, len(supported)))}
 
     folder.mkdir(parents=True)
@@ -397,6 +436,8 @@ def draw(
         item["ask"] = ASK
         if id(u) in anchored:
             item["blind_first"] = True
+        if u["kind"] == "declared":
+            item["blind_phrases"] = [{"concern": m["concern"], "statement": m.get("statement")} for m in u["members"]]
         items.append(item)
     from skuld.review_expectation import vocabularies  # the tool shows a unit's data types and purposes in them
 
@@ -474,9 +515,102 @@ def _rate(k, n):
     return {"rate": round(k / n, 3) if n else None, "interval": [round(x, 3) for x in wilson(k, n)] if n else None}
 
 
+#: What a partial return's scores stand for, said in scores.json beside the strata it reached
+COVERAGE_NOTE = (
+    "Each stratum is weighted by its population over the units judged in it. A stratum with no unit judged has no rate "
+    "and drops out of the weighted rates, which then stand only for the strata reached (population_covered: their "
+    "share of the estimate's population); the strata listed under not_reviewed and without_rate are not represented."
+)
+
+
+def coverage(strata: list[dict], fields: tuple[str, ...], units: int, reviewed: int) -> dict:
+    """Which strata a return reached: those with a unit reviewed, those with a unit judged (counted in the rates), and
+    the strata without either, each named by its `fields`; `strata` are the scores' strata, each with its
+    `population`, `drawn`, `reviewed` and `judged`."""
+    keep = ("population", "drawn")
+    return {
+        "partial": reviewed < units,
+        "units": units,
+        "reviewed": reviewed,
+        "strata": len(strata),
+        "strata_reviewed": sum(1 for s in strata if s["reviewed"]),
+        "strata_judged": sum(1 for s in strata if s["judged"]),
+        "not_reviewed": [{k: s[k] for k in (*fields, *keep)} for s in strata if not s["reviewed"]],
+        "without_rate": [{k: s[k] for k in (*fields, *keep)} for s in strata if s["reviewed"] and not s["judged"]],
+        "note": COVERAGE_NOTE,
+    }
+
+
+def coverage_lines(c: dict) -> list[str]:
+    """A score's coverage (`coverage`) as the command prints it: what was reviewed and, for each stratum not reached
+    or without a rate, its name, units drawn and population, with what the rates then stand for."""
+    out = [
+        f"{c['reviewed']} of {c['units']} units reviewed{' (a partial return)' if c['partial'] else ''}; "
+        f"{c['strata_reviewed']} of {c['strata']} strata reached, {c['strata_judged']} with a unit judged"
+    ]
+    for label, strata in (("not reviewed", c["not_reviewed"]), ("reviewed, none judged", c["without_rate"])):
+        for st in strata:
+            name = " ".join(str(v) for k, v in st.items() if k not in ("population", "drawn"))
+            out.append(f"  {label}: {name} ({st['drawn']} drawn of {st['population']})")
+    if c["not_reviewed"] or c["without_rate"]:
+        out.append(f"  {c['note']}")
+    return out
+
+
+def _blind_phrases(items: dict, key: dict, reviews: dict) -> dict:
+    """
+    The phrases of declared purposes judged blind (before E's output was shown) against E, beside the same phrases
+    judged after: per run and in all, over the units E holds not specific (supported), where a phrase agrees with E if
+    judged not specific; unsure is left out. Unweighted, with Wilson intervals. `changed` counts the phrases judged
+    differently after E's output was shown, `towards_e` those changed to not specific.
+    """
+    out = {"units": 0, "units_judged_blind": 0, "units_not_supported": 0, "runs": {}}
+    totals = defaultdict(lambda: {"bk": 0, "bn": 0, "k": 0, "n": 0, "paired": 0, "changed": 0, "towards_e": 0})
+    for iid, item in items.items():
+        if not item.get("blind_phrases") or iid not in key:
+            continue
+        out["units"] += 1
+        r = reviews.get(iid) or {}
+        blind = (r.get("blind_phrases") or {}).get("phrases") or {}
+        if not blind:
+            continue
+        out["units_judged_blind"] += 1
+        if item["status"] != "supported":
+            out["units_not_supported"] += 1  # E does not hold its phrases not specific: no agreement to count
+            continue
+        after = r.get("phrases") or {}
+        for p in item["blind_phrases"]:
+            b, a = blind.get(p["concern"]), after.get(p["concern"])
+            for scope in (key[iid]["stratum"]["run"], "all"):
+                t = totals[scope]
+                if b in JUDGED_PHRASE:
+                    t["bk"] += b == "not_specific"
+                    t["bn"] += 1
+                if a in JUDGED_PHRASE:
+                    t["k"] += a == "not_specific"
+                    t["n"] += 1
+                if b in JUDGED_PHRASE and a in JUDGED_PHRASE:
+                    t["paired"] += 1
+                    t["changed"] += a != b
+                    t["towards_e"] += a != b and a == "not_specific"
+    for scope, t in sorted(totals.items()):
+        blind_rate, after_rate = _rate(t["bk"], t["bn"]), _rate(t["k"], t["n"])
+        out["runs"][scope] = {
+            "blind": {"phrases": t["bn"], **blind_rate},
+            "non_blind": {"phrases": t["n"], **after_rate},
+            "paired": t["paired"],
+            "changed": t["changed"],
+            "towards_e": t["towards_e"],
+            "difference": round(after_rate["rate"] - blind_rate["rate"], 3) if t["bn"] and t["n"] else None,
+        }
+    return out
+
+
 def score(folder: str | Path) -> dict:
     """Agreement with E's output from one reviewer's judgments: per stratum, and per run, principle and step weighted
-    by the strata's populations; per unit and per member; the criteria; the anchoring units; the recall pass."""
+    by the strata's populations; per unit and per member; the criteria; the anchoring units; the phrases of declared
+    purposes judged blind beside the same judged after; the recall pass; and which strata a partial return reached
+    (per stratum drawn, reviewed and judged)."""
     folder = Path(folder)
     manifest = read_json(folder / MANIFEST)
     for name, sha in manifest["files"].items():
@@ -487,10 +621,12 @@ def score(folder: str | Path) -> dict:
     reviews = decisions(folder / REVIEWS, missing_ok=True)
     # a judged unit stands for its stratum's population over the units judged in it (not over those drawn), so that a
     # stratum with unsure or not yet reviewed units counts for its whole population
-    judged = defaultdict(int)
+    judged, reviewed = defaultdict(int), defaultdict(int)
     for iid, entry in key.items():
         if (reviews.get(iid) or {}).get("overall") in DECIDED:
             judged[_skey(entry["stratum"])] += 1
+        if (reviews.get(iid) or {}).get("overall") in OVERALL:
+            reviewed[_skey(entry["stratum"])] += 1
     weight = {_skey(s): (s["population"] / judged[_skey(s)] if judged[_skey(s)] else 0.0) for s in manifest["strata"]}
 
     by_stratum = defaultdict(
@@ -529,6 +665,8 @@ def score(folder: str | Path) -> dict:
         strata.append(
             {
                 **s,
+                "reviewed": reviewed[_skey(s)],
+                "judged": judged[_skey(s)],
                 "agree": c["agree"],
                 "disagree": c["disagree"],
                 "partly": c["partly"],
@@ -556,6 +694,13 @@ def score(folder: str | Path) -> dict:
         anchoring["non_blind_rate"] = round(anchoring["agree"] / anchoring["decided"], 3)
         anchoring["difference"] = round(anchoring["non_blind_rate"] - anchoring["blind_rate"], 3)
 
+    # per estimate (run, principle, step, status), the share of its strata's population in strata with a unit judged
+    population, covered = defaultdict(int), defaultdict(int)
+    for s in manifest["strata"]:
+        e = (s["run"], s["principle"], s["step"], s["status"])
+        population[e] += s["population"]
+        covered[e] += s["population"] if judged[_skey(s)] else 0
+
     recall = decisions(folder / RECALL, missing_ok=True)
     misses = [
         {"application": app, **m} for app, entry in sorted(recall.items()) for m in (entry or {}).get("missed", [])
@@ -580,6 +725,9 @@ def score(folder: str | Path) -> dict:
                 "unweighted_rate": _rate(t["k"], t["n"])["rate"],
                 "interval": _rate(t["k"], t["n"])["interval"],
                 "members_rate": round(t["mk"] / t["mn"], 3) if t["mn"] else None,
+                "population_covered": round(covered[(run, p, step, status)] / population[(run, p, step, status)], 3)
+                if population[(run, p, step, status)]
+                else None,
             }
             for (run, p, step, status), t in sorted(totals.items())
         ],
@@ -588,6 +736,8 @@ def score(folder: str | Path) -> dict:
             for (run, p, step), v in sorted(criteria.items())
         ],
         "anchoring": anchoring,
+        "blind_phrases": _blind_phrases(items, key, reviews),
+        "coverage": coverage(strata, STRATUM, len(key), sum(reviewed.values())),
         "recall": {
             "applications_done": sum(1 for e in recall.values() if (e or {}).get("done")),
             "applications": len(read_json(folder / SAMPLE)["applications"]),
@@ -640,6 +790,18 @@ def agree(folder: str | Path, first: str | Path, second: str | Path) -> dict:
         ]
         k = kappa(phrases)
         out["phrases"] = {"items": len(phrases), "kappa": round(k, 3) if k is not None else None}
+
+        def blind(r):
+            return (r.get("blind_phrases") or {}).get("phrases") or {}
+
+        judged_blind = [
+            (blind(a[i])[c], blind(b[i])[c])
+            for i in ids
+            for c in blind(a.get(i, {}))
+            if blind(b.get(i, {})).get(c) in JUDGED_PHRASE and blind(a[i])[c] in JUDGED_PHRASE
+        ]
+        k = kappa(judged_blind)
+        out["blind_phrases"] = {"items": len(judged_blind), "kappa": round(k, 3) if k is not None else None}
         return out
 
     ids = sorted(key)
@@ -670,6 +832,11 @@ def agree(folder: str | Path, first: str | Path, second: str | Path) -> dict:
                     for k in ("evidence", "follows", "phrases", "blind")
                     if k in a[i] and a[i][k] == b[i].get(k)
                 }
+                # phrases judged alike blind are kept (with the first reviewer's time), so that the adjudicator is not
+                # asked them blind again
+                blind = (a[i].get("blind_phrases") or {}).get("phrases")
+                if blind and blind == (b[i].get("blind_phrases") or {}).get("phrases"):
+                    merged["blind_phrases"] = a[i]["blind_phrases"]
                 notes = " | ".join(n for n in (a[i].get("note"), b[i].get("note")) if n)
                 seeded[i] = {"overall": a[i]["overall"], **merged, "note": notes, "reviewed": out["compared"]}
         write_json(folder / REVIEWS, seeded)

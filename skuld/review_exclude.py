@@ -3,7 +3,9 @@ skuld review exclude: a drawn sample without the units of applications withdrawn
 
 The reviewers keep the sample they were given; the units of a withdrawn application are taken out afterwards. Within a
 stratum, the units the draw picked that do not belong to the withdrawn application are a simple random sample of the
-stratum's other units, so the derived sample keeps the draw's design. Each stratum's population loses the withdrawn
+stratum's other units, so the derived sample keeps the draw's design; for a stage-1 draw capped per application
+(`--per-app`), the withdrawal also frees the share the cap gave the application, which the derived sample does not
+redraw, so its strata hold no more than they did and the cap's lean towards the average over applications stays. Each stratum's population loses the withdrawn
 application's units, which are counted again from its workspaces. Those workspaces are given explicitly, since they have
 usually been moved out of the run, and are matched to the draw's records by their assessment's digest. The derived folder holds
 sample.json, key.json and manifest.json without those units, and, where present, reviews.json and recall.json without
@@ -136,6 +138,11 @@ def exclude(folder, out, workspaces, applications: list[str], reason: str) -> di
         "id": out.name,
         "created": datetime.now(UTC).isoformat(timespec="seconds"),
         "workspaces": [w for w in manifest["workspaces"] if w["key"] not in gone_keys],
+        **(
+            {"applications": [x for x in manifest["applications"] if x.get("application") not in gone_apps]}
+            if "applications" in manifest
+            else {}
+        ),
         "strata": strata,
         "derived": {
             "by": AUTHOR,

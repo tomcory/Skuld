@@ -3,7 +3,7 @@ skuld [--profile <name>] <command> …: every command with a named configuration
 skuld config [--profiles]: the configuration in force (file, profile, digest, content), or the profiles.
 skuld propose <exploration> --pilot …: generate and fix a workspace's inputs from Loki's exploration and the catalogue.
 skuld corpus check | coverage <reports…>: the corpus's passages checked; the components no passage covers.
-skuld catalogue: the catalogue's families.
+skuld catalogue [--review <id>@<version> --by …]: the catalogue's families and their reviews; record a review.
 skuld freeze <workspace>: fix the named inputs before the runs they judge.
 skuld change <workspace> <input> --reason …: record a change of a fixed input.
 skuld run <workspace> --recorded … --config … --device …: the runs, made by Loki in rotated order.
@@ -88,7 +88,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--api", default=None, help="API that serves the model (default: the configuration's client.api)"
     )
     propose_.add_argument("--offline", action="store_true", help="only the answers kept")
-    propose_.add_argument("--selection", type=Path, help="cases only for the practices this selection chose")
+    propose_.add_argument(
+        "--selection", type=Path, help="experimental cases only for the practices this selection chose"
+    )
     propose_.add_argument("--registry", type=Path, help="the recipient registry (default: Ratatoskr's built one)")
 
     corpus_ = commands.add_parser(
@@ -96,14 +98,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     corpus_.add_argument(
         "action",
-        choices=["check", "coverage"],
-        help="check: the passages; coverage <O reports…>: what no passage is about",
+        choices=["check", "coverage", "keep", "repoint"],
+        help="check: the passages; coverage <O reports…>: what no passage is about; keep: copy the corpus to "
+        "corpora/<digest> before changing it; repoint <workspaces…>: point the workspaces that named it there",
     )
-    corpus_.add_argument("reports", nargs="*", help="for coverage: observation reports, or folders searched for them")
+    corpus_.add_argument(
+        "reports",
+        nargs="*",
+        help="for coverage: observation reports, or folders searched for them; for repoint: workspaces, or folders",
+    )
+    corpus_.add_argument("--dry-run", action="store_true", help="repoint: list, change nothing")
     corpus_.add_argument("--corpus", default=str(CORPUS), help="the corpus folder (default: Skuld's)")
+
+    purposes_ = commands.add_parser(
+        "purposes", help="map: place the purpose nodes stage 1 invented at the nearest node of the vocabulary"
+    )
+    purposes_.add_argument("action", choices=["map"])
+    purposes_.add_argument("workspaces", nargs="+", type=Path, help="assessment workspaces, or folders of them")
+    purposes_.add_argument("--out", type=Path, required=True, help="the map, extended if it exists")
+    purposes_.add_argument("--model", default=None, help="the embedding model (default: qwen3-embedding:8b-fp16)")
 
     families = commands.add_parser("catalogue", help="list the catalogue's families and check them")
     families.add_argument("--catalogue", default=str(CATALOGUE), help="the catalogue folder (default: Skuld's)")
+    families.add_argument("--review", metavar="FAMILY", help="record a review of <id>@<version> (in reviews/)")
+    families.add_argument("--by", help="who reviewed the family (a person's id), with --review")
+    families.add_argument("--note", default="", help="what the review found, with --review")
 
     freeze = commands.add_parser("freeze", help="fix every input not fixed yet, with its digest and author")
     freeze.add_argument("workspace")
@@ -126,17 +145,19 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         default=["all"],
         help="'baseline' and the alternatives' conditions; 'all' (the default): baseline and every alternative of the "
-        "workspace's fixed cases",
+        "workspace's fixed experimental cases",
     )
     run.add_argument("--json", action="store_true", help="one JSON line per run (order, condition, exit, folder)")
     run.add_argument("--repeat", type=_positive, default=3, help="runs per condition (default: 3)")
     run.add_argument("--loki", default=str(LOKI), help="Loki's folder (default: the sibling Loki)")
     run.add_argument(
-        "--qualify", action="store_true", help="first one baseline replay; record the cases it does not qualify"
+        "--qualify",
+        action="store_true",
+        help="first one baseline replay; record the experimental cases it does not qualify",
     )
     run.add_argument(
         "--case",
-        help="replay only up to the end of this case's path (the cold start for the launch); 'all' conditions are "
+        help="replay only up to the end of this experimental case's path (the cold start for the launch); 'all' conditions are "
         "then this case's",
     )
     run.add_argument(
@@ -249,6 +270,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--prefix", help="expect-draw: the units' id prefix (default x), e.g. one per part of a sample"
     )
     review_.add_argument(
+        "--per-app",
+        type=int,
+        help="expect-draw: at most about this many units of one application per run, without changing the strata's "
+        "sizes (default: config.json's, none)",
+    )
+    review_.add_argument(
         "--application",
         action="append",
         default=[],
@@ -325,6 +352,7 @@ READ_BY = {
         "anchor": ("draw",),
         "step": ("draw",),
         "prefix": ("expect-draw",),
+        "per_app": ("expect-draw",),
         "reviewer": ("export",),
         "application": ("exclude",),
         "reason": ("exclude",),
@@ -408,11 +436,46 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"{key:>8}  {'(refused)':<40} {'; '.join(entry['refused'])}")
             print(f"{len(summary['fixed'])} inputs fixed in {root}")
             print(f"manifest {run.path}")
+        elif args.command == "purposes":
+            from skuld import purposemap
+
+            _environment()
+            roots = [
+                w
+                for given in args.workspaces
+                for w in ([given] if (given / "expectation").is_dir() else sorted(given.glob("*/")))
+                if (w / "expectation").is_dir()
+            ]
+            model = args.model or purposemap.MODEL
+            embed, digest = purposemap.ollama_embedder(model)
+            built, new = purposemap.build(roots, args.out, embed, model, digest)
+            print(
+                f"{len(roots)} workspaces, {sum(e['occurrences'] for e in built['entries'].values())} invented "
+                f"labels' occurrences, {len(new)} new; the map has {len(built['entries'])} -> {args.out}"
+            )
         elif args.command == "corpus":
             from ratatoskr.vocabularies import Vocabulary
 
             if not Path(args.corpus).is_dir():
                 raise FileNotFoundError(f"no corpus folder {args.corpus}")
+            if args.action in ("keep", "repoint"):
+                from skuld import corpora
+
+                if args.action == "keep":
+                    kept, copied = corpora.keep(Path(args.corpus))
+                    print(f"{'kept in' if copied else 'already kept in'} {kept}")
+                    return 0
+                if not args.reports:
+                    raise FileNotFoundError("repoint: name the workspaces, or folders of them")
+                moved = corpora.repoint([Path(r) for r in args.reports], Path(args.corpus), write=not args.dry_run)
+                for r in moved:
+                    print(f"{r.workspace.parent}: {r.before} -> {r.after or '(no kept corpus ' + r.digest[:8] + ')'}")
+                orphaned = [r for r in moved if r.after is None]
+                print(
+                    f"{len(moved) - len(orphaned)} repointed{' (dry run)' if args.dry_run else ''}, "
+                    f"{len(orphaned)} name a corpus not kept"
+                )
+                return 1 if orphaned else 0
             found = corpus.load(args.corpus)
             if args.action == "check":
                 norms = corpus.load(Path(args.corpus) / corpus.NORMS)
@@ -435,10 +498,16 @@ def main(argv: list[str] | None = None) -> int:
             if not (Path(args.catalogue) / "families").is_dir():
                 raise FileNotFoundError(f"no catalogue folder {args.catalogue} (with families/)")
             found = catalogue.load(args.catalogue)
+            if args.review:
+                if not args.by:
+                    raise catalogue.CatalogueError("--review needs --by (who reviewed the family)")
+                f = found.review(args.review, args.by, args.note)
+                print(f"{f.key}: {f.review_state()} -> {catalogue.review_path(found.root, f.key)}")
+                return 0
             for f in found.latest():
-                state = "reviewed" if f.reviewed else "not reviewed"
-                print(f"{f.key:<40} {state:<13} {f.data['name']}")
-            print(f"{len(found.families)} families, digest {found.sha256}")
+                print(f"{f.key:<40} {f.review_state():<32} {f.data['name']}")
+            unreviewed = sum(1 for f in found.latest() if not f.reviewed)
+            print(f"{len(found.families)} families, {unreviewed} newest not reviewed, digest {found.sha256}")
         elif args.command == "freeze":
             author = {"kind": "model" if args.model else "person", "name": args.author}
             if args.prompt:
@@ -478,6 +547,12 @@ def main(argv: list[str] | None = None) -> int:
                     print(json.dumps(record), flush=True)
                 else:
                     print(f"{e['order']:3d} {e['condition']:<10} exit {e['exit']}  {e['dir']}")
+            if entries and (drift := entries[0].get("version_drift")):
+                print(
+                    f"version {drift['installed']} installed, the recording of {drift['recorded']}: "
+                    "run as stated compatible (runs.jsonl: version_drift)",
+                    file=sys.stderr,
+                )
             # a replay Loki ended with an error fails the series, unless a retry replaced it
             failed = [e for e in entries if e["exit"] != 0 and not e.get("retried")]
             if failed:
@@ -632,7 +707,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.action == "expect-draw":
                 if not args.paths:
                     raise rx.ReviewError("expect-draw needs the workspaces")
-                m = rx.draw(args.folder, args.paths, args.per_stratum, args.seed, args.prefix or "x")
+                m = rx.draw(args.folder, args.paths, args.per_stratum, args.seed, args.prefix or "x", args.per_app)
                 for st in m["strata"]:
                     name = " ".join(str(st[k]) for k in ("run", "role", "status"))
                     print(f"{name:<50} {st['drawn']:>3} of {st['population']:>4}")
@@ -650,6 +725,9 @@ def main(argv: list[str] | None = None) -> int:
                     f"{sc['done']} of {sc['units']} practices done; {len(sc['missed'])} purposes noted as missed "
                     f"({sc['missed_functional']} functional) -> {args.folder / rx.SCORES}"
                 )
+                from skuld.review import coverage_lines
+
+                print("\n".join(coverage_lines(sc["coverage"])))
             else:
                 if len(args.paths) != 2:
                     raise rx.ReviewError("expect-agree needs the two reviewers' reviews files")
@@ -682,6 +760,12 @@ def main(argv: list[str] | None = None) -> int:
                 a = sc["anchoring"]
                 if "difference" in a:
                     print(f"anchoring: blind {a['blind_rate']}, non-blind {a['non_blind_rate']} on {a['units']} units")
+                for scope, b in sc["blind_phrases"]["runs"].items():
+                    print(
+                        f"phrases of declared purposes, {scope}: blind {b['blind']['rate']} on {b['blind']['phrases']}, "
+                        f"non-blind {b['non_blind']['rate']} on {b['non_blind']['phrases']} ({b['changed']} changed)"
+                    )
+                print("\n".join(review.coverage_lines(sc["coverage"])))
                 print(
                     f"{sc['judged']} of {sc['items']} judged, {sc['unsure']} unsure; "
                     f"{len(sc['recall']['missed'])} misses noted -> {args.folder / review.SCORES}"

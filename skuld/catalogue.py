@@ -37,18 +37,34 @@ purposes:
 author: {kind: model, name: gemma4:31b, prompt: <sha256>}
 created: 2026-10-23
 derived_from: {application: de.wetteronline.wetterapp@2026.20, run: <run id>, episode: 1}
-reviewed: null                    # or {by, time, note}
 ```
 
 A slot is of kind `text` (texts a screen of the path showed; the oracle's `any`), `screen` (the exact key of a
 screen of the path) or `activity` (the activity of a screen of the path). `path_start` and `path_end`, the number
 of the recording's actions before the feature's path and up to its last action, are filled by every instantiation.
 A slot that is a whole argument is replaced by its value; one within a text is written into it.
+
+A family's review is stored beside it, `reviews/<id>@<version>.yaml` in the catalogue folder, outside the family's
+digest and the catalogue's, so that reviewing a family changes neither (20 Nov 2026; before, `reviewed` was a field of
+the family file, and a review changed its digest):
+
+```yaml
+family: current-location-forecast@1
+sha256: <the digest of the family file reviewed>
+by: <a person's id>
+time: 2026-11-20T10:00:00+00:00
+note: <what the reviewer found, or empty>
+```
+
+A review names the digest of the family file it read; a review of another text than the family's is no review of it.
+A `reviewed: {by, time, note}` field in a family file, as families written before carry it, is still read as its
+review where no review file is stored (deprecated: record a review with `skuld catalogue --review`).
 """
 
 import hashlib
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -63,6 +79,8 @@ INVALID = ({"hold_above_ms": 1000},)
 
 _SLOT = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
 _ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+#: The folder of the families' reviews, beside `families/`
+REVIEWS = "reviews"
 
 
 class CatalogueError(Exception):
@@ -76,6 +94,10 @@ class Family:
     data: dict
     sha256: str
     path: Path | None = None
+    #: The family's review (by, time, note; `legacy` if read from the family file's `reviewed` field), or None
+    review: dict | None = None
+    #: Why a stored review is no review of the family (it names another digest), or None
+    review_problem: str | None = None
 
     @property
     def key(self) -> str:
@@ -83,7 +105,17 @@ class Family:
 
     @property
     def reviewed(self) -> bool:
-        return bool(self.data.get("reviewed"))
+        return self.review is not None and self.review_problem is None
+
+    def review_state(self) -> str:
+        """How `skuld catalogue` shows the review: who reviewed the family and when, or why it counts as not reviewed."""
+        if self.review_problem:
+            return f"not reviewed ({self.review_problem})"
+        if self.review is None:
+            return "not reviewed"
+        r = self.review
+        state = f"reviewed by {r.get('by') or '?'} {str(r.get('time') or '?')[:10]}"
+        return state + " (in the family file; deprecated)" if r.get("legacy") else state
 
     def summary(self) -> dict:
         """What a model is shown of the family: its description, purposes and the slots it asks for."""
@@ -127,9 +159,12 @@ class Catalogue:
         return max(found, key=lambda f: f.version) if found else None
 
     def add(self, data: dict) -> Family:
-        """Writes a family as the next version of its id, or as version 1 of a new id; returns it."""
+        """Writes a family as the next version of its id, or as version 1 of a new id; returns it. An empty `reviewed`
+        field is dropped: the review is stored beside the family (`review`)."""
         current = self.get(data["id"])
         data = {**data, "version": current.version + 1 if current else 1}
+        if "reviewed" in data and not data["reviewed"]:
+            del data["reviewed"]
         check(data)
         folder = self.root / "families"
         folder.mkdir(parents=True, exist_ok=True)
@@ -139,6 +174,59 @@ class Catalogue:
         family = Family(data["id"], data["version"], data, _digest(text), path)
         self.families.append(family)
         return family
+
+    def review(self, key: str, by: str, note: str = "", time: datetime | None = None) -> Family:
+        """
+        Records a person's review of a family (`<id>@<version>`) in `reviews/<key>.yaml`, with the digest of the
+        family file reviewed; returns the family with its review. A family reviewed already, in either place, is
+        refused: a review is recorded once.
+        """
+        family_id, _, version = key.partition("@")
+        family = self.get(family_id, int(version)) if version.isdigit() else None
+        if family is None:
+            raise CatalogueError(f"no family {key} in the catalogue (give <id>@<version>)")
+        if not by.strip():
+            raise CatalogueError("a review names its reviewer")
+        path = review_path(self.root, family.key)
+        if path.exists() or family.review is not None:
+            raise CatalogueError(f"{family.key} is reviewed already ({family.review_state()})")
+        record = {
+            "family": family.key,
+            "sha256": family.sha256,
+            "by": by.strip(),
+            "time": (time or datetime.now(UTC)).isoformat(timespec="seconds"),
+            "note": note.strip(),
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = yaml.safe_dump(record, sort_keys=False, allow_unicode=True, width=120)
+        path.write_text(text, encoding="utf-8", newline="\n")
+        reviewed = Family(family.id, family.version, family.data, family.sha256, family.path, record)
+        self.families[self.families.index(family)] = reviewed
+        return reviewed
+
+
+def review_path(root: Path, key: str) -> Path:
+    """Where the review of a family is stored."""
+    return Path(root) / REVIEWS / f"{key}.yaml"
+
+
+def _review(root: Path, key: str, sha256: str, data: dict) -> tuple[dict | None, str | None]:
+    """A family's review and why it is none of the family's: the review file, else the family file's deprecated
+    `reviewed` field."""
+    path = review_path(root, key)
+    if path.is_file():
+        record = yamlio.load(path.read_text(encoding="utf-8"))
+        if not isinstance(record, dict) or not record.get("by"):
+            raise CatalogueError(f"{REVIEWS}/{path.name}: not a review (family, sha256, by, time, note)")
+        if record.get("family") not in (None, key):
+            raise CatalogueError(f"{REVIEWS}/{path.name}: a review of {record.get('family')}, not of {key}")
+        if record.get("sha256") != sha256:
+            return record, "the review read another text of the family"
+        return record, None
+    legacy = data.get("reviewed")
+    if not legacy:
+        return None, None
+    return {**(legacy if isinstance(legacy, dict) else {"note": str(legacy)}), "legacy": True}, None
 
 
 def load(root: str | Path) -> Catalogue:
@@ -156,7 +244,9 @@ def load(root: str | Path) -> Catalogue:
             raise CatalogueError(f"{path.name}: {e}") from e
         if path.stem != f"{data['id']}@{data['version']}":
             raise CatalogueError(f"{path.name}: named otherwise than its id and version")
-        families.append(Family(data["id"], int(data["version"]), data, _digest(text), path))
+        key, sha256 = f"{data['id']}@{data['version']}", _digest(text)
+        review, problem = _review(root, key, sha256, data)
+        families.append(Family(data["id"], int(data["version"]), data, sha256, path, review, problem))
     return Catalogue(root, families)
 
 

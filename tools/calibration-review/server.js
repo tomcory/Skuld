@@ -5,7 +5,8 @@
 // - a review of aggregated concerns (skuld review draw, sample kind "aggregate-review"): non-blind, blind to the model
 //   run (key.json, which names it, is never served); stores the criteria, phrases and overall judgment per unit in
 //   reviews.json, and the recall pass per application in recall.json. A unit drawn to be shown blind first is served
-//   without E's output until its blind decision is saved;
+//   without E's output until its blind decision is saved; a unit of declared purposes drawn with its phrases
+//   (`blind_phrases`, samples drawn since 20 Nov 2026) is served with its phrases only until each is judged blind;
 // - a review of the expectation stage's predictions (skuld review expect-draw, kind "expectation-review"): non-blind,
 //   blind to the model run; per practice, the answers per purpose and dependency, the purposes missed, a note, and
 //   `done` once every question asked is answered (the server refuses `done` before).
@@ -67,6 +68,22 @@ function blindView(item) {
         members: item.members.map(m => Object.fromEntries(Object.entries(m).filter(([k]) => keep.includes(k)))),
     };
 }
+
+// what a unit of declared purposes shows before its phrases are judged blind: the phrases, none of E's output (its
+// status, label, reasons and evidence)
+function phrasesView(item) {
+    return {
+        id: item.id, application: item.application, requirement: item.requirement, question: item.question,
+        step: item.step, kind: item.kind, blind_phrases_now: true,
+        members: item.blind_phrases.map(p => ({concern: p.concern, statement: p.statement})),
+    };
+}
+
+// the phrases of a unit judged blind, each specific, not specific or unsure
+const blindPhrasesDone = (item, review) => {
+    const judged = review && review.blind_phrases && review.blind_phrases.phrases;
+    return !!judged && item.blind_phrases.every(p => PHRASE.includes(judged[p.concern]));
+};
 
 // an aggregate review is decided once its overall judgment is given, an expectation review once it is done
 const decided = r => (EXPECT ? !!(r && r.done) : AGGREGATE ? r && DERIVED.includes(r.overall) : r && DECISIONS.includes(r.decision));
@@ -140,7 +157,8 @@ app.get('/api/items/:index', (req, res) => {
     if (AGGREGATE) {
         const app_ = sample().applications[item.application] || {};
         const blindNow = item.blind_first && !(review && review.blind && DECISIONS.includes(review.blind.decision));
-        const shown = blindNow ? blindView(item) : item;
+        const phrasesNow = !blindNow && item.blind_phrases && !blindPhrasesDone(item, review);
+        const shown = blindNow ? blindView(item) : phrasesNow ? phrasesView(item) : item;
         return res.send({...shown, index, total: all.length, review, documents: app_.documents || [],
                          application_units: all.filter(i => i.application === item.application).map(i => i.id)});
     }
@@ -185,19 +203,28 @@ app.get('/api/next-open', (req, res) => {
     res.send({index: next ? next.index : null});
 });
 
-// an aggregate unit's judgment: the blind decision (units shown blind first), the criteria, the phrases and the overall
-// judgment; each part may come on its own, and a saved part is kept until it is replaced
+// an aggregate unit's judgment: the blind decision (units shown blind first), the phrases judged blind (units of
+// declared purposes drawn with them), the criteria, the phrases and the overall judgment; each part may come on its
+// own, and a saved part is kept until it is replaced, except the blind ones, which are never changed
 function aggregateReview(req, res) {
     const item = items().find(i => i.id === req.params.id);
     if (!item) return res.status(404).send('no such item');
     const done = reviews();
     const prior = done[req.params.id] || {};
-    const {blind, evidence, follows, phrases, overall, note} = req.body;
+    const {blind, blind_phrases: blindPhrases, evidence, follows, phrases, overall, note} = req.body;
     const bad = (value, allowed) => value !== undefined && value !== null && !allowed.includes(value);
     if (blind !== undefined && (!blind || !DECISIONS.includes(blind.decision))) return res.status(400).send(`blind decision must be one of ${DECISIONS}`);
     if (bad(evidence, EVIDENCE)) return res.status(400).send(`evidence must be one of ${EVIDENCE}`);
     if (bad(follows, FOLLOWS)) return res.status(400).send(`follows must be one of ${FOLLOWS}`);
     if (bad(overall, OVERALL)) return res.status(400).send(`overall must be one of ${OVERALL}`);
+    if (blindPhrases !== undefined) {
+        if (!item.blind_phrases) return res.status(400).send('this unit has no phrases to judge blind');
+        const judged = blindPhrases && blindPhrases.phrases;
+        if (!judged || typeof judged !== 'object' || item.blind_phrases.some(p => !PHRASE.includes(judged[p.concern]))
+            || Object.keys(judged).some(c => !item.blind_phrases.some(p => p.concern === c))) {
+            return res.status(400).send(`blind_phrases must map each of the unit's phrases to one of ${PHRASE}`);
+        }
+    }
     if (phrases !== undefined) {
         const concerns = new Set(item.members.map(m => m.concern));
         if (typeof phrases !== 'object' || Object.entries(phrases).some(([c, v]) => !concerns.has(c) || !PHRASE.includes(v))) {
@@ -209,11 +236,18 @@ function aggregateReview(req, res) {
     if (item.blind_first && !blindDone && (evidence || follows || overall || phrases)) {
         return res.status(409).send('this unit is shown blind first: save the blind decision before judging E\'s output');
     }
+    const phrasesDone = blindPhrasesDone(item, prior) || (blindPhrases !== undefined && blindPhrasesDone(item, {blind_phrases: blindPhrases}));
+    if (item.blind_phrases && !phrasesDone && (evidence || follows || overall || phrases)) {
+        return res.status(409).send('judge this unit\'s phrases blind before judging E\'s output');
+    }
     if (derivedUnit(item) && overall !== undefined && overall !== null) {
         return res.status(400).send('the verdict of this unit is derived from its phrases: send the phrases, not an overall judgment');
     }
     const next = {...prior, reviewed: new Date().toISOString()};
     if (blind !== undefined && !prior.blind) next.blind = {decision: blind.decision, note: blind.note || '', reviewed: next.reviewed};
+    if (blindPhrases !== undefined && !blindPhrasesDone(item, prior)) {
+        next.blind_phrases = {phrases: {...blindPhrases.phrases}, note: blindPhrases.note || '', reviewed: next.reviewed};
+    }
     for (const [k, v] of Object.entries({evidence, follows, overall})) if (v !== undefined) next[k] = v;
     if (phrases !== undefined) next.phrases = phrases;
     if (derivedUnit(item)) {
@@ -293,8 +327,10 @@ app.put('/api/reviews/:id', (req, res) => {
 
 app.delete('/api/reviews/:id', (req, res) => {
     const done = reviews();
-    // a blind decision, once saved, is never removed: the unit has been seen with E's output since
-    if (AGGREGATE && done[req.params.id] && done[req.params.id].blind) done[req.params.id] = {blind: done[req.params.id].blind};
+    // a blind decision or blind phrases, once saved, are never removed: the unit has been seen with E's output since
+    const prior = done[req.params.id];
+    const kept = AGGREGATE && prior ? Object.fromEntries(['blind', 'blind_phrases'].filter(k => prior[k]).map(k => [k, prior[k]])) : {};
+    if (Object.keys(kept).length) done[req.params.id] = kept;
     else delete done[req.params.id];
     writeJson(REVIEWS, done);
     res.send(progress());

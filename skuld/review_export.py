@@ -82,6 +82,8 @@ def export(out: str | Path, samples: list[str | Path], reviewer: str, note: str 
         _check_blind(folder)
         kind = json.loads(sample.read_text(encoding="utf-8"))["kind"]
         name = folder.name
+        if not _plain(name):  # the launchers and the import take it as one plain name (import_ refuses any other)
+            raise ReviewError(f"{folder}: a sample's folder name must be letters, digits, - or _")
         if name in {n for n, _ in names}:
             raise ReviewError(f"two samples named {name}")
         names.append((name, kind))
@@ -110,18 +112,23 @@ def export(out: str | Path, samples: list[str | Path], reviewer: str, note: str 
         {"reviewer": reviewer, "samples": [{"name": n, "kind": k} for n, k in names], "made": made}, indent=1
     ).encode()
     files["README.md"] = ((f"> **{note}**\n\n" if note else "") + guide(reviewer, names)).encode()
-    scripts = {}
-    for i, (name, _) in enumerate(names):
-        scripts |= launchers(name, PORT + i)  # a port per sample: two samples open at once never collide
-    scripts |= packers(reviewer, [n for n, _ in names])
     out.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for arc, src in sorted(files.items()):
             z.writestr(_info(f"{root}/{arc}", 0o644), src if isinstance(src, bytes) else src.read_bytes())
-        for arc, text in sorted(scripts.items()):
-            newline = "\r\n" if arc.endswith(".bat") else "\n"
-            z.writestr(_info(f"{root}/{arc}", 0o755), text.replace("\n", newline).encode())
+        for arc, text in sorted(scripts(reviewer, [n for n, _ in names]).items()):
+            z.writestr(_info(f"{root}/{arc}", 0o755), text)
     return out
+
+
+def scripts(reviewer: str, names: list[str]) -> dict[str, bytes]:
+    """The package's launchers and packers as written: a start-<name> per sample, each on its own port (two samples
+    open at once never collide), and pack-reviews; a .bat with Windows' line endings (CRLF), the others with LF."""
+    out = {}
+    for i, name in enumerate(names):
+        out |= launchers(name, PORT + i)
+    out |= packers(reviewer, names)
+    return {arc: text.replace("\n", "\r\n" if arc.endswith(".bat") else "\n").encode() for arc, text in out.items()}
 
 
 def _info(name: str, mode: int) -> zipfile.ZipInfo:
