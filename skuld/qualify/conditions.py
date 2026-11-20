@@ -1,5 +1,5 @@
 """
-The three kinds of condition (QUALIFICATION_PLAN.md §2.4; framework report 0.6, def:qualification).
+The three kinds of condition (plan/archive/QUALIFICATION_PLAN.md §2.4; framework report 0.6, def:qualification).
 
     source  that a source was read or acquired in full: a concern's condition `analysed:<channel>` or
             `complete:<channel>`; a relation's condition of kind `source`. A finding under it rests on a missing source:

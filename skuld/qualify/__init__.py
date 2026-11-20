@@ -1,5 +1,5 @@
 """
-Qualification, the last, deterministic stage of `skuld assess` (S-25, QUALIFICATION_PLAN.md, ADR 0002): it reads
+Qualification, the last, deterministic stage of `skuld assess` (S-25, plan/archive/QUALIFICATION_PLAN.md, ADR 0002): it reads
 what the assessment computed (subjects, relations, concerns, coverage, gaps, open conditions, claims), the frame's
 requirements and the data vocabulary, and writes `qualification` into the report:
 

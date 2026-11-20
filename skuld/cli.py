@@ -53,7 +53,7 @@ def component(name: str, folder: Path, relative_to: Path | None = None) -> list[
     """
     The command that runs another component: config.json's `components.<name>` (an argument list) if given, else the
     executable in the component's own venv (`<folder>/.venv/bin/<name>`). Not `uv run --project`, which needs uv on
-    the PATH and may re-sync that venv on every call (POST_PAPER_FIXES 3). `relative_to`: the path written relative to
+    the PATH and may re-sync that venv on every call (plan/archive/POST_PAPER_FIXES 3). `relative_to`: the path written relative to
     that folder, as a command run from a workspace is recorded.
     """
     given = (config.load().get("components") or {}).get(name)

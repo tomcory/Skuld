@@ -6,12 +6,12 @@
 
 **State: 0.6.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
-qualified results and next steps; [`QUALIFICATION_PLAN.md`](../QUALIFICATION_PLAN.md)), the aggregate of its concerns
+qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
 (`skuld select`, `propose`, `run`, `analyse`), the provenance check (`skuld check`) and the calibration against an
 expert (`skuld calibrate`). Not built: the reasoning tier's argument form (P10). The model is E's technical report
 ([`ODE/expectation/expectation.tex`](../ODE/expectation/expectation.tex), version 0.9); the plan and its history,
-[`SKULD_REDESIGN_PLAN.md`](../SKULD_REDESIGN_PLAN.md). How Skuld works is in
+[`plan/archive/SKULD_REDESIGN_PLAN.md`](../plan/archive/SKULD_REDESIGN_PLAN.md). How Skuld works is in
 [`docs/architecture.md`](docs/architecture.md). Checked against the code on 2026-11-20.
 
 ## Role in Asgard
@@ -232,9 +232,9 @@ case workspace (`SKULD_DRY_RUN`, or the Pilates fixture). Earlier copies of the 
 | [`docs/scientific-summary.md`](docs/scientific-summary.md) | The method for a scientific audience, in the notation of E's report |
 | [`tools/calibration-review/README.md`](tools/calibration-review/README.md) | The expert's blind review of a calibration sample |
 | [`ODE/expectation/expectation.tex`](../ODE/expectation/expectation.tex) | The model: E's technical report |
-| [`SKULD_REDESIGN_PLAN.md`](../SKULD_REDESIGN_PLAN.md) | The plan, its reviews and measurements, what is done and open |
+| [`plan/archive/SKULD_REDESIGN_PLAN.md`](../plan/archive/SKULD_REDESIGN_PLAN.md) | The plan, its reviews and measurements, what is done and open |
 | [`Loki/docs/architecture.md`](../Loki/docs/architecture.md#capture) (Capture, Instrumentation) | The capture and instrumentation of a run, which Skuld reads |
-| [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) | The standard these documents follow |
+| [`docs/DOCUMENTATION_STANDARD.md`](../docs/DOCUMENTATION_STANDARD.md) | The standard these documents follow |
 
 ## License
 

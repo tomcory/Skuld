@@ -163,7 +163,7 @@ def test_a_denial_contradicts_only_under_what_o_cannot_observe(tmp_path):
 
 def test_a_denial_contradicts_a_transmission_only(tmp_path):
     """Google Play counts only data that leaves the device as collected: an access on the device contradicts no
-    denial (POST_PAPER_FIXES 3, Peacock's "Camera" denied and contradicted by every on-device access)."""
+    denial (plan/archive/POST_PAPER_FIXES 3, Peacock's "Camera" denied and contradicted by every on-device access)."""
     built, rel = relate(
         tmp_path,
         [claim("c1", "photos-videos.photos", ctype="accesses"), claim("c2", "personal-info.name", "adco")],

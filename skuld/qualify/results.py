@@ -1,5 +1,5 @@
 """
-The qualified results (QUALIFICATION_PLAN.md §3): for a case, or a row of a section, the steps of the precedence are
+The qualified results (plan/archive/QUALIFICATION_PLAN.md §3): for a case, or a row of a section, the steps of the precedence are
 taken in order; the first that holds is the result, and every later step that also holds is a secondary reason. Each
 step records what made it hold.
 

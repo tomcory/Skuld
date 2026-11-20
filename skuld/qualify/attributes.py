@@ -1,5 +1,5 @@
 """
-Case attributes (QUALIFICATION_PLAN.md §2.3): the facts of a case that triage selects on, stated in full so that it
+Case attributes (plan/archive/QUALIFICATION_PLAN.md §2.3): the facts of a case that triage selects on, stated in full so that it
 can select from reports alone. They describe a case; no rule of qualification reads them to set a result.
 
     claim_type        the practice's, or the declaration's (declares_collection, declares_recipient)

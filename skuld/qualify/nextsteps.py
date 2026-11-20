@@ -1,5 +1,5 @@
 """
-Next steps (QUALIFICATION_PLAN.md §4.1): every gap, open condition and broader O–D relation of a case yields one next
+Next steps (plan/archive/QUALIFICATION_PLAN.md §4.1): every gap, open condition and broader O–D relation of a case yields one next
 step with its kind, who would take it, what it would decide and whether it could change the result of a case it
 serves. Duplicates across cases are merged and keep every case they serve. The Investigator takes those the suite can
 take within its pass; the rest stay in the dossier as recommended follow-up.

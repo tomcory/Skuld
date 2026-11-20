@@ -353,7 +353,7 @@ def test_the_same_words_on_two_channels_are_one_statement(tmp_path):
 
 
 def test_a_report_of_earlier_components_is_noted_not_failed(workspace):
-    """The study's runs under combination rule A (skuld.combine 1) no longer rebuild identically (POST_PAPER_FIXES 3)."""
+    """The study's runs under combination rule A (skuld.combine 1) no longer rebuild identically (plan/archive/POST_PAPER_FIXES 3)."""
     import copy
 
     from skuld.assess import build

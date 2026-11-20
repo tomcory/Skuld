@@ -1,4 +1,4 @@
-"""Qualification, the last stage of E (S-25, QUALIFICATION_PLAN.md §7): each rule on constructed assessments, the
+"""Qualification, the last stage of E (S-25, plan/archive/QUALIFICATION_PLAN.md §7): each rule on constructed assessments, the
 tables against the pinned schema, precedence, and the fixtures."""
 
 import json
@@ -28,7 +28,7 @@ FIXTURES = [
     "de.wetteronline.wetterapp@2026.20",
     "pilatesworkout.yogaworkout.loseweight.workoutapps@1.6.4",
 ]
-#: The profiles the author reviewed (Q3, 2026-11-02; QUALIFICATION_PLAN.md 8.7-8.10), fixed as expected output: a
+#: The profiles the author reviewed (Q3, 2026-11-02; plan/archive/QUALIFICATION_PLAN.md 8.7-8.10), fixed as expected output: a
 #: change of a rule that moves one is a decision, recorded there, and this table changes with it
 PROFILES = {
     "air.nn.mobile.app.main@3.8.96": {
@@ -205,7 +205,7 @@ def test_a_purpose_goes_with_the_declaration_it_is_nested_under():
 
 
 def test_a_legal_basis_is_no_declared_purposes_row():
-    """209 legal bases per family appeared as purposes "the reasoning tier did not judge" (POST_PAPER_FIXES 3)."""
+    """209 legal bases per family appeared as purposes "the reasoning tier did not judge" (plan/archive/POST_PAPER_FIXES 3)."""
     a = Assessment()
     p = a.practice()
     a.assessed_for_practice(p)

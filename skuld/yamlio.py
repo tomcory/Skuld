@@ -2,7 +2,7 @@
 YAML as Skuld reads it: safe, and refusing a mapping that names a key twice.
 
 PyYAML's `safe_load` keeps the last of two equal keys. A second `compatible_versions:` in an `assessment.yaml`
-silently replaced the first, and qwen's Remini went from 351 concerns to 1 (`POST_PAPER_FIXES.md` 3). Every YAML
+silently replaced the first, and qwen's Remini went from 351 concerns to 1 (`plan/archive/POST_PAPER_FIXES.md` 3). Every YAML
 Skuld reads goes through `load`.
 """
 

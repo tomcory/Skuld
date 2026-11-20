@@ -1,5 +1,5 @@
 """
-The symbols of qualification (QUALIFICATION_PLAN.md §2.2): each relation reduced to agree (≈), disagree (≠), unknown
+The symbols of qualification (plan/archive/QUALIFICATION_PLAN.md §2.2): each relation reduced to agree (≈), disagree (≠), unknown
 (?) or conflict, by fixed tables over the outcomes of `expectation_assessment`; per relation type, a case's symbol;
 and the case's triangulation pattern, read against the framework's table.
 

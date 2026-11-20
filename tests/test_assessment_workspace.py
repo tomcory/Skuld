@@ -170,7 +170,7 @@ def test_the_strict_loader_reads_what_yaml_reads_otherwise():
 
 
 def test_describe_again_keeps_the_compatibility_statements_and_the_models(workspace):
-    """The study re-applied them with add_compat.py and set_models.py after every describe (POST_PAPER_FIXES 3)."""
+    """The study re-applied them with add_compat.py and set_models.py after every describe (plan/archive/POST_PAPER_FIXES 3)."""
     root, o, d, run = workspace
     statement = inputs.add_compatible_versions(root, "1.0", "1.1", "the author compared them", "tomcory")
     assert statement["versions"] == ["1.0", "1.1"] and statement["author"] == {"kind": "person", "id": "tomcory"}

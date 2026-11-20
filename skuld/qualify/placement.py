@@ -1,5 +1,5 @@
 """
-Placement (QUALIFICATION_PLAN.md §2.1): the assessment divided into cases and sections, by the structure of the claims,
+Placement (plan/archive/QUALIFICATION_PLAN.md §2.1): the assessment divided into cases and sections, by the structure of the claims,
 never by their text.
 
     practice case          one per practice: its relations; the declarations of practice its O–D relations relate;
@@ -143,7 +143,7 @@ def place(index: Index) -> tuple[list[Holding], list[Holding], list[Holding]]:
         cases.append(h)
     purposes: list[Holding] = []
     # a declared purpose's row holds purposes only: a legal basis is information the collection's rows assess
-    # (Art. 13(1)(c)), not a purpose the reasoning tier judges (POST_PAPER_FIXES 3: 209 per family filed as purposes)
+    # (Art. 13(1)(c)), not a purpose the reasoning tier judges (plan/archive/POST_PAPER_FIXES 3: 209 per family filed as purposes)
     justifications = [
         d
         for d in sorted(index.declarations, key=_order)

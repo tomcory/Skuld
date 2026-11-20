@@ -162,7 +162,7 @@ def _condition(
 ) -> str | None:
     """What O cannot observe but a contradiction needs: a channel's definitions, the legal role a denial names, the
     denial's own condition and applicability, and, for a denial D labelled only with the root category of data, that
-    it meant the data observed (POST_PAPER_FIXES 3: "we never collect or store those informations")."""
+    it meant the data observed (plan/archive/POST_PAPER_FIXES 3: "we never collect or store those informations")."""
     parts = []
     definitions = channel_definitions.get(declaration.channel)
     if (definitions, aspect) in DEFINITIONS:

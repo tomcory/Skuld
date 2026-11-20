@@ -1,5 +1,5 @@
 """
-Review triggers (QUALIFICATION_PLAN.md §5): a mark on a case that one of the framework's review conditions
+Review triggers (plan/archive/QUALIFICATION_PLAN.md §5): a mark on a case that one of the framework's review conditions
 (F-R-REVIEW) holds, with the signal that raises it. A trigger weighs if qualifying the case under any of its
 resolutions gives a different result; the test reuses the rules of results.py on a copy of the case and adds none of
 its own. Triggers tell the reader where a result is least certain, and their weight enters the review sample of

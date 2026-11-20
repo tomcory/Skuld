@@ -5,7 +5,7 @@ profile over it if one is chosen, over Ratatoskr's defaults.
 A profile (`profiles/<name>.json`, chosen by SKULD_PROFILE or `skuld --profile <name>`) holds only what differs from
 config.json, merged key by key (a list or a value replaces the one below it), and says what it is for in its
 `description`. Skuld's profiles are the setups a study ran with, so that they can be run again outside the machine
-they ran on (`POST_PAPER_FIXES.md` 2):
+they ran on (`plan/archive/POST_PAPER_FIXES.md` 2):
 
     study-2026-11-gemma-vendor            the Expectation paper's final gemma4:31b run (vendor sampling)
     study-2026-11-qwen-low-traffic-topup  the Expectation paper's final qwen3.8:27b run

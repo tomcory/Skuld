@@ -1,6 +1,6 @@
 """D's marks on the root (Urda 2.1.0): a declaration that names no data holds of all data (`_no_data`); a root D holds
 only because it could not place the value (`_unplaced`) is undecided, not all data; an earlier report, which marks
-neither, is read as before (POST_PAPER_FIXES 5, URDA_RERUN_PLAN 5)."""
+neither, is read as before (plan/archive/POST_PAPER_FIXES 5, plan/archive/URDA_RERUN_PLAN 5)."""
 
 from ratatoskr import claims as claim_views
 from ratatoskr.frames import Frame
