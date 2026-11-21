@@ -1,0 +1,46 @@
+id: location-search-forecast
+version: 1
+name: forecast for a searched location
+entry: the app's main forecast screen
+path: search for a specific city or place and select it from the results
+outcome: the weather forecast for the selected location
+purposes:
+- id: P1
+  action: display the weather forecast for a specific location
+  object: weather forecast
+  beneficiary: user
+  context: user-specified location
+  outcome: user sees weather for that location
+  node: RequestedServiceProvision
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: determine the location based on user input
+  oracle:
+    reach:
+    - R1
+    success:
+    - text_shown:
+        any: '{place_name}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      place_name:
+        kind: text
+        description: the name of the place the forecast is shown for
+author:
+  kind: model
+  name: gemma4:31b
+  prompt: skuld.propose 1
+  sha256: 5cf7501b7b46707894bbb8a8a570b78c8406278a07a01318d8e771d9eabca378
+created: '2026-11-12'
+derived_from:
+  application: com.weather.Weather@16.28.0
+  run: 20261110T025228Z_com.weather.Weather_b704cd
+  episode: 3
+reviewed: null

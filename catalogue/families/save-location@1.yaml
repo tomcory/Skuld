@@ -1,0 +1,49 @@
+id: save-location
+version: 1
+name: save location
+entry: the app's main screen or location management screen
+path: search for a specific location and add it to a saved list
+outcome: the location is added to the user's saved locations list
+purposes:
+- id: P1
+  action: save a location for quick access
+  object: location
+  beneficiary: user
+  context: weather app
+  outcome: user can access weather for that location without searching again
+  node: Personalisation
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: identify a place based on user input
+  - id: R2
+    statement: associate the identified place with the user's account or profile
+  oracle:
+    reach:
+    - R1
+    - R2
+    success:
+    - text_shown:
+        any: '{list_header}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      list_header:
+        kind: text
+        description: the header of the saved locations list
+author:
+  kind: model
+  name: gemma4:31b
+  prompt: skuld.propose 1
+  sha256: 4a6e76cf221512f7b53d0a15cc518eec85085eb61584c33d4e1a17e0284a0547
+created: '2026-11-12'
+derived_from:
+  application: com.accuweather.android@21.2.1-1-rc
+  run: 20261110T025316Z_com.accuweather.android_44dd07
+  episode: 4
+reviewed: null

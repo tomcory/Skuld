@@ -1,0 +1,46 @@
+id: notification-preferences-management
+version: 1
+name: notification preferences management
+entry: the app's settings or profile screen
+path: navigate to notification settings and modify the preferences for communication channels
+outcome: the settings screen showing the updated preferences or a confirmation of the changes
+purposes:
+- id: P1
+  action: modify communication preferences
+  object: notification settings
+  beneficiary: user
+  context: user account management
+  outcome: user controls which notifications they receive
+  node: ServiceManagement
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: allow the user to select or deselect specific notification types
+  oracle:
+    reach:
+    - R1
+    success:
+    - screen_reached:
+        exact_key: '{settings_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      settings_screen:
+        kind: screen
+        description: the screen where notification preferences are managed
+author:
+  kind: model
+  name: gemma4:31b
+  prompt: skuld.propose 1
+  sha256: 6d989d132990ec58d5958f2c0bc5808ae5caeab3993567a48cd8925fe9b5bbf2
+created: '2026-11-12'
+derived_from:
+  application: com.alltrails.alltrails@26.11.10
+  run: 20261110T201802Z_com.alltrails.alltrails_179065
+  episode: 12
+reviewed: null

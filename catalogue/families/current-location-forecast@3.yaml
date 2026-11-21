@@ -1,0 +1,70 @@
+id: current-location-forecast
+version: 3
+name: forecast for the current location
+entry: the app open, the device at a known location
+path: open the forecast for the place the device is at
+outcome: the forecast for the place the app found for the device
+purposes:
+- id: P1
+  action: determine and display
+  object: the weather forecast
+  beneficiary: user
+  context: the device's current location
+  outcome: the forecast for the area the user is in
+  node: asgard:ProvideLocationBasedFeatures
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: determine an area relevant to the user
+  - id: R2
+    statement: retrieve the forecast for that area
+  - id: R3
+    statement: display the forecast with the area's name
+  oracle:
+    reach:
+    - R1
+    - R2
+    - R3
+    success:
+    - text_shown:
+        any: '{place}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    - text_shown:
+        any:
+        - 0°
+        - 1°
+        - 2°
+        - 3°
+        - 4°
+        - 5°
+        - 6°
+        - 7°
+        - 8°
+        - 9°
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      place:
+        kind: text
+        description: the name of the place the forecast is shown for, as the screen at the end of the path shows it
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), from the catalogue review of 21 Nov
+    (reviews/notes-2026-11-21.md): version 2 with the slot description whole (a comma in a YAML flow mapping had cut it and
+    left a stray key); a temperature (''0°'' … ''9°'') at the path''s end beside the place''s name, which Android''s geocoder
+    (outside the app''s capture) or the place list shows without a forecast, so that the oracle reaches R2 and the network
+    control can break; the node asgard:ProvideLocationBasedFeatures, which fits a forecast for the current place exactly'
+created: '2026-11-21'
+derived_from:
+  family: current-location-forecast
+  version: 2
+control:
+  intervention: network
+  expected: breaks

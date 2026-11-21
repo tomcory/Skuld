@@ -1,0 +1,88 @@
+id: third-party-authentication
+version: 2
+name: sign up or sign in with a third-party account
+entry: the app's sign-up, login or profile screen
+path: select a third-party identity provider and authenticate with it
+outcome: the app signed in, showing the account
+purposes:
+- id: P1
+  action: sign in
+  object: the user, by an identity at a third-party provider
+  beneficiary: user
+  context: access to the user's account
+  outcome: the app signed in to the user's account
+  node: AccountManagement
+  fit: broader
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: verify the user's identity via the third-party provider
+  - id: R2
+    statement: show the app signed in to the user's account
+  oracle:
+    reach:
+    - R1
+    - R2
+    success:
+    - text_shown:
+        any: '{account_text}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      account_text:
+        kind: text
+        description: 'a text only the signed-in app shows: the account''s display name or e-mail address (the test persona''s)
+          at the end of the path'
+- id: P2
+  action: create
+  object: an account linked to the user's identity at the provider
+  beneficiary: user
+  context: a first sign-in with the provider
+  outcome: an account of the app for the user
+  node: ServiceRegistration
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: authenticate the user via the third-party provider
+  - id: R2
+    statement: create or link a local account to the third-party identity
+  oracle:
+    reach:
+    - R1
+    success:
+    - text_shown:
+        any: '{account_text}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      account_text:
+        kind: text
+        description: 'a text only the signed-in app shows: the account''s display name or e-mail address (the test persona''s)
+          at the end of the path'
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), from the catalogue review of 21 Nov
+    (reviews/notes-2026-11-21.md): version 1 merged with oauth-sign-up@1, which has the same path (the proposer would pick
+    either for the same flow, and the merge of proposals split identical cases by node): one family with two purposes, signing
+    in (AccountManagement, fit broader: access to the account, not security''s IdentityAuthentication) and registering (ServiceRegistration,
+    its oracle reaching only R1, authentication: whether an account was created or an existing one linked is not on the screen);
+    the oracle a text only the signed-in app shows (the persona''s name or e-mail address), not the main or profile screen,
+    which a signed-out app reaches too. Signing in through Google passes through Play Services'' account picker, another app''s
+    screens, and needs a Google account on the emulator'
+created: '2026-11-21'
+derived_from:
+  family: third-party-authentication
+  version: 1
+  merges:
+    family: oauth-sign-up
+    version: 1

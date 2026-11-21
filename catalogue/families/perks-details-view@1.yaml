@@ -1,0 +1,46 @@
+id: perks-details-view
+version: 1
+name: perks details view
+entry: the app's settings or account section
+path: navigate to a perks or offers section and select a specific offer or partner card
+outcome: a detailed view of the available perks, benefits, and how to claim them
+purposes:
+- id: P1
+  action: display available partner benefits
+  object: perks
+  beneficiary: user
+  context: subscription reward
+  outcome: user is informed of additional value
+  node: RequestedServiceProvision
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: identify the user's eligibility for specific offers
+  oracle:
+    reach:
+    - R1
+    success:
+    - screen_reached:
+        exact_key: '{details_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      details_screen:
+        kind: screen
+        description: the screen showing the detailed list of perks
+author:
+  kind: model
+  name: gemma4:31b
+  prompt: skuld.propose 1
+  sha256: b5fe03aa13c20b67e3347e4bed2621550114307e0025a69ad7fb50906f3e3924
+created: '2026-11-12'
+derived_from:
+  application: com.weather.Weather@16.28.0
+  run: 20261110T025228Z_com.weather.Weather_b704cd
+  episode: 6
+reviewed: null

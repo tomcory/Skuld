@@ -1,0 +1,48 @@
+id: location-search-forecast
+version: 2
+name: forecast for a searched location
+entry: the app's main forecast screen
+path: search for a specific city or place and select it from the results
+outcome: the weather forecast for the selected location
+purposes:
+- id: P1
+  action: display the weather forecast for a specific location
+  object: weather forecast
+  beneficiary: user
+  context: user-specified location
+  outcome: user sees weather for that location
+  node: RequestedServiceProvision
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: determine the location based on user input
+  oracle:
+    reach:
+    - R1
+    success:
+    - text_shown:
+        any: '{place_name}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      place_name:
+        kind: text
+        description: the name of the place the forecast is shown for
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026): version 1 with a control: every host
+    the case''s baseline runs contacted blocked, under which the purpose, which needs the network, must break; a control that
+    preserves is a sensitivity failure of the oracle'
+created: '2026-11-21'
+derived_from:
+  family: location-search-forecast
+  version: 1
+control:
+  intervention: network
+  expected: breaks

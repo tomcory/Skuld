@@ -540,9 +540,10 @@ def test_a_purpose_no_family_observes_is_refused_and_one_a_family_observes_is_no
     # the same node is observable for the user, through a family's purpose above it of that beneficiary
     assert select.unobservable("RequestedServiceProvision", "user", observed, purposes) is None
     # catalogue of 21 Nov 2026: notification preferences at CommunicationManagement, no longer ServiceManagement, and
-    # perks as the provider's Marketing, above every advertising node
+    # perks as the provider's DirectMarketing (perks-details-view@3), which is above no advertising node
     assert select.unobservable("ServiceUsageAnalytics", "user", observed, purposes)
-    assert select.unobservable("TargetedAdvertising", "provider", observed, purposes) is None
+    assert select.unobservable("TargetedAdvertising", "provider", observed, purposes)
+    assert select.unobservable("DirectMarketing", "provider", observed, purposes) is None
     assert select.unobservable("NoSuchNode", "provider", observed, purposes) is None  # left to the cases
 
 

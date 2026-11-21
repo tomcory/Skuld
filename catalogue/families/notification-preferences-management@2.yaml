@@ -1,0 +1,49 @@
+id: notification-preferences-management
+version: 2
+name: notification preferences management
+entry: the app's settings or profile screen
+path: navigate to notification settings and modify the preferences for communication channels
+outcome: the settings screen showing the updated preferences or a confirmation of the changes
+purposes:
+- id: P1
+  action: let the user choose
+  object: the notifications they receive
+  beneficiary: user
+  context: the app's settings
+  outcome: user controls which notifications they receive
+  node: CommunicationManagement
+  fit: broader
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: show the notification settings
+  - id: R2
+    statement: let the user select or deselect specific notification types
+  oracle:
+    reach:
+    - R1
+    success:
+    - screen_reached:
+        exact_key: '{settings_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      settings_screen:
+        kind: screen
+        description: the screen where notification preferences are managed
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), from the catalogue review of 21 Nov
+    (reviews/notes-2026-11-21.md): version 1 with the node CommunicationManagement, fit broader (ServiceManagement is the
+    provider''s management of its service); a reach that does not claim the change: the settings screen shows the settings
+    (R1), and a switch''s state is in no screen text, so the change (R2) is not observed; the context the app''s settings,
+    which need not be an account''s'
+created: '2026-11-21'
+derived_from:
+  family: notification-preferences-management
+  version: 1

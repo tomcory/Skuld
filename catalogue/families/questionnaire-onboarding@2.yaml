@@ -1,0 +1,50 @@
+id: questionnaire-onboarding
+version: 2
+name: onboarding by questionnaire
+entry: the app's entry screen after a first launch
+path: answer the onboarding questions about the user's goals, preferences or body
+outcome: the step of the onboarding the questions lead to, or the plan they produce
+purposes:
+- id: P1
+  action: collect and use
+  object: the user's answers about their goals, preferences or body
+  beneficiary: user
+  context: onboarding
+  outcome: a plan or content matched to them
+  node: ServicePersonalisation
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: present the questions
+  - id: R2
+    statement: record the answers
+  - id: R3
+    statement: produce a plan or content from them
+  oracle:
+    reach:
+    - R1
+    - R2
+    success:
+    - screen_reached:
+        exact_key: '{reached_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      reached_screen:
+        kind: screen
+        description: the screen the answered questions lead to, at the end of the path
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), from the catalogue review of 21 Nov
+    (reviews/notes-2026-11-21.md): version 1 with the slot description whole (a comma in a YAML flow mapping had cut it and
+    left a stray key)'
+created: '2026-11-21'
+derived_from:
+  family: questionnaire-onboarding
+  version: 1

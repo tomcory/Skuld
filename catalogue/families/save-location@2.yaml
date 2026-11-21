@@ -1,0 +1,51 @@
+id: save-location
+version: 2
+name: save location
+entry: the app's main screen or location management screen
+path: search for a specific location and add it to a saved list
+outcome: the location is added to the user's saved locations list
+purposes:
+- id: P1
+  action: save a location for quick access
+  object: location
+  beneficiary: user
+  context: weather app
+  outcome: user can access weather for that location without searching again
+  node: Personalisation
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: identify a place based on user input
+  - id: R2
+    statement: associate the identified place with the user's account or profile
+  oracle:
+    reach:
+    - R1
+    - R2
+    success:
+    - text_shown:
+        any: '{list_header}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      list_header:
+        kind: text
+        description: the header of the saved locations list
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026): version 1 with a control: every host
+    the case''s baseline runs contacted blocked, under which the purpose, which needs the network, must break; a control that
+    preserves is a sensitivity failure of the oracle'
+created: '2026-11-21'
+derived_from:
+  family: save-location
+  version: 1
+control:
+  intervention: network
+  expected: breaks

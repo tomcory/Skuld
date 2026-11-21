@@ -1,0 +1,54 @@
+id: ai-image-editing
+version: 2
+name: AI Image Editing
+entry: the app's main interface or an AI tools section
+path: upload an image and provide a natural language description of the desired changes
+outcome: the edited image is displayed with options to save or further modify it
+purposes:
+- id: P1
+  action: modify an image based on a text prompt
+  object: image content
+  beneficiary: user
+  context: user request
+  outcome: edited image
+  node: RequestedServiceProvision
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: recognise the user's image
+  - id: R2
+    statement: interpret the user's text request
+  - id: R3
+    statement: apply modifications to the image based on the request
+  oracle:
+    reach:
+    - R1
+    - R2
+    - R3
+    success:
+    - screen_reached:
+        exact_key: '{result_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      result_screen:
+        kind: screen
+        description: the screen showing the edited image and post-processing options
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026): version 1 with a control: every host
+    the case''s baseline runs contacted blocked, under which the purpose, which needs the network, must break; a control that
+    preserves is a sensitivity failure of the oracle'
+created: '2026-11-21'
+derived_from:
+  family: ai-image-editing
+  version: 1
+control:
+  intervention: network
+  expected: breaks

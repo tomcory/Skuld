@@ -1,0 +1,46 @@
+id: launch
+version: 2
+name: launch
+entry: cold start from the launcher, fresh data
+path: no action
+outcome: an entry screen of the app, ready for input
+purposes:
+  - id: P1
+    action: start and present
+    object: the app's entry screen
+    beneficiary: user
+    context: first launch
+    outcome: the app is ready for the user's first input
+    node: ServiceProvision
+    fit: broader
+    specificity: sufficient
+    role: functional
+    requirements:
+      - {id: R1, statement: load the app's code and resources}
+      - {id: R2, statement: show an entry screen}
+    oracle:
+      reach: [R1, R2]
+      success:
+        - first_screen_ready: {}
+      invalid:
+        - hold_above_ms: 1000
+      measurements: []
+      slots: {}
+  - id: P2
+    action: attribute
+    object: the installation
+    beneficiary: provider
+    context: first launch
+    outcome: the install is credited to the campaign that led to it
+    node: Marketing
+    fit: broader
+    specificity: sufficient
+    role: ancillary
+    requirements:
+      - {id: R1, statement: tell the attribution service that this install launched}
+      - {id: R2, statement: let the attribution service match the install to a prior ad interaction}
+    oracle: null
+author: {kind: model, name: claude-opus-5-5, prompt: "written in the assessor's session, at the assessor's direction: P1's oracle accepts any first screen of the app that is ready for input, not only the recorded one (12 Nov 2026)"}
+created: '2026-11-12'
+derived_from: {family: launch, version: 1}
+reviewed: null

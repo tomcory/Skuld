@@ -1,0 +1,50 @@
+id: ai-document-chat
+version: 1
+name: AI Chat for Documents
+entry: the app's main interface or a tools menu
+path: select a document and ask a question about its content via an AI chat interface
+outcome: the AI's response to the question based on the document's content
+purposes:
+- id: P1
+  action: extract and analyze information from documents
+  object: document content
+  beneficiary: user
+  context: user query
+  outcome: answer to the query
+  node: RequestedServiceProvision
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: access a document
+  - id: R2
+    statement: process natural language queries
+  - id: R3
+    statement: analyze document content
+  oracle:
+    reach:
+    - R1
+    success:
+    - text_shown:
+        any: '{answer_text}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      answer_text:
+        kind: text
+        description: the AI's response to the user's question
+author:
+  kind: model
+  name: gemma4:31b
+  prompt: skuld.propose 1
+  sha256: cd756dd1e1681ec57c8f06c2da01ce6ad372bc9e1d9e769ec9895c2cc8e34190
+created: '2026-11-12'
+derived_from:
+  application: com.intsig.camscanner@7.27.5.2610140000
+  run: 20261110T003621Z_com.intsig.camscanner_8cf6e4
+  episode: 8
+reviewed: null

@@ -1,0 +1,49 @@
+id: oauth-sign-up
+version: 1
+name: sign up with third-party account
+entry: the app's sign-up or login screen
+path: select a third-party identity provider and authenticate
+outcome: the app's main screen or a post-registration onboarding screen
+purposes:
+- id: P1
+  action: create an account using an existing identity provider
+  object: user account
+  beneficiary: user
+  context: registration
+  outcome: access to the app's personalized features
+  node: ServiceRegistration
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: authenticate the user via a third-party provider
+  - id: R2
+    statement: create or link a local account to the third-party identity
+  oracle:
+    reach:
+    - R1
+    - R2
+    success:
+    - screen_reached:
+        exact_key: '{main_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      main_screen:
+        kind: screen
+        description: the main screen of the app reached after successful authentication
+author:
+  kind: model
+  name: gemma4:31b
+  prompt: skuld.propose 1
+  sha256: 49f8ae64a1548f206d57aa7086206c7867d4da93f0ad55e6b01ebc966525f992
+created: '2026-11-12'
+derived_from:
+  application: com.alltrails.alltrails@26.11.10
+  run: 20261110T201802Z_com.alltrails.alltrails_179065
+  episode: 3
+reviewed: null

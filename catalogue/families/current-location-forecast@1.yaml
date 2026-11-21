@@ -1,0 +1,34 @@
+id: current-location-forecast
+version: 1
+name: forecast for the current location
+entry: the app open, the device at a known location
+path: open the forecast for the place the device is at
+outcome: the forecast for the place the app found for the device
+purposes:
+  - id: P1
+    action: determine and display
+    object: the weather forecast
+    beneficiary: user
+    context: the device's current location
+    outcome: the forecast for the area the user is in
+    node: ServiceProvision
+    fit: broader
+    specificity: sufficient
+    role: functional
+    requirements:
+      - {id: R1, statement: determine an area relevant to the user}
+      - {id: R2, statement: retrieve the forecast for that area}
+      - {id: R3, statement: display the forecast with the area's name}
+    oracle:
+      reach: [R1, R2, R3]
+      success:
+        - text_shown: {any: "{place}", after_action: "{path_end}", until_action: "{path_end}"}
+      invalid:
+        - hold_above_ms: 1000
+      measurements: []
+      slots:
+        place: {kind: text, description: the name of the place the forecast is shown for, as the screen at the end of the path shows it}
+author: {kind: model, name: claude-opus-5-5, prompt: "written in the assessor's session, at the assessor's direction (Phase 6, case forecast)"}
+created: '2026-10-23'
+derived_from: {application: de.wetteronline.wetterapp@2026.20, case: forecast}
+reviewed: null

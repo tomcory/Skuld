@@ -1,0 +1,65 @@
+id: ai-document-chat
+version: 3
+name: AI chat about a document
+entry: the app's main screen or a tools menu, a document in the app
+path: open a document, ask a question about its content in the app's AI chat and wait for the answer
+outcome: the AI's answer to the question, drawn from the document
+purposes:
+- id: P1
+  action: answer
+  object: the user's question about a document
+  beneficiary: user
+  context: a document the user opened in the app
+  outcome: an answer drawn from the document's content
+  node: RequestedServiceProvision
+  fit: broader
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: access the document
+  - id: R2
+    statement: take the user's question
+  - id: R3
+    statement: answer the question from the document's content
+  oracle:
+    reach:
+    - R1
+    - R2
+    - R3
+    success:
+    - screen_reached:
+        exact_key: '{chat_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    - text_shown:
+        any: '{answer_control}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      chat_screen:
+        kind: screen
+        description: the chat screen that shows the question and its answer
+      answer_control:
+        kind: text
+        description: a fixed text the chat shows only beside an answer (a copy or feedback control, a note under each answer),
+          never the answer's own words
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), from the catalogue review of 21 Nov
+    (reviews/notes-2026-11-21.md): version 2 with a fixed text shown only beside an answer (a copy or feedback control) together
+    with the chat screen, instead of the answer''s own text, which a language model words anew in every run so that it never
+    recurs; the oracle reaches R1–R3; the purpose''s action ''answer'' the user''s question (the feature), the name in lower
+    case, fit broader. The network control stays (a cloud model answers). A goal run needs a document on a fresh device first
+    (a scan of the emulator''s scene or an import), which the path now says'
+created: '2026-11-21'
+derived_from:
+  family: ai-document-chat
+  version: 2
+control:
+  intervention: network
+  expected: breaks

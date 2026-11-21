@@ -1,0 +1,71 @@
+id: location-search-forecast
+version: 3
+name: forecast for a searched location
+entry: the app's main forecast screen
+path: search for a specific city or place and select it from the results
+outcome: the weather forecast for the selected location
+purposes:
+- id: P1
+  action: display
+  object: the weather forecast
+  beneficiary: user
+  context: a place the user searched for
+  outcome: the forecast for the place the user chose
+  node: RequestedServiceProvision
+  fit: broader
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: determine the place from the user's search
+  - id: R2
+    statement: retrieve the forecast for that place
+  - id: R3
+    statement: display the forecast with the place's name
+  oracle:
+    reach:
+    - R1
+    - R2
+    - R3
+    success:
+    - text_shown:
+        any: '{place_name}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    - text_shown:
+        any:
+        - 0°
+        - 1°
+        - 2°
+        - 3°
+        - 4°
+        - 5°
+        - 6°
+        - 7°
+        - 8°
+        - 9°
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      place_name:
+        kind: text
+        description: the name of the place the forecast is shown for, as the screen at the end of the path shows it
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), from the catalogue review of 21 Nov
+    (reviews/notes-2026-11-21.md): version 2 with the requirements of the purpose''s outcome (R2 retrieve the forecast, R3
+    display it with the place''s name), reached by a temperature (''0°'' … ''9°'') at the path''s end beside the place''s
+    name, which the agent may have typed or an offline suggestion list shows without a forecast; the action and object split
+    as in the other families; fit broader, RequestedServiceProvision being a generic parent. The network control stays: searching
+    and the forecast need the network'
+created: '2026-11-21'
+derived_from:
+  family: location-search-forecast
+  version: 2
+control:
+  intervention: network
+  expected: breaks

@@ -1,0 +1,49 @@
+id: perks-details-view
+version: 2
+name: perks details view
+entry: the app's settings or account section
+path: navigate to a perks or offers section and select a specific offer or partner card
+outcome: a detailed view of the available perks, benefits, and how to claim them
+purposes:
+- id: P1
+  action: present
+  object: partner offers and perks
+  beneficiary: provider
+  context: the app's perks or offers section
+  outcome: the user learns of partner offers to take up
+  node: Marketing
+  fit: broader
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: show an offer's details
+  - id: R2
+    statement: identify the user's eligibility for specific offers
+  oracle:
+    reach:
+    - R1
+    success:
+    - screen_reached:
+        exact_key: '{details_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      details_screen:
+        kind: screen
+        description: the screen showing the detailed list of perks
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), from the catalogue review of 21 Nov
+    (reviews/notes-2026-11-21.md): version 1 as the provider''s marketing (node Marketing, beneficiary provider, fit broader):
+    partner perks and offers inform the user of the provider''s and its partners'' offers; a requirement ''show an offer''s
+    details'', the only one the screen check reaches (eligibility is not observed). The details screen by key is navigation;
+    an empty or failed details view may share it'
+created: '2026-11-21'
+derived_from:
+  family: perks-details-view
+  version: 1

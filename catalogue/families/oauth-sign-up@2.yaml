@@ -1,0 +1,49 @@
+id: oauth-sign-up
+version: 2
+name: sign up with third-party account
+entry: the app's sign-up or login screen
+path: select a third-party identity provider and authenticate
+outcome: the app's main screen or a post-registration onboarding screen
+purposes:
+- id: P1
+  action: create an account using an existing identity provider
+  object: user account
+  beneficiary: user
+  context: registration
+  outcome: access to the app's personalized features
+  node: ServiceRegistration
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: authenticate the user via a third-party provider
+  - id: R2
+    statement: create or link a local account to the third-party identity
+  oracle:
+    reach:
+    - R1
+    - R2
+    success:
+    - screen_reached:
+        exact_key: '{main_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      main_screen:
+        kind: screen
+        description: the main screen of the app reached after successful authentication
+superseded_by: third-party-authentication
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), from the catalogue review of 21 Nov
+    (reviews/notes-2026-11-21.md): version 1 marked superseded by third-party-authentication (version 2), which holds both
+    purposes of the same path; its last version, which no proposer is offered'
+created: '2026-11-21'
+derived_from:
+  family: oauth-sign-up
+  version: 1

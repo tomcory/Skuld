@@ -1,0 +1,54 @@
+id: ai-document-summarization
+version: 2
+name: AI document summarization
+entry: the app's main scanning or home screen
+path: capture a document using an AI-powered mode and request a summary of its content
+outcome: the AI processes the image and provides a textual summary of the document
+purposes:
+- id: P1
+  action: summarize the content of a captured document
+  object: document content
+  beneficiary: user
+  context: after capturing a photo of a document
+  outcome: user receives a concise summary
+  node: RequestedServiceProvision
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: capture an image of a document
+  - id: R2
+    statement: extract text from the image
+  - id: R3
+    statement: generate a summary of the extracted text
+  oracle:
+    reach:
+    - R1
+    - R2
+    - R3
+    success:
+    - screen_reached:
+        exact_key: '{summary_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      summary_screen:
+        kind: screen
+        description: the screen showing the AI-generated summary
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026): version 1 with a control: every host
+    the case''s baseline runs contacted blocked, under which the purpose, which needs the network, must break; a control that
+    preserves is a sensitivity failure of the oracle'
+created: '2026-11-21'
+derived_from:
+  family: ai-document-summarization
+  version: 1
+control:
+  intervention: network
+  expected: breaks

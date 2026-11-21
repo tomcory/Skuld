@@ -1,0 +1,47 @@
+id: subscription-plan-selection
+version: 2
+name: subscription plan selection
+entry: the app's main screen or a promotional banner
+path: navigate to the subscription page and select a pricing plan
+outcome: the selected plan and its price shown on the paywall
+purposes:
+- id: P1
+  action: present
+  object: the subscription plans and their prices
+  beneficiary: provider
+  context: the app's paywall
+  outcome: the selected plan and its price shown on the paywall
+  node: SellProductsToDataSubject
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: provide a list of available subscription options and their costs
+  oracle:
+    reach:
+    - R1
+    success:
+    - text_shown:
+        any: '{plan_name}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      plan_name:
+        kind: text
+        description: the name of the selected plan as the paywall shows it after the selection (not its price, which is localised
+          and changes with offers)
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), from the catalogue review of 21 Nov
+    (reviews/notes-2026-11-21.md): version 1 with the node SellProductsToDataSubject (exact); the outcome the selected plan
+    and its price on the paywall, never a payment confirmation (runs never pay, and Play''s purchase sheet is not the app''s
+    screen); the slot the plan''s name, not its price (localised, fetched from Play Billing, changed by offers)'
+created: '2026-11-21'
+derived_from:
+  family: subscription-plan-selection
+  version: 1

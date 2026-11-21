@@ -1,0 +1,52 @@
+id: document-import-to-pdf
+version: 1
+name: import image to PDF
+entry: the app's main scanning or home screen
+path: select an image from the device gallery and save it as a PDF document
+outcome: the imported image is converted and displayed as a PDF file in the app's library
+purposes:
+- id: P1
+  action: convert an image to PDF
+  object: document
+  beneficiary: user
+  context: digitization
+  outcome: PDF file
+  node: RequestedServiceProvision
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: access the device's image gallery
+  - id: R2
+    statement: identify document boundaries in an image
+  - id: R3
+    statement: convert image data to PDF format
+  oracle:
+    reach:
+    - R1
+    - R2
+    - R3
+    success:
+    - screen_reached:
+        exact_key: '{library_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      library_screen:
+        kind: screen
+        description: the screen showing the list of saved PDF documents
+author:
+  kind: model
+  name: gemma4:31b
+  prompt: skuld.propose 1
+  sha256: 4e2197ef7288d19769fec3eed1794b1e84514549ccf0e4f1df92241e9306f3a5
+created: '2026-11-12'
+derived_from:
+  application: com.adobe.scan.android@26.10.29
+  run: 20261110T113926Z_com.adobe.scan.android_67dc7a
+  episode: 1
+reviewed: null

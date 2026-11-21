@@ -1,0 +1,48 @@
+id: app-onboarding
+version: 1
+name: general app onboarding
+entry: the app's entry screen after a first launch
+path: go through welcome screens, legal agreements, permission requests, and basic preferences
+outcome: the app's main functional screen
+purposes:
+- id: P1
+  action: configure initial app settings and permissions
+  object: app environment
+  beneficiary: user
+  context: first launch
+  outcome: ready-to-use app
+  node: ServiceProvision
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: determine the user's preferences for display
+  - id: R2
+    statement: obtain necessary system permissions
+  oracle:
+    reach:
+    - R1
+    success:
+    - screen_reached:
+        exact_key: '{main_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      main_screen:
+        kind: screen
+        description: the main screen of the app reached after onboarding
+author:
+  kind: model
+  name: gemma4:31b
+  prompt: skuld.propose 1
+  sha256: 501f76bc5a73f9207e268c6f0654f4fa0b9ca83793e9346b0b473755480fd23c
+created: '2026-11-12'
+derived_from:
+  application: com.accuweather.android@21.2.1-1-rc
+  run: 20261110T025316Z_com.accuweather.android_44dd07
+  episode: 1
+reviewed: null

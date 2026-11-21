@@ -1,0 +1,46 @@
+id: subscription-plan-selection
+version: 1
+name: subscription plan selection
+entry: the app's main screen or a promotional banner
+path: navigate to the subscription page and select a pricing plan
+outcome: the payment confirmation screen or the selected plan highlighted on the paywall
+purposes:
+- id: P1
+  action: display available subscription plans to the user
+  object: subscription plans
+  beneficiary: provider
+  context: monetization
+  outcome: user can choose a plan
+  node: SellProducts
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: provide a list of available subscription options and their costs
+  oracle:
+    reach:
+    - R1
+    success:
+    - text_shown:
+        any: '{plan_details}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      plan_details:
+        kind: text
+        description: the text describing the selected subscription plan and its price
+author:
+  kind: model
+  name: gemma4:31b
+  prompt: skuld.propose 1
+  sha256: 0df44261a798bf348af6d49bdae76b185fb4b3f087c10b3ef5a9998f21399ee0
+created: '2026-11-12'
+derived_from:
+  application: vsin.t16_funny_photo@3.13.128
+  run: 20261110T191759Z_vsin.t16_funny_photo_b94c62
+  episode: 9
+reviewed: null

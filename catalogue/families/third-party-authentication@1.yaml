@@ -1,0 +1,46 @@
+id: third-party-authentication
+version: 1
+name: third-party authentication
+entry: the app's login or profile screen
+path: select a third-party identity provider and authenticate
+outcome: the app's main screen or profile screen showing the user is logged in
+purposes:
+- id: P1
+  action: authenticate the user
+  object: user identity
+  beneficiary: user
+  context: app access
+  outcome: access to personalized features
+  node: IdentityAuthentication
+  fit: exact
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: verify the user's identity via an external provider
+  oracle:
+    reach:
+    - R1
+    success:
+    - screen_reached:
+        exact_key: '{profile_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      profile_screen:
+        kind: screen
+        description: the screen showing the authenticated user's profile or account status
+author:
+  kind: model
+  name: gemma4:31b
+  prompt: skuld.propose 1
+  sha256: 34fe30c69923a1d392fd5bdb22e453caaa59d50b385a566807d52b03cc937de1
+created: '2026-11-12'
+derived_from:
+  application: vsin.t16_funny_photo@3.13.128
+  run: 20261110T191759Z_vsin.t16_funny_photo_b94c62
+  episode: 4
+reviewed: null

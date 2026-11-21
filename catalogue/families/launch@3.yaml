@@ -1,0 +1,97 @@
+id: launch
+version: 3
+name: launch
+entry: cold start from the launcher, fresh data
+path: no action
+outcome: an entry screen of the app, ready for input
+purposes:
+- id: P1
+  action: start and present
+  object: the app's entry screen
+  beneficiary: user
+  context: first launch
+  outcome: the app is ready for the user's first input
+  node: ServiceProvision
+  fit: broader
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: load the app's code and resources
+  - id: R2
+    statement: show an entry screen
+  oracle:
+    reach:
+    - R1
+    - R2
+    success:
+    - first_screen_ready: {}
+    invalid:
+    - hold_above_ms: 1000
+    - launcher_first: {}
+    measurements: []
+    slots: {}
+    categories:
+    - names:
+      - Weather
+      - Wetter
+      success:
+      - text_shown:
+          any:
+          - °
+      control:
+        intervention: network
+        expected: breaks
+    - names:
+      - Maps & Navigation
+      - Karten & Navigation
+      success:
+      - text_shown:
+          any:
+          - Suche
+          - suchen
+          - Search
+          - search
+          - Route
+    - names:
+      - Productivity
+      - Produktivität
+      - Business
+      success:
+      - text_shown:
+          any:
+          - Dokument
+          - dokument
+          - Document
+          - document
+          - Scan
+          - scan
+- id: P2
+  action: attribute
+  object: the installation
+  beneficiary: provider
+  context: first launch
+  outcome: the install is credited to the campaign that led to it
+  node: Marketing
+  fit: broader
+  specificity: sufficient
+  role: ancillary
+  requirements:
+  - id: R1
+    statement: tell the attribution service that this install launched
+  - id: R2
+    statement: let the attribution service match the install to a prior ad interaction
+  oracle: null
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026): version 2 with content by the application''s
+    store category (Sága''s store_listing.category, in English or German): a weather app''s first screens show a temperature,
+    a map app''s a search or a route, a scanner''s or productivity app''s documents or a scan; a category without an entry
+    keeps version 2''s oracle. A launch that brought up the launcher or another app first is an invalid run (launcher_first).
+    A weather app''s content needs the network: its control blocks every host the baseline runs contacted. The texts of a
+    heading (''Vorhersage'', ''Forecast'') are left out, as a screen shows them without a forecast'
+created: '2026-11-21'
+derived_from:
+  family: launch
+  version: 2

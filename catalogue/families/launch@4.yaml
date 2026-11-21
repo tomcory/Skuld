@@ -1,0 +1,103 @@
+id: launch
+version: 4
+name: launch
+entry: cold start from the launcher, fresh data
+path: no action
+outcome: an entry screen of the app, ready for input
+purposes:
+- id: P1
+  action: start and present
+  object: the app's entry screen
+  beneficiary: user
+  context: first launch
+  outcome: the app is ready for the user's first input, showing its primary content where its store category has some
+  node: ServiceProvision
+  fit: broader
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: load the app's code and resources
+  - id: R2
+    statement: show an entry screen
+  - id: R3
+    statement: show the app's primary content where its store category has some (a weather app's temperature)
+  oracle:
+    reach:
+    - R1
+    - R2
+    success:
+    - first_screen_ready: {}
+    invalid:
+    - hold_above_ms: 1000
+    - launcher_first: {}
+    measurements: []
+    slots: {}
+    categories:
+    - names:
+      - Weather
+      - Wetter
+      success:
+      - text_shown:
+          any:
+          - 0°
+          - 1°
+          - 2°
+          - 3°
+          - 4°
+          - 5°
+          - 6°
+          - 7°
+          - 8°
+          - 9°
+      reach:
+      - R3
+      control:
+        intervention: network
+        expected: breaks
+    - names:
+      - Maps & Navigation
+      - Karten & Navigation
+      success:
+      - text_shown:
+          any:
+          - Suche
+          - suchen
+          - Search
+          - search
+          - Route
+          - route
+          - Directions
+          - Navigation
+- id: P2
+  action: attribute
+  object: the installation
+  beneficiary: provider
+  context: first launch
+  outcome: the install is credited to the campaign that led to it
+  node: Marketing
+  fit: broader
+  specificity: sufficient
+  role: ancillary
+  requirements:
+  - id: R1
+    statement: tell the attribution service that this install launched
+  - id: R2
+    statement: let the attribution service match the install to a prior ad interaction
+  oracle: null
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), from the catalogue review of 21 Nov
+    (reviews/notes-2026-11-21.md): version 3 with a weather app''s temperature as a digit followed by the degree sign (''0°''
+    … ''9°''), since a bare ''°'' is shown by placeholders (''--°'') and unit choices (''°C'') without a forecast and under
+    the network block; the Productivity/Business entry dropped (the category mixes scanners, notes and calculators, and a
+    scanner''s empty library matches ''Dokument''), so such apps keep first_screen_ready; a requirement R3 for the category''s
+    content, which the weather entry reaches (a category entry''s reach) and the map entry does not (its texts are a search
+    field and a route button, a stronger ready check, without a control); ''Directions'', ''Navigation'' and ''route'' added
+    to it. A weather app''s forecast needs the network: its control blocks the baseline''s hosts. Check each weather app''s
+    baseline for a consent wall or a location prompt before the forecast (de-DE)'
+created: '2026-11-21'
+derived_from:
+  family: launch
+  version: 3

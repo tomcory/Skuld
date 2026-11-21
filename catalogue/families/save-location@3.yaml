@@ -1,0 +1,56 @@
+id: save-location
+version: 3
+name: save a place
+entry: the app's main screen or its list of saved places
+path: find a place and add it to the app's list of saved places
+outcome: the place in the app's list of saved places
+purposes:
+- id: P1
+  action: keep
+  object: a place the user chose
+  beneficiary: user
+  context: a list of places the app keeps for the user
+  outcome: the user reaches the place again without searching
+  node: ServicePersonalisation
+  fit: broader
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: identify a place from the user's input
+  - id: R2
+    statement: add the place to the list of saved places
+  oracle:
+    reach:
+    - R1
+    - R2
+    success:
+    - text_shown:
+        any: '{saved_place}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      saved_place:
+        kind: text
+        description: the name of the saved place as the list of saved places shows it at the end of the path
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), from the catalogue review of 21 Nov
+    (reviews/notes-2026-11-21.md): version 2 in generic words (no weather: a map or transit app''s saved places are of the
+    family too); R2 adding the place to the list of saved places, which is mostly on the device, not on an account; the node
+    ServicePersonalisation, fit broader; the oracle on the saved place''s name as the list shows it, not on the list''s heading,
+    which an empty list and a failed save show. No screen slot: the list is often the flow''s first screen, which a screen
+    slot may not name. The network control stays, expected to break: finding a place needs the network, so it tests the search,
+    not the save, which is often local; a goal run that saves the current location without a search may preserve truthfully
+    (the control then reports whether a blocked host was tried)'
+created: '2026-11-21'
+derived_from:
+  family: save-location
+  version: 2
+control:
+  intervention: network
+  expected: breaks

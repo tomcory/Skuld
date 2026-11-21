@@ -1,0 +1,50 @@
+id: app-onboarding
+version: 2
+name: general app onboarding
+entry: the app's entry screen after a first launch
+path: go through welcome screens, legal agreements, permission requests, and basic preferences
+outcome: the app's main functional screen
+purposes:
+- id: P1
+  action: set up
+  object: the app for its first use
+  beneficiary: user
+  context: first launch
+  outcome: ready-to-use app
+  node: ServiceProvision
+  fit: broader
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: determine the user's preferences for display
+  - id: R2
+    statement: obtain necessary system permissions
+  - id: R3
+    statement: complete the onboarding
+  oracle:
+    reach:
+    - R3
+    success:
+    - screen_reached:
+        exact_key: '{main_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      main_screen:
+        kind: screen
+        description: the main screen of the app reached after onboarding
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), from the catalogue review of 21 Nov
+    (reviews/notes-2026-11-21.md): version 1 with a requirement R3 ''complete the onboarding'', the only one the oracle reaches:
+    the main screen after the onboarding shows that it was completed, not the display preferences (R1) or the permissions
+    (R2); fit broader, ServiceProvision being a generic parent; the action and object split'
+created: '2026-11-21'
+derived_from:
+  family: app-onboarding
+  version: 1
