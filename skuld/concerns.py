@@ -326,7 +326,8 @@ def less_invasive_alternative(
         shown = [x for x in decisive if x.get("strength") == "run"]
         if shown:
             reason = "; ".join(
-                f"{x['alternative']} demonstrated for {x['purpose']['id']} ({x['purpose']['node']}) of case {x['case']}"
+                f"{x['alternative']} demonstrated for {x['purpose'].get('id') or x['basis'][0]} ({x['purpose']['node']}) of case "
+                + ", ".join(combine.tested_cases(x))
                 for x in shown
             )
         elif decisive:

@@ -23,7 +23,9 @@ version is part of every sample's identity, and so is the digest of its text.
                                           a purpose needs may be read (judge.SCREENS_SINCE; P10, 21 Nov 2026); 3: the
                                           context last, and "list no entry for it" where a component admits no
                                           alternative, which the models wrote as "none" (2: "give none for it")
-    propose                             2: the context (the flow) last, the answer's form before it; the generator's
+    propose                             3: the needs of the selection's chosen practices (`{needs}`), the families'
+                                          requirements numbered, and each feature says which requirement is which
+                                          need (propose.NEEDS_SINCE; P10 fix 4, 21 Nov 2026); 2: the context (the flow) last, the answer's form before it; the generator's
                                           version (propose.VERSION) names the prompt with the procedure
 """
 
@@ -37,7 +39,7 @@ CURRENT = {
     "specificity": "3",
     "compatibility": "2",
     "minimisation": "5",
-    "propose": "2",
+    "propose": "3",
 }
 
 

@@ -32,12 +32,24 @@ model and yields no finding: the claims it combines are kept, in the samples and
                   strength, so a run's substitutable overrules a hypothesis of essential (the purpose survived the
                   removal) as it overrules one of quality_dependent. Where no hypothesis aligns, reasoning
                   is silent on the experimental case's purpose, and the experiment's claim stands combined alone.
+    tested_needs  the needs of the reasoning's typed Alternative claims that an experiment tested (P10 fix 4): a case
+                  purpose's requirement names a need (`need`), its oracle reaches the requirement, and the case's
+                  alternative imposes the claim's change on the claim's component (the same change key, `remove` or
+                  `replace:<node>`). The comparison then confirms the need (preserves: met) or refutes it (breaks:
+                  not_met), recorded on the need as `tested: {case, outcome, runs}`. A run outranks the documents
+                  (own < doc < run): a need not met makes the claim refuted at strength run, whatever the reasoning
+                  decided; every need met makes it supported at strength run with the level demonstrated, as an
+                  experiment's Alternative claim is; a claim some of whose needs no oracle reached keeps its status
+                  (the case's requirements_not_reached, or no case, as before).
 
 A combined claim's uncertainty is used here, to set its concerns', and not stored: the assessment names this function
 (`uncertainty.CLAIMS`). A concern resting on a purpose `needs` the purpose's uncertainty with its own.
 """
 
 from skuld.uncertainty import either, needs, raised
+
+#: The outcome of a need an experiment tested: met where the alternative preserved the purpose, not_met where it broke it
+MET, NOT_MET = "met", "not_met"
 
 #: The strength of a sample's or an experiment's claim, by which the combination decides; a combined claim states it
 #: only if supported or refuted, and then it is doc or run, since no rule lets own knowledge decide
@@ -51,8 +63,10 @@ DECISIVE = ("supported", "refuted")
 #: agree (21 Nov 2026); 7: alternatives are combined per change as well (`change_key`, from the reasoning tier's reading
 #: 5), so that gate (d) counts the samples that propose the same change (P10 fix 2, 21 Nov 2026); claims of an earlier
 #: reading name no change and are combined per component as before; an Alternative claim of the typed form (P10 (b))
-#: carries its change, needs, gives and covers, its needs named after the combined claim
-VERSION = "7"
+#: carries its change, needs, gives and covers, its needs named after the combined claim; 8: an experiment confirms or
+#: refutes the needs of a typed Alternative claim through a case requirement that names one (`tested_needs`, P10 fix 4,
+#: 21 Nov 2026)
+VERSION = "8"
 COMPONENT = {"role": "method", "id": "skuld.combine", "version": VERSION}
 #: What a combined claim carries over from the claim that decides it; an Alternative claim of the typed minimisation
 #: form (judge.typed) its change, needs, gives and covers too, its needs renamed after the combined claim (<id>:N<k>)
@@ -375,3 +389,88 @@ def experimental(hypotheses: list[dict], premises: list[dict], vocabulary, numbe
                 claim["uncertainty"] = raised(claim["uncertainty"], "aligned_above")
             out.append(claim)
     return out
+
+
+def tested_needs(alternatives: list[dict], premises: list[dict]) -> list[dict]:
+    """
+    The reasoning tier's combined Alternative claims with the needs an experiment tested (P10 fix 4; the rule in the
+    module's docstring): per need, the experimental premises (`experiments.premises`) of the claim's practice and
+    component whose alternative imposes the claim's change and whose oracle reaches a requirement naming the need
+    (`need_tests`). A need tested both ways is not met (a break under the change outranks a run that preserved). A need
+    not met refutes the claim at strength run; every need met supports it at strength run, demonstrated; otherwise
+    its status stands. Returns the claims, changed where a need was tested.
+    """
+    out = []
+    for c in alternatives:
+        if c.get("tier") != "reasoning" or not c.get("needs"):
+            out.append(c)
+            continue
+        mine = [
+            x
+            for x in premises
+            if x.get("need_tests")
+            and x["subject"] == c["subject"]
+            and x["component"] == c["component"]
+            and x.get("imposes") == c.get("change_key")
+        ]
+        if not mine:
+            out.append(c)
+            continue
+        claim = {**c, "needs": [dict(n) for n in c["needs"]]}
+        by_outcome: dict[str, list[dict]] = {MET: [], NOT_MET: []}
+        for n in claim["needs"]:
+            found = [(x, t) for x in mine for t in x["need_tests"] if t["need"] == n["id"]]
+            if not found:
+                continue
+            outcome = NOT_MET if any(t["outcome"] == NOT_MET for _, t in found) else MET
+            deciding = [(x, t) for x, t in found if t["outcome"] == outcome]
+            n["tested"] = {
+                "case": sorted({t["case"] for _, t in deciding})[0],
+                "outcome": outcome,
+                "runs": sorted({r for _, t in deciding for r in t["runs"]}),
+            }
+            by_outcome[outcome] += [x for x, _ in deciding if x not in by_outcome[outcome]]
+        if by_outcome[NOT_MET]:
+            refuting = by_outcome[NOT_MET]
+            unmet = [n["id"] for n in claim["needs"] if (n.get("tested") or {}).get("outcome") == NOT_MET]
+            claim.update(
+                status="refuted",
+                strength="run",
+                level="plausible",
+                channels=sorted({*c["channels"], *(ch for x in refuting for ch in x["channels"])}),
+                supporting=[],
+                challenging=sorted({i for x in refuting for i in x["challenging"]}),
+                sufficiency={"sufficient": True},
+                uncertainty=either(*(x["uncertainty"] for x in refuting)),
+                reason=f"a run refutes what the purpose needs: {', '.join(unmet)} not met under "
+                + ", ".join(sorted({x["alternative"] for x in refuting}))
+                + f" (the reasoning: {c['status']})",
+            )
+        elif all((n.get("tested") or {}).get("outcome") == MET for n in claim["needs"]):
+            confirming = by_outcome[MET]
+            claim.update(
+                status="supported",
+                strength="run",
+                level="demonstrated",
+                channels=sorted({*c["channels"], *(ch for x in confirming for ch in x["channels"])}),
+                supporting=sorted(
+                    {
+                        *(c["supporting"] if c["status"] == "supported" else []),
+                        *(i for x in confirming for i in x["supporting"]),
+                    }
+                ),
+                challenging=[],
+                sufficiency={"sufficient": True},
+                uncertainty=needs(*(x["uncertainty"] for x in confirming)),
+            )
+            claim.pop("reason", None)
+        out.append(claim)
+    return out
+
+
+def tested_cases(claim: dict) -> list[str]:
+    """The experimental cases a claim rests on: an experiment's own case, or the cases that tested a reasoning claim's
+    needs."""
+    if claim.get("case"):
+        return [claim["case"]]
+    return sorted({n["tested"]["case"] for n in claim.get("needs") or () if n.get("tested")})

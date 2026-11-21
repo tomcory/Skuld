@@ -56,6 +56,12 @@ one it replaces. Within one investigation it may be extended (`--extend`), which
 refusal that does not depend on the budget, counts the device time already chosen, and decides the others again:
 the candidates it did not yet hold and those an earlier budget refused (the Investigator gives each batch just the
 device time of its choice, so its next batch may choose what the earlier one refused).
+
+A candidate carries the needs of the reasoning tier's typed Alternative claims on its purpose (`needs_of`, P10 fix 4,
+21 Nov 2026): per combined claim whose change an experiment can impose (`remove`, `replace:<node>`: the search space has
+no alternative for on-device processing or a narrower recipient), its id, component, change and needs (id and
+requirement). The generator shows them to the model (`propose`), and a case purpose's requirement may name the need it
+corresponds to, which an oracle that reaches the requirement then confirms or refutes (`combine.tested_needs`).
 """
 
 import hashlib
@@ -70,8 +76,9 @@ import yaml
 from skuld import catalogue, combine, config, inputs, space, yamlio
 
 VERSION = (
-    "4"  # 4: a datum below a hooked source's node is imposable, as experimental cases vary it;
-    # 3: unobservable purposes refused
+    "5"  # 5: a candidate carries the needs of the reasoning's typed Alternative claims on its purpose whose change an
+    # experiment can impose (`needs_of`; P10 fix 4, 21 Nov 2026); 4: a datum below a hooked source's node is
+    # imposable, as experimental cases vary it; 3: unobservable purposes refused
 )
 AUTHOR = {"kind": "rule", "id": "skuld.select", "version": VERSION}
 FILE = "inputs/selection.json"
@@ -300,6 +307,7 @@ def candidates(report: dict, practices: list[dict], study: Path | None = None) -
         if k is not None and k["status"] == "supported":
             continue
         p = by_id[h["subject"]]
+        shown = needs_of(report, h["id"])
         out.append(
             {
                 "practice": p["id"],
@@ -311,6 +319,7 @@ def candidates(report: dict, practices: list[dict], study: Path | None = None) -
                 "episodes": p.get("episodes") or [],
                 "fields": {f: p.get(f) for f in ("id", "claim_type", "data", "recipient")},
                 "components": space.imposable(SimpleNamespace(**{**p, "party": p.get("party")})),
+                **({"needs": shown} if shown else {}),
                 **(
                     {"tried": f"case {tried[h['id']]['case']}: {tried[h['id']].get('reason', 'not assessable')}"}
                     if h["id"] in tried
@@ -325,6 +334,33 @@ def candidates(report: dict, practices: list[dict], study: Path | None = None) -
                     )
                     else {}
                 ),
+            }
+        )
+    return out
+
+
+#: The change keys of a typed Alternative claim that an experiment's search space can impose (`space.derive`: a removal
+#: of a datum or a recipient, a datum replaced by a coarser node)
+IMPOSABLE_CHANGES = ("remove", "replace:")
+
+
+def needs_of(report: dict, purpose: str) -> list[dict]:
+    """The needs of the reasoning tier's typed Alternative claims on a purpose (`basis` the purpose), per claim whose
+    change an experiment can impose: {claim, component, change_key, alternative, needs: [{id, requirement}]}."""
+    out = []
+    for c in report.get("claims") or ():
+        if c["type"] != "alternative" or c.get("tier") != "reasoning" or c.get("basis") != [purpose]:
+            continue
+        key = c.get("change_key") or ""
+        if not c.get("needs") or not key.startswith(IMPOSABLE_CHANGES):
+            continue
+        out.append(
+            {
+                "claim": c["id"],
+                "component": c["component"],
+                "change_key": key,
+                "alternative": c.get("alternative", ""),
+                "needs": [{"id": n["id"], "requirement": n["requirement"]} for n in c["needs"]],
             }
         )
     return out

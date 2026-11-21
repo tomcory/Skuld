@@ -236,6 +236,7 @@ def build(
     tier = _reasoning_tier(a, built, hypotheses, item, registry, applicability, number, reading, notices)
     premises = experiments.premises(a.cases, root, built.practices, item)
     tested = combine.experimental(hypotheses, premises, purposes, number)
+    tier["alternatives"] = combine.tested_needs(tier["alternatives"], premises)
     more, cover = concerns.less_invasive_alternative(
         a.frame, hypotheses, tier["alternatives"], tier["judged"], applicability, tested
     )

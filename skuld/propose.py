@@ -37,6 +37,15 @@ store category (`launch@4`: a temperature for a weather app, a search field for 
 (`store_category`: a listing, a collection, or D's report on it; `skuld propose --listing`, else the D report the
 workspace's assessment.yaml names); a category without an entry keeps the family's own conditions. A family's control
 (`catalogue`) is written into its cases.
+
+Requirements are the unit shared with the reasoning (generator 4, P10 fix 4, 21 Nov 2026). Where a chosen practice of
+the selection carries needs (`select.needs_of`: what the reasoning's typed Alternative claims say its purpose needs,
+each with a stable id `<claim>:N<k>`) and the flow is one of its episodes, the prompt (version 3) shows them, with the
+families' requirements numbered, and a feature says which requirement of which of its purposes is which need
+(`needs: [{purpose, requirement, need}]`). A need the prompt did not show, a purpose or requirement the family does not
+have, or two needs for one requirement refuse the feature. The case's requirement then names its need (`need`), and an
+oracle that reaches it confirms or refutes the need (`combine.tested_needs`). The merge keeps the needs of a case's
+first proposer and adds those another proposer of the same family names for a requirement still without one.
 """
 
 import hashlib
@@ -56,11 +65,12 @@ from skuld import catalogue as cat
 from skuld.common import DATA, PURPOSES, vocabulary
 from skuld.observe import observe
 
-#: 3 (21 Nov 2026): per-model proposals merged into one set of cases with their proposers, the launch's conditions by
+#: 4 (21 Nov 2026): the needs of the selection's chosen practices shown, and a case's requirement names the need it
+#: corresponds to (P10 fix 4; prompt version 3). 3 (21 Nov 2026): per-model proposals merged into one set of cases with their proposers, the launch's conditions by
 #: the store category, a family's control in its cases. 2 (20 Nov 2026): the flow's screens without what Ratatoskr's notice definition takes for notices, as the
 #: expectation stage's (C3: the proposer saw consent dialogs and privacy notices), and the prompt's version 2 (the
 #: flow last). Changes the experimental cases' digests
-VERSION = "3"
+VERSION = "4"
 #: The version of Ratatoskr's notice definition the flow's screens leave notices out by
 NOTICES = notice_rules.VERSION
 PROMPT = "propose"
@@ -149,6 +159,31 @@ ANSWER_SCHEMA = {
     "required": ["features"],
     "properties": {"features": {"type": "array", "items": _FEATURE_SCHEMA}},
 }
+_NEEDS_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "required": ["purpose", "requirement", "need"],
+        "properties": {"purpose": {"type": "integer"}, "requirement": {"type": "integer"}, "need": _STRING},
+    },
+}
+#: The answer's form where the prompt shows needs: each feature says which of its requirements are which need
+NEEDS_ANSWER_SCHEMA = {
+    "type": "object",
+    "required": ["features"],
+    "properties": {
+        "features": {
+            "type": "array",
+            "items": {
+                **_FEATURE_SCHEMA,
+                "required": [*_FEATURE_SCHEMA["required"], "needs"],
+                "properties": {**_FEATURE_SCHEMA["properties"], "needs": _NEEDS_SCHEMA},
+            },
+        }
+    },
+}
+#: The prompt's version from which it shows the needs of the chosen practices (`{needs}`)
+NEEDS_SINCE = 3
 #: The family whose experimental cases are filled by rule, not asked of the model
 RULE_FILLED = "launch"
 #: Features of one flow at most: a first run, say, whose onboarding ends at the app's main feature
@@ -319,14 +354,86 @@ def without_notices(texts: list[str], notices: str = NOTICES) -> list[str]:
     return [t for t in texts if t not in declared]
 
 
-def render_catalogue(families: list[cat.Family]) -> str:
+def render_catalogue(families: list[cat.Family], requirements: bool = False) -> str:
+    """The families as the model is shown them; with `requirements`, each purpose numbered with its requirements
+    numbered, so that a feature can name which requirement is which need."""
     if not families:
         return "(The catalogue is empty.)"
-    return "\n".join(json.dumps(f.summary(), ensure_ascii=False) for f in families)
+    out = []
+    for f in families:
+        summary = f.summary()
+        if requirements:
+            summary["purposes"] = [
+                {
+                    "purpose": n,
+                    "is": text,
+                    "requirements": {str(m): r["statement"] for m, r in enumerate(p["requirements"], 1)},
+                }
+                for n, (text, p) in enumerate(zip(summary["purposes"], f.data["purposes"], strict=True), 1)
+            ]
+        out.append(json.dumps(summary, ensure_ascii=False))
+    return "\n".join(out)
+
+
+def episode_needs(selection: dict | None, episode: str) -> list[dict]:
+    """The needs the selection's chosen practices of an episode carry (`select.needs_of`), per practice and claim:
+    {practice, fields, node, beneficiary, claim, component, change_key, alternative, needs}."""
+    if selection is None:
+        return []
+    out = []
+    for e in select.chosen(selection):
+        if episode not in {str(x) for x in e.get("episodes") or ()}:
+            continue
+        for c in e.get("needs") or ():
+            out.append(
+                {
+                    "practice": e["practice"],
+                    "fields": e.get("fields") or {},
+                    "node": e.get("node"),
+                    "beneficiary": e.get("beneficiary"),
+                    **c,
+                }
+            )
+    return out
+
+
+def render_needs(shown: list[dict]) -> str:
+    """The prompt's section on the needs of the chosen practices (empty where none is shown)."""
+    if not shown:
+        return ""
+    lines = [
+        "# What the purposes need",
+        "",
+        "This experiment tests what an assessment's reasoning says about the practices observed in this flow: for each,",
+        "an alternative that changes the practice, and what the practice's purpose needs, each need with an id. Where a",
+        "requirement of a purpose of a feature you give (of the family you choose, or of the new family you describe)",
+        "states the same capability as a need, so that a repetition of the flow that meets the requirement meets the",
+        "need, name it in the feature's `needs`: one entry per such requirement, with `purpose` and `requirement`, the",
+        "numbers (1, 2, …) of the purpose in the family and of the requirement in the purpose, and `need`, the need's id",
+        "exactly as given. Name a need only where the requirement states the same capability, at most one need per",
+        "requirement; give `needs` empty where none corresponds. The needs do not change which family you choose.",
+        "",
+    ]
+    for x in shown:
+        f = x["fields"]
+        practice = f"{f.get('claim_type') or 'processes'} {f.get('data') or '?'}" + (
+            f" to {f['recipient']}" if f.get("recipient") else ""
+        )
+        lines.append(
+            f"- The practice {practice}, for its purpose {x.get('node') or '?'} ({x.get('beneficiary') or '?'}); "
+            f"the alternative ({x['change_key']} of its {x['component'].rsplit('.', 1)[-1]}): {x['alternative']}"
+        )
+        lines += [f"  - {n['id']}: {n['requirement']}" for n in x["needs"]]
+    return "\n".join(lines) + "\n\n"
 
 
 def problems(
-    answer: dict | None, flow: Flow, catalogue: cat.Catalogue, purposes: Vocabulary, titles: list[str] = ()
+    answer: dict | None,
+    flow: Flow,
+    catalogue: cat.Catalogue,
+    purposes: Vocabulary,
+    titles: list[str] = (),
+    needs: set[str] = frozenset(),
 ) -> tuple[list[str], list[dict]]:
     """
     What refuses an answer (no feature, two new families of one id, or what refuses one of its features), and the
@@ -342,7 +449,7 @@ def problems(
     out = [f"two new families are called {i}" for i in sorted(twice)]
     passing = []
     for n, feature in enumerate(features, 1):
-        found = feature_problems(feature, flow, catalogue, purposes, titles)
+        found = feature_problems(feature, flow, catalogue, purposes, titles, needs)
         out += [f"feature {n}: {p}" for p in found]
         if not found and (feature.get("new_family") or {}).get("id") not in twice:
             passing.append(feature)
@@ -350,11 +457,18 @@ def problems(
 
 
 def feature_problems(
-    answer: dict, flow: Flow, catalogue: cat.Catalogue, purposes: Vocabulary, titles: list[str] = ()
+    answer: dict,
+    flow: Flow,
+    catalogue: cat.Catalogue,
+    purposes: Vocabulary,
+    titles: list[str] = (),
+    needs: set[str] = frozenset(),
 ) -> list[str]:
     """
     What refuses a feature of an answer: an unknown family; a malformed new one, or one whose requirements name a
-    datum of the search space (`titles`) or an identifier; or a slot not filled from the flow's screens.
+    datum of the search space (`titles`) or an identifier; a slot not filled from the flow's screens; or a need it
+    names that the prompt did not show (`needs`, the ids shown), for a purpose or requirement its family does not
+    have, or a second need for one requirement.
     """
     out = []
     family_id = answer.get("family")
@@ -384,6 +498,8 @@ def feature_problems(
         except cat.CatalogueError as e:
             return [str(e)]
         slots = _slots(family.data)
+        data = family.data
+    out += need_problems(answer.get("needs") or [], data, needs)
     values = {s["name"]: s["values"] for s in answer.get("slots") or ()}
     for name, slot in slots.items():
         given = [v for v in values.get(name) or () if v.strip()]
@@ -421,6 +537,28 @@ def _slot_problems(kind: str, values: list[str], flow: Flow) -> list[str]:
         for v in values:  # each, since the first is the one bound
             if not any(s.activity.endswith(v) for s in flow.screens):
                 out.append(f"{v!r} is not the activity of a screen of the flow")
+    return out
+
+
+def need_problems(named: list[dict], family: dict, shown: set[str]) -> list[str]:
+    """What refuses the needs a feature names: an id the prompt did not show, a purpose or requirement the family
+    (a catalogue family's data, or the new one's) does not have, a second need for one requirement."""
+    out, seen = [], set()
+    for x in named:
+        need, n, m = x.get("need"), x.get("purpose"), x.get("requirement")
+        if need not in shown:
+            out.append(f"need {need!r} is not one of the needs shown")
+            continue
+        ps = family["purposes"]
+        if not isinstance(n, int) or not 1 <= n <= len(ps):
+            out.append(f"need {need}: the family has no purpose {n}")
+            continue
+        if not isinstance(m, int) or not 1 <= m <= len(ps[n - 1]["requirements"]):
+            out.append(f"need {need}: purpose {n} has no requirement {m}")
+            continue
+        if (n, m) in seen:
+            out.append(f"need {need}: requirement {m} of purpose {n} names a need already")
+        seen.add((n, m))
     return out
 
 
@@ -695,6 +833,7 @@ def propose_model(
             summary["episodes"]["launch"] = {"cases": [{"case": "launch", "family": launch.key}], "title": "launch"}
 
     sampling = config.options("propose")
+    shows_needs = int(templates.version(PROMPT)) >= NEEDS_SINCE
     for flow in exp.flows:
         key = f"e{flow.episode}"
         if wanted is not None and (
@@ -702,23 +841,27 @@ def propose_model(
         ):
             summary["episodes"][key] = {"cases": [], "title": flow.title, "refused": ["no practice of it was chosen"]}
             continue
+        # the needs of the chosen practices of the episode, from prompt version 3 (NEEDS_SINCE)
+        shown = episode_needs(selection, str(flow.episode)) if shows_needs else []
+        shown_ids = {n["id"] for x in shown for n in x["needs"]}
         prompt = template.format(
-            catalogue=render_catalogue([f for f in catalogue.latest() if f.id != RULE_FILLED]),
+            catalogue=render_catalogue([f for f in catalogue.latest() if f.id != RULE_FILLED], bool(shown)),
             nodes=", ".join(n.id for n in purposes),
+            needs=render_needs(shown),
             flow=render_flow(flow),
         )
         titles = _titles(space.derive(report, {str(flow.episode)}, exp.package, own=own)[0], data)
         passing: list[dict] = []
 
-        def refuse(text: str | None, flow=flow, titles=titles) -> list[str]:
+        def refuse(text: str | None, flow=flow, titles=titles, shown_ids=shown_ids) -> list[str]:
             nonlocal passing
-            found, passing = problems(_parse(text) if text else None, flow, catalogue, purposes, titles)
+            found, passing = problems(_parse(text) if text else None, flow, catalogue, purposes, titles, shown_ids)
             return found
 
         sample, refused, _ = ask.ask_with_feedback(
             lambda attempt, key=key: mine / key / f"a{attempt}",
             prompt,
-            ANSWER_SCHEMA,
+            NEEDS_ANSWER_SCHEMA if shown else ANSWER_SCHEMA,
             lambda asked, flow=flow: {
                 "episode": flow.episode,
                 "generator": {"id": "skuld.propose", "version": VERSION, "notices": NOTICES},
@@ -736,7 +879,7 @@ def propose_model(
             provider=provider,
         )
         if sample is not None and sample.text is None:
-            refused, passing = problems(None, flow, catalogue, purposes, titles)
+            refused, passing = problems(None, flow, catalogue, purposes, titles, shown_ids)
         folder = sample.folder if sample is not None else None
         summary["episodes"][key] = {"cases": [], "title": flow.title}
         if refused:
@@ -844,6 +987,11 @@ def merge(
                 same["models"].add(m["model"])
                 if proposer not in same["proposers"]:
                     same["proposers"].append(proposer)
+                if family.key == same["family"].key:  # a need for a requirement the first proposers left without one
+                    named = {(x["purpose"], x["requirement"]) for x in same["needs"]}
+                    same["needs"] += [
+                        x for x in record.get("needs") or () if (x["purpose"], x["requirement"]) not in named
+                    ]
                 continue
             merged.append(
                 {
@@ -852,6 +1000,7 @@ def merge(
                     "family": family,
                     "proposers": [proposer],
                     "models": {m["model"]},
+                    "needs": [dict(x) for x in record.get("needs") or ()],
                 }
             )
 
@@ -896,6 +1045,7 @@ def merge(
             own,
             category=record.get("category"),
             proposers=item["proposers"],
+            needs=item["needs"],
         )
         held = out["episodes"].setdefault(key, {"cases": [], "title": key})
         if named is None:
@@ -999,6 +1149,7 @@ def _feature_case(
         "bindings": bindings,
         "author": _author(generator, {"api": api, "name": model}, family, answered),
         "proposer": {"kind": "model", "name": model, "family": family.key, "case": case_id, "answer": answered},
+        **({"needs": [dict(x) for x in answer["needs"]]} if answer.get("needs") else {}),
     }
 
 
@@ -1018,11 +1169,14 @@ def _write_case(
     own=None,
     category=None,
     proposers=(),
+    needs=(),
 ) -> list[str] | None:
     """Writes an experimental case and its oracles; returns the requirements that name a datum of its search space
     (kept, reported), or None, writing nothing, where `keep` keeps no component of it. An oracle template's
     conditions of the application's store category (`category`) are added to its own (`catalogue.success`); the
-    family's control (or the category's) is the case's; the proposers are recorded."""
+    family's control (or the category's) is the case's; the proposers are recorded; a requirement names the need a
+    proposer said it corresponds to (`needs`: [{purpose, requirement, need}], by numbers)."""
+    need_of = {(x["purpose"], x["requirement"]): x["need"] for x in needs}
     components, alternatives = space.derive(report, episodes, package, keep, own)
     if keep is not None and not components:
         return None
@@ -1058,7 +1212,14 @@ def _write_case(
                 "provenance": "feature",
                 "specificity": p["specificity"],
                 "role": p["role"],
-                "requirements": [{"id": rid[r["id"]], "statement": r["statement"]} for r in p["requirements"]],
+                "requirements": [
+                    {
+                        "id": rid[r["id"]],
+                        "statement": r["statement"],
+                        **({"need": need_of[(n, m)]} if (n, m) in need_of else {}),
+                    }
+                    for m, r in enumerate(p["requirements"], 1)
+                ],
                 "oracle": oracle_key,
             }
         )

@@ -31,6 +31,6 @@ Fill every slot of the family you chose or described, from the screens below:
 
 Answer with JSON: `features`, a list with one entry per feature, each with `family` (an id of the catalogue, or "new"), `new_family` (null unless `family` is "new"), `slots` (one entry per slot: its name and its values; one value for a slot of kind `screen`), `name` (a short name of this app's feature), and `outcome` (what this app shows when the feature worked, in one sentence).
 
-# The flow
+{needs}# The flow
 
 {flow}

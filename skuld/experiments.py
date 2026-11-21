@@ -942,6 +942,12 @@ def premises(cases: Workspace | None, root: Path, practices: list, item) -> list
     experimental channel (`ex:<case>`), once per practice whose component the case's component varies (`space.varies`),
     with the case's purpose (provenance `case`) and the requirements its oracle reaches. `item(key, fields)` gives the
     evidence item of a comparison, of kind run, which points into the case report.
+
+    An Alternative claim also states the change its alternative imposes (`imposes`, a change key as the reasoning's
+    typed claims name it: `remove`, `replace:<nodes>`) and, where the status rule decided it, the needs it tests
+    (`need_tests`, P10 fix 4): per requirement its oracle reaches that names a need (`need`), the need, the case, the
+    outcome (met where the alternative preserves the purpose, not_met where it breaks it) and the runs under the
+    alternative. `combine.tested_needs` reads them; they are not carried into a combined claim.
     """
     report = case_report(cases, root)
     if report is None:
@@ -1011,6 +1017,11 @@ def premises(cases: Workspace | None, root: Path, practices: list, item) -> list
                     **({"strength": "run"} if decisive else {}),
                     **({"relationship": c.relationship} if c.relationship else {}),
                     **({"alternative": f"{case.id}:{c.alternative}", "level": "demonstrated"} if c.alternative else {}),
+                    **(
+                        {"imposes": imposes_key(case, c.alternative), "need_tests": tests}
+                        if c.alternative and (tests := need_tests(case, purpose, oracle, c))
+                        else {}
+                    ),
                     # a substitutable dependency names its substitutes though it is supported
                     **(
                         {"reason": c.reason} if c.reason and (not decisive or c.relationship == "substitutable") else {}
@@ -1018,6 +1029,31 @@ def premises(cases: Workspace | None, root: Path, practices: list, item) -> list
                 }
                 out.append(x)
     return out
+
+
+def imposes_key(case: Case, alternative: str) -> str:
+    """The change a search-space alternative imposes, keyed as the reasoning's typed Alternative claims key theirs
+    (judge.typed_change_key): `remove` for a removal, `replace:<nodes>` for a component set to coarser nodes."""
+    a = next(x for x in case.alternatives if x.id == alternative)
+    if a.removal:
+        return "remove"
+    nodes = sorted({str(ch["value"]) for ch in a.changes if ch.get("value")})
+    return "replace:" + ",".join(nodes) if nodes else "other"
+
+
+def need_tests(case: Case, purpose, oracle, claim) -> list[dict]:
+    """The needs a decided Alternative claim tests (P10 fix 4): per requirement of its purpose that names a need and
+    that its oracle reaches, {need, requirement, case, outcome: met | not_met, runs}; none for a claim the status rule
+    did not decide."""
+    if oracle is None or not claim.comparisons or claim.status not in ("supported", "refuted"):
+        return []
+    outcome = "met" if claim.status == "supported" else "not_met"
+    runs = sorted({r for k in claim.comparisons for r in k.alternative_runs})
+    return [
+        {"need": r["need"], "requirement": r["id"], "case": case.id, "outcome": outcome, "runs": runs}
+        for r in purpose.requirements
+        if r.get("need") and r["id"] in oracle.reach
+    ]
 
 
 def device_seconds(cases: Workspace | None, root: Path) -> float:
