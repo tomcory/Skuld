@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.12.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.12.1.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -54,6 +54,12 @@ Q8 by the author on 21 Nov 2026). Since 0.12.0 (P10, Ratatoskr 0.41.0;
   corresponds to (`need`); an oracle that reaches it tests the need (`tested: {case, outcome, runs}`), and a run
   outranks the documents: a need not met refutes the Alternative claim at strength run, every need met demonstrates
   it.
+
+Since 0.12.1 (the P10 live trial's findings 3 and 4) the practice's part of a minimisation context lists the
+admissible replacements of its data component ("Admissible replacements of P-….data: <node> (<title>), …", or "none";
+`judge.replacements`), and the prompt (6) says that a REPLACE must name one of them; and a `fact_missing` gap is keyed
+by the node and the kind, else by the node and the change, with the models' wordings kept as examples (gaps 3), so
+that the gaps aggregate.
 
 Checked against the code on 2026-11-21.
 
