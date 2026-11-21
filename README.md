@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.11.3.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.11.4.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -27,7 +27,9 @@ failure of its oracle, the launch checks content by the application's store cate
 family proposes cases whose union is run once. Since 0.11.1 a goal-directed control run that did not reach its goal
 is a break ("broken: goal not reached"), a control blocks the registrable domains of the baseline's hosts and reports
 a sensitivity failure only where the app tried a blocked host, and the catalogue refuses a slot with stray keys and
-offers no superseded family (`launch@5` and the review's new versions). Checked against the code on 2026-11-21.
+offers no superseded family (`launch@5` and the review's new versions). Since 0.11.4 a datum at the data vocabulary's
+root retrieves no documentation by its node, and each passage of a stage-1 context names the practices it was
+retrieved for, which alone it documents (prompts expectation 8). Checked against the code on 2026-11-21.
 
 ## Role in Asgard
 
@@ -330,7 +332,7 @@ generator's feature families, committed, with their reviews in `catalogue/review
 ## Tests
 
 ```bash
-uv run pytest                     # 547 tests on 2026-11-21
+uv run pytest                     # 553 tests on 2026-11-21
 ruff format . && ruff check .
 ```
 
