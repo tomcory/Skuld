@@ -282,7 +282,10 @@ def test_practices_of_an_unidentified_datum_are_left_out_with_a_gap_when_configu
     unknown = left_out[0].id
     assert not any(x["subject"] == unknown for x in known["claims"] + known["concerns"])
     gap = next(g for g in known["gaps"] if g["reason"] == "source_not_analysable")
-    assert unknown in gap["proposition"] and "of" not in gap and gap["observability"] == "E3"
+    assert unknown in gap["proposition"] and "of" not in gap and "observability" not in gap
+    # O's reason for the payload (encrypted, binary) asks for an instrument; it bears on the practice's requirements
+    assert gap["next"]["kind"] == "improve_instrument"
+    assert {b["ref"] for b in gap["bears_on"]} >= {"requirement:purpose_specified", "requirement:data_minimised"}
     from skuld.provenance import check_assessment
 
     assert check_assessment(a, known) == []

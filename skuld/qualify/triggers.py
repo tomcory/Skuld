@@ -15,14 +15,17 @@ calibration (ADR 0004); no decision on them changes this report.
     purpose_too_vague              a D–E relation purpose_too_vague                       read as ≈ and as ≠
     model_against_measurement      a concern resting on a combined claim that overruled   the concern's status flipped
                                    a claim of the other kind of strength (S-22)
-    beyond_external_observability  a concern or gap with observability E3 or E4           resolved for and against
+    beyond_external_observability  a concern not assessable, or a gap whose next step is  resolved for and against
+                                   an audit request (results.py, step 4)
 """
 
 from skuld.qualify import symbols
 from skuld.qualify.nextsteps import _concern, _relation, _without_gap
 from skuld.qualify.results import View, result
 
-VERSION = "2"  # 2: high_uncertainty reads one level (Ratatoskr 0.34.0), before any factor high
+#: 3: beyond_external_observability reads a concern not assessable or a gap whose next step is an audit request, not a
+#: level (Ratatoskr 0.39.0; 21 Nov 2026); 2: high_uncertainty reads one level (Ratatoskr 0.34.0), before any factor high
+VERSION = "3"
 COMPONENT = {"role": "method", "id": "skuld.qualify.triggers", "version": VERSION}
 
 
@@ -92,8 +95,8 @@ def triggers(index, holding, view: View) -> list[dict]:
         [c.id for c in against],
         [(f"{c.id} as the overruled claim would have it", _concern(view, c.id, _flip(c.status))) for c in against],
     )
-    beyond_c = [c for c in view.concerns if c.observability in ("E3", "E4")]
-    beyond_g = [g for g in view.gaps if g.observability in ("E3", "E4")]
+    beyond_c = [c for c in view.concerns if c.status == "not_assessable"]
+    beyond_g = [g for g in view.gaps if g.audit]
     add(
         "beyond_external_observability",
         [c.id for c in beyond_c] + [g.id for g in beyond_g],

@@ -189,13 +189,14 @@ def test_every_gap_reason_of_the_pinned_schema_has_a_next_step():
         a = Assessment()
         p = a.practice()
         a.assessed_for_practice(p)
-        a.gap(p, reason, of=p, observability="E3")
+        a.gap(p, reason, of=p)
         q = qualified(a)
         assert q["next_steps"], reason
-    with pytest.raises(nextsteps.UnknownReason):
+    with pytest.raises(nextsteps.UnknownReason):  # a gap without a next step
         a = Assessment()
         p = a.practice()
         a.gap(p, "a_new_reason", of=p)
+        a.report["gaps"][-1]["next"] = {}
         qualify(a.build(), REQUIREMENTS)
 
 
@@ -355,18 +356,34 @@ def test_beyond_external_evidence_is_not_externally_assessable():
     p = a.practice()
     a.assessed_for_practice(p)
     declared(a, p, "corresponds_exactly")
-    a.gap(p, "oracle_not_observable", of=p, observability="E3")
+    a.gap(p, "oracle_not_observable", of=p, kind="audit_request", held="record")
     assert case(qualified(a), p)["result"] == NOT_ASSESSABLE
 
 
-def test_an_audit_request_carries_its_level():
+def test_a_gap_with_an_external_step_is_not_beyond_external_evidence():
+    # Ratatoskr 0.39.0: step 4 reads a gap whose next step is an audit request, not a level
     a = Assessment()
     p = a.practice()
     a.assessed_for_practice(p)
-    a.gap(p, "oracle_not_observable", of=p, observability="E3")
-    a.gap(p, "applicability_unknown", of=p, observability="E4")
-    levels = {s["level"] for s in qualified(a)["next_steps"] if s["kind"] == "audit_request"}
-    assert levels == {"evidence_assisted_audit", "full_accountability_assessment"}
+    declared(a, p, "corresponds_exactly")
+    a.gap(p, "oracle_not_observable", of=p, kind="improve_instrument")
+    q = case(qualified(a), p)
+    assert q["result"] != NOT_ASSESSABLE
+    assert not [t for t in q["triggers"] if t["trigger"] == "beyond_external_observability"]
+
+
+def test_an_audit_request_carries_what_it_requests():
+    a = Assessment()
+    p = a.practice()
+    a.assessed_for_practice(p)
+    a.gap(p, "oracle_not_observable", of=p, kind="audit_request", held="record")
+    a.gap(p, "applicability_unknown", of=p, kind="audit_request", held="organisation")
+    a.gap(p, "source_not_analysable", of=p, kind="improve_instrument")
+    steps = qualified(a)["next_steps"]
+    assert {s["held"] for s in steps if s["kind"] == "audit_request"} == {"record", "organisation"}
+    assert all("held" not in s for s in steps if s["kind"] != "audit_request")
+    assert "improve_instrument" in {s["kind"] for s in steps}
+    assert all("level" not in s for s in steps)
 
 
 def test_only_minimisation_has_an_experiment():
@@ -375,8 +392,8 @@ def test_only_minimisation_has_an_experiment():
     a.assessed_for_practice(p)
     m = a.concern(p, status="not_established")
     s = a.concern(p, "purpose_compatible", status="not_established", step="no_specified_purpose")
-    a.gap(p, "not_admitted", of=m)
-    a.gap(p, "not_admitted", of=s)
+    a.gap(p, "not_admitted", of=m, kind="experiment")
+    a.gap(p, "not_admitted", of=s, kind="re-analyse")
     kinds = {tuple(x["from"]): x["kind"] for x in qualified(a)["next_steps"]}
     assert sorted(kinds.values()) == ["experiment", "re-analyse"]
 
@@ -474,7 +491,7 @@ def test_the_result_is_the_first_step_that_holds_and_lower_evidence_never_change
             a.concern(p, status=rng.choice(statuses))
         first = case(qualified(a), p)
         # adding evidence for a lower step never changes a higher result
-        a.gap(p, "oracle_not_observable", of=p, observability="E3")
+        a.gap(p, "oracle_not_observable", of=p, kind="audit_request")
         after = case(qualified(a), p)
         if ORDER.index(first["result"]) < ORDER.index(NOT_ASSESSABLE):
             assert after["result"] == first["result"]

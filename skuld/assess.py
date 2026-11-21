@@ -43,6 +43,7 @@ from skuld import (
     expectation,
     experiments,
     frame,
+    gaps,
     inputs,
     judge,
     qualify,
@@ -52,6 +53,7 @@ from skuld import (
     transparency,
     uncertainty,
 )
+from skuld import scope as run_scope
 from skuld.common import DATA, PURPOSES, RECIPIENT_TYPES, vocabulary
 from skuld.corpus import NORMS
 from skuld.corpus import load as load_corpus
@@ -166,6 +168,8 @@ def build(
     o_reports = [r.load() for r in a.observations]
     data, purposes = vocabulary(DATA), vocabulary(PURPOSES)
 
+    scope = run_scope.of_reports(o_reports)
+    settled: list[dict] = []  # the denials' scopes and conditions the run's scope settles (D3)
     related = correspondence.relate(
         built,
         d_report,
@@ -173,6 +177,8 @@ def build(
         registry,
         data,
         vocabulary(RECIPIENT_TYPES),
+        scope,
+        settled,
     )
     statuses = transparency.statuses(a.frame, built, decided, a.declaration.sha256 if a.declaration else "")
     item = Evidence()
@@ -308,6 +314,7 @@ def build(
                 notice_rules.component(notices),
                 relations.COMPONENT,
                 concerns.COMPONENT,
+                gaps.COMPONENT,
                 *_declaration_analysis(a),
                 {"role": "frame", "id": a.frame.id, "version": a.frame.version, "sha256": a.frame.digest()},
                 {"role": "vocabulary", "id": DATA, "version": data.version},
@@ -372,7 +379,19 @@ def build(
         "cases": _cases(a),
         "open": open_,
         "decided": settled,
-        "gaps": _gaps(stated, claims, tested, a, tier["absent"], item, built, hypotheses, left_out),
+        "gaps": _gaps(
+            stated,
+            claims,
+            tested,
+            a,
+            tier["absent"],
+            item,
+            built,
+            hypotheses,
+            left_out,
+            o_reports,
+            load_corpus(a.corpus),
+        ),
     }
     report["qualification"] = qualify.qualify(
         report,
@@ -380,6 +399,7 @@ def build(
         data,
         registry,
         {cid for r in a.frame.requirements.values() for cid in r.applies_if},
+        a.frame,
     )
     report["report"]["components"] += qualify.COMPONENTS
     validate("expectation_assessment", report)
@@ -390,7 +410,7 @@ def build(
         (root / REPORT).write_text(
             json.dumps(report, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
         )
-        (root / MARKDOWN).write_text(markdown(report, built), encoding="utf-8", newline="\n")
+        (root / MARKDOWN).write_text(markdown(report, built, a.frame, settled, scope), encoding="utf-8", newline="\n")
     return report, stage1 + tier["members"] + premises
 
 
@@ -605,28 +625,6 @@ def _reasoning_tier(
     }
 
 
-#: What a gap's reason asks for next
-NEXT = {
-    "applicability_unknown": "ask the provider, or an expert reading the documents and the processing",
-    "own_knowledge": "documentation of the feature or the component in the corpus, and the stage asked again",
-    "purpose_vague": "state the purpose's action, object and outcome",
-    "purpose_not_in_vocabulary": "place the node in the purpose map (skuld purposes map), or ask the stage again",
-    "needs_run": "an experiment that removes the component (skuld select)",
-    "search_space_not_run": "run the alternative's condition",
-    "intervention_not_verified": "repeat the runs with an intervention that verifies",
-    "substitution_not_verifiable": "hook every identifier source with pass",
-    "not_covered": "record those connections",
-    "oracle_not_observable": "none from outside the recipient's servers",
-    "requirements_not_reached": "extend the feature's path and the oracle",
-    "precondition_failed": "correct the alternative against the baseline",
-    "not_admitted": "repeat the comparison, or ask the reasoning tier again",
-    "substitute_more_invasive": "none by experiment: the application falls back to a datum at least as invasive; a person"
-    " judges what that means for the purpose",
-    "source_absent": "skuld judge",
-    "source_not_analysable": "decode the connection's content (TLS interception, the protocol's format), then observe again",
-}
-
-
 def _declaration(d, statement_of: dict[str, str]) -> dict:
     """A declaration as the report states it: by reference, with what qualification's case attributes read (S-24), and
     for a declared purpose the statement it is said in (8.8)."""
@@ -642,6 +640,61 @@ def _declaration(d, statement_of: dict[str, str]) -> dict:
     return out
 
 
+def own_knowledge_exhausted() -> bool:
+    """config.json's `gaps.own_knowledge_exhausted` (default off: D4, adopted only after its effect is measured): a
+    practice without a purpose whose recipient's or actor's documentation the corpus holds ends in an audit request."""
+    return bool((config.load().get("gaps") or {}).get("own_knowledge_exhausted"))
+
+
+def _documented(corpus, practice) -> bool:
+    """Whether the corpus holds documentation of a practice's recipient or actor (a passage about its entity)."""
+    if corpus is None:
+        return False
+    names = {str(x).removeprefix("component:").lower() for x in (practice.recipient, practice.actor) if x}
+    names -= {"?", "", "none"}
+    return any(str(e).lower() in names for passage in corpus.passages for e in passage.entities)
+
+
+def _payload_reasons(practice, o_reports: list[dict], by_sha: dict[str, dict]) -> list[str]:
+    """O's reasons the payloads of a practice's claims could not be read: the reasons of their unidentified data items,
+    else the scopes' payload exclusions (`payload_<reason>`) of the reports the claims are in."""
+    reasons, reports = set(), []
+    for ref in practice.claims:
+        report = by_sha.get(ref.get("report"))
+        if report is None:
+            continue
+        reports.append(report)
+        claim = next((c for c in report.get("claims", []) if c.get("id") == ref.get("claim")), None)
+        items = {e["id"]: e for e in report.get("evidence", [])}
+        for i in (claim or {}).get("evidence") or ():
+            prop = (items.get(i) or {}).get("proposition") or {}
+            if prop.get("identified") is False and prop.get("reason"):
+                reasons.add(str(prop["reason"]))
+    if not reasons:
+        for report in reports or o_reports:
+            for scope in report.get("scopes", []):
+                excluded = scope.get("exclusions") if isinstance(scope.get("exclusions"), dict) else {}
+                for counts in excluded.values():
+                    if isinstance(counts, dict):
+                        reasons |= {k.removeprefix("payload_") for k in counts if k.startswith("payload_")}
+    return sorted(reasons)
+
+
+def _achieved_on(x: dict, hypotheses: list[dict], purposes) -> str | None:
+    """Where an experimental claim's purpose is achieved: as its case states it, else as the stage-1 hypotheses of its
+    practice aligned with it agree (combine.aligned), else None."""
+    said = (x.get("purpose") or {}).get("achieved_on")
+    if said:
+        return said
+    own = [h for h in hypotheses if h["subject"] == x.get("subject") and h["type"] == "purpose"]
+    found = {
+        h["purpose"].get("achieved_on")
+        for h in own
+        if h["id"] in combine.aligned(own, [x.get("purpose") or {}], purposes) and h["purpose"].get("achieved_on")
+    }
+    return found.pop() if len(found) == 1 else None
+
+
 def _gaps(
     stated: list,
     claims: list[dict],
@@ -652,48 +705,73 @@ def _gaps(
     built=None,
     hypotheses: list[dict] = (),
     left_out: list = (),
+    o_reports: list[dict] = (),
+    corpus=None,
 ) -> list[dict]:
-    """The gaps someone could act on: the conditions of concerns whose applicability is unknown; the premises of
-    concerns not established; what the experiments could not settle; questions not asked; D's report absent; and
-    every practice E established no purpose for, which is therefore assessed for no requirement of practices (S-23)."""
+    """The gaps someone could act on, each with the propositions it bears on and its next step (gaps.py): the frame's
+    applicability conditions of concerns that no dimension decided; the premises of concerns not established; what the
+    experiments could not settle; questions not asked; D's report absent; and every practice E established no purpose
+    for, which is therefore assessed for no requirement of practices (S-23). A concern's source conditions (a document
+    not analysed, or acquired incomplete) and its fact conditions (a channel's definition, a role, a reading, the
+    denial's scope) are open conditions with their own steps, no gaps (relations.open_conditions)."""
     out: list[dict] = []
     by_id = {c["id"]: c for c in claims}
     n: dict[str, int] = {}
+    frame = a.frame
+    applicability = {cid for r in frame.requirements.values() for cid in r.applies_if}
+    of_subject = {r.id for r in frame.requirements.values() if r.subject == "practice"}
+    purposes = vocabulary(PURPOSES)
+    exhausted = own_knowledge_exhausted()
 
-    def gap(subject: str, reason: str, proposition: str, required: str, observability: str = "E2", **fields) -> None:
+    def requirement(rid: str) -> dict:
+        r = frame.requirements.get(rid)
+        return gaps.bearing(f"requirement:{rid}", f"{rid}: {r.title}" if r is not None else rid)
+
+    def gap(subject: str, reason: str, proposition: str, required: str, bears_on: list, next_: dict, **fields):
         n[subject] = n.get(subject, 0) + 1
-        out.append(
-            {
-                "id": f"gap:{subject}:{n[subject]}",
-                **fields,
-                "proposition": proposition,
-                "required": required,
-                "reason": reason,
-                "observability": observability,
-                "next": NEXT.get(reason, ""),
-            }
-        )
+        g = {
+            "id": f"gap:{subject}:{n[subject]}",
+            **fields,
+            "proposition": proposition,
+            "required": required,
+            "reason": reason,
+            "bears_on": bears_on,
+            "next": next_,
+        }
+        gaps.check(g, frame, by_id)
+        out.append(g)
 
-    def of_claim(c: dict, reason: str | None = None, required: str | None = None) -> None:
+    def of_claim(c: dict, requirements: list[str], reason: str | None = None) -> None:
         reason = reason or c["sufficiency"].get("reason") or "not_admitted"
         what = c.get("relationship") or c.get("alternative") or c["purpose"].get("node")
+        said = f"{c['type']} of {c['subject']}" + (f" ({c['component']})" if c.get("component") else "") + f": {what}"
         gap(
             c["subject"],
             reason,
-            f"{c['type']} of {c['subject']}" + (f" ({c['component']})" if c.get("component") else "") + f": {what}",
-            required or "; ".join(c["sufficiency"].get("missing", [])) or c.get("reason") or "a supporting item",
-            "E3" if reason == "oracle_not_observable" else "E2",
+            said,
+            "; ".join(c["sufficiency"].get("missing", [])) or c.get("reason") or "a supporting item",
+            [gaps.bearing(f"claim:{c['id']}", said), *(requirement(r) for r in requirements)],
+            gaps.reason_step(
+                reason,
+                said,
+                claim_type=c["type"],
+                achieved_on=_achieved_on(c, list(hypotheses), purposes) if reason == "oracle_not_observable" else None,
+            ),
             of=c["id"],
         )
 
     for c in stated:
-        if c.condition:
+        for cid in c.condition:
+            if cid not in applicability or cid not in frame.conditions:
+                continue  # a source or fact condition: an open condition with its own step
+            text = frame.conditions[cid].text
             gap(
                 c.subject,
                 "applicability_unknown",
-                f"{c.requirement} applies",
-                f"whether {', '.join(c.condition)} holds",
-                "E4",
+                text,
+                f"whether {cid} holds, for {c.requirement} to apply",
+                [gaps.bearing(f"condition:{cid}", text)],
+                gaps.condition_step(f"condition:{cid}", gaps.frame_level(frame, "condition", cid), text),
                 of=c.id,
             )
     seen = set()
@@ -704,54 +782,82 @@ def _gaps(
         for p in premises:
             if p["id"] not in seen:
                 seen.add(p["id"])
-                of_claim(p)
+                of_claim(p, [c.requirement])
         if not premises:
-            gap(c.subject, "not_admitted", f"{c.step.replace('_', ' ')}: {c.requirement}", c.reason or "", of=c.id)
+            said = f"{c.step.replace('_', ' ')}: {c.requirement}"
+            gap(
+                c.subject,
+                "not_admitted",
+                said,
+                c.reason or "",
+                [requirement(c.requirement)],
+                gaps.reason_step("not_admitted", said, requirement=c.requirement),
+                of=c.id,
+            )
     for x in tested:
         if x["status"] not in combine.DECISIVE and x["id"] not in seen:
             seen.add(x["id"])
-            of_claim(x)
+            of_claim(x, ["data_minimised"])
     measured = experiments.case_report(a.cases, a.root) or {"cases": [], "comparisons": []}
     for k in measured["comparisons"]:
         parts = k.get("unverifiable") or []
-        if parts and any(item.ids.get(k["id"]) in x["supporting"] + x["challenging"] for x in tested):
+        citing = [x for x in tested if item.ids.get(k["id"]) in x["supporting"] + x["challenging"]]
+        if parts and citing:
             substitution = any(u.startswith("substitution") for u in parts)
+            said = f"whether the runs of comparison {k['id']} ran under {k['alternative']} alone"
             gap(
                 k["case"],
                 "substitution_not_verifiable" if substitution else "not_covered",
-                f"whether the runs of comparison {k['id']} ran under {k['alternative']} alone",
+                said,
                 "; ".join(parts),
+                [gaps.bearing(f"claim:{x['id']}", f"{x['type']} of {x['subject']}") for x in citing],
+                gaps.step(
+                    gaps.EXPERIMENT,
+                    "repeat the runs with every identifier source hooked with pass"
+                    if substitution
+                    else "repeat the runs with those connections recorded",
+                ),
             )
     if a.cases is not None:
         for case in a.cases.cases:
             for purpose in case.purposes:
                 oracle = a.cases.oracles.get(purpose.oracle) if purpose.oracle else None
                 unreached = [r["id"] for r in purpose.requirements if oracle and r["id"] not in oracle.reach]
-                if unreached and any(x["case"] == case.id and x["purpose"]["id"] == purpose.id for x in tested):
+                mine = [x for x in tested if x["case"] == case.id and x["purpose"]["id"] == purpose.id]
+                if unreached and mine:
+                    said = f"whether {purpose.id} of case {case.id} achieves {', '.join(unreached)}"
                     gap(
                         case.id,
                         "requirements_not_reached",
-                        f"whether {purpose.id} of case {case.id} achieves {', '.join(unreached)}",
+                        said,
                         f"an oracle that reaches {', '.join(unreached)}, on a path that exercises them",
+                        [gaps.bearing(f"claim:{x['id']}", f"{x['type']} of {x['subject']}") for x in mine],
+                        gaps.step(gaps.EXPLORE, f"a goal-directed run of {case.feature.id} that reaches them"),
                         feature=case.feature.id,  # what a goal-directed exploration would reach (L-10)
                     )
         for c in measured["cases"]:
             for alt in c["scope"]["search_space"]:
                 if alt.get("problems"):
+                    said = f"whether {alt['id']} preserves the purposes of case {c['id']}"
                     gap(
                         c["id"],
                         "precondition_failed",
-                        f"whether {alt['id']} preserves the purposes of case {c['id']}",
+                        said,
                         "an alternative less invasive than the baseline in its component's dimension: "
                         + "; ".join(alt["problems"]),
+                        [requirement("data_minimised")],
+                        gaps.step(gaps.EXPERIMENT, f"correct {alt['id']} against the baseline and run it"),
                     )
     for question in absent:
+        rid = judge.REQUIREMENT[question]
         gap(
-            judge.REQUIREMENT[question],
+            rid,
             "source_absent",
-            f"{judge.REQUIREMENT[question]}: the reasoning tier's judgement",
+            f"{rid}: the reasoning tier's judgement",
             f"kept samples of the {question} question",
-            of=judge.REQUIREMENT[question],
+            [requirement(rid)],
+            gaps.step(gaps.ACQUIRE, f"kept samples of the {question} question (skuld judge)"),
+            of=rid,
         )
     if built is not None and hypotheses:
         purposeful = {h["subject"] for h in hypotheses if h["type"] == "purpose" and h["status"] == "supported"}
@@ -759,38 +865,48 @@ def _gaps(
             if p.id in purposeful:
                 continue
             what = p.recipient or p.actor
+            said = f"the purposes of {p.claim_type} {p.data}" + (f" to {p.recipient}" if p.recipient else "")
+            # D4: external means exhausted where the corpus documents the recipient or actor (off by default)
+            next_ = gaps.reason_step("own_knowledge", said, exhausted=exhausted and _documented(corpus, p))
             gap(
                 p.id,
                 "own_knowledge",
-                f"the purposes of {p.claim_type} {p.data}" + (f" to {p.recipient}" if p.recipient else ""),
+                said,
                 f"documentation of {what} in the corpus, so that the expectation stage can establish a purpose",
+                [requirement(r) for r in ("purpose_specified", "data_minimised") if r in frame.requirements],
+                next_,
                 of=p.id,
             )
+    by_sha = {r.sha256: rep for r, rep in zip(a.observations, o_reports, strict=False)}
     for p in left_out:
+        said = (
+            f"what practice {p.id} ({p.claim_type} {p.data}"
+            + (f" to {p.recipient}" if p.recipient else "")
+            + ") carries"
+        )
         gap(
             p.id,
             "source_not_analysable",
-            f"what practice {p.id} ({p.claim_type} {p.data}"
-            + (f" to {p.recipient}" if p.recipient else "")
-            + ") carries",
+            said,
             "the datum identified: O saw the connection, but its content is encrypted, binary or damaged; the practice "
             "is left out of the assessment",
-            "E3",
+            [requirement(r) for r in sorted(of_subject)],
+            gaps.reason_step("source_not_analysable", said, payloads=_payload_reasons(p, list(o_reports), by_sha)),
         )
     if a.declaration is None:
-        requirements = [r.id for r in a.frame.requirements.values() if r.subject in ("collection", "declaration")]
-        out.append(
-            {
-                "id": "gap:collection:1",
-                "of": "collection",
-                "proposition": f"the collection gives the information of {len(requirements)} requirements, declared "
-                "purposes are specific",
-                "required": "D's report on the version's declarations",
-                "reason": "source_absent",
-                "observability": "E1",
-                "next": "collect and analyse the app's declarations (Sága, Urda)",
-            }
-        )
+        requirements = [r.id for r in frame.requirements.values() if r.subject in ("collection", "declaration")]
+        g = {
+            "id": "gap:collection:1",
+            "of": "collection",
+            "proposition": f"the collection gives the information of {len(requirements)} requirements, declared "
+            "purposes are specific",
+            "required": "D's report on the version's declarations",
+            "reason": "source_absent",
+            "bears_on": [requirement(r) for r in requirements],
+            "next": gaps.step(gaps.ACQUIRE, "collect and analyse the app's declarations (Sága, Urda)"),
+        }
+        gaps.check(g, frame, by_id)
+        out.append(g)
     return out
 
 
@@ -891,8 +1007,55 @@ def _what(built):
     return what
 
 
-def markdown(report: dict, built) -> str:
-    """The report for a reader: the relations, the concerns, the experiments and the open conditions."""
+def _gaps_markdown(found: list[dict]) -> list[str]:
+    """The gaps counted by the kind of their next step, with the unit each counts (a practice, a claim, a condition of
+    a concern), and the audit requests by what they request (`held`)."""
+    if not found:
+        return []
+    counted: dict[str, dict[str, int]] = {}
+    for g in found:
+        kind = g["next"]["kind"] + (f" ({g['next']['held']})" if g["next"].get("held") else "")
+        units = counted.setdefault(kind, {})
+        units[gaps.unit(g)] = units.get(gaps.unit(g), 0) + 1
+    lines = ["", "## Gaps by next step", "", "| Next step | Gaps | Unit |", "|---|---|---|"]
+    for kind in sorted(counted, key=lambda k: (gaps.KINDS.index(k.split(" ")[0]), k)):
+        units = counted[kind]
+        lines.append(
+            f"| {kind} | {sum(units.values())} | " + ", ".join(f"{u} {v}" for u, v in sorted(units.items())) + " |"
+        )
+    return lines
+
+
+def _coverage_markdown(frame) -> list[str]:
+    """The coverage statement (Frame.coverage, from the frame alone): per requirement, how far a concern and a silence
+    can be established from outside; a frame that declares no level is read with the current frame's (gaps.py)."""
+    lines = [
+        "",
+        "## Coverage statement",
+        "",
+        "What any assessment under the frame can establish from outside: per requirement, the level of a concern and of a "
+        "silence (no concern identified).",
+        "",
+        "| Requirement | Concern | Silence |",
+        "|---|---|---|",
+    ]
+
+    def said(level: dict | None) -> str:
+        if not level:
+            return "–"
+        return f"{level['level']} ({level['reach']}{', ' + level['held'] if level.get('held') else ''})"
+
+    for entry in frame.coverage():
+        rid = entry["requirement"]
+        concern = entry["concern"] or gaps.frame_level(frame, "requirement", rid, "concern")
+        silence = entry["silence"] or gaps.frame_level(frame, "requirement", rid, "silence")
+        lines.append(f"| {rid} | {said(concern)} | {said(silence)} |")
+    return lines
+
+
+def markdown(report: dict, built, frame=None, settled: list | None = None, scope=None) -> str:
+    """The report for a reader: the relations, the concerns, the experiments, the open conditions, what the run's
+    scope settled, the gaps by next step and the frame's coverage statement."""
     app = report["application"]
     what = _what(built)
     claims = {c["id"]: c for c in report["claims"]}
@@ -972,6 +1135,15 @@ def markdown(report: dict, built) -> str:
     if report["open"]:
         lines += ["", "## Open conditions", ""]
         lines += [f"- {o['text']} (qualifies {', '.join(o['qualifies'])})" for o in report["open"]]
+    if settled:
+        lines += ["", "## Settled by the run's scope", "", f"The run's scope: {run_scope.described(scope)}.", ""]
+        lines += [
+            f"- {x['declaration']}, limited to {x['limit']}: {'applies' if x['outcome'] == 'holds' else 'does not apply'}"
+            for x in settled
+        ]
+    lines += _gaps_markdown(report["gaps"])
+    if frame is not None:
+        lines += _coverage_markdown(frame)
     if report.get("qualification"):
         lines += _qualification_markdown(report["qualification"], what)
     return "\n".join(lines) + "\n"
@@ -1023,7 +1195,7 @@ def _qualification_markdown(q: dict, what) -> list[str]:
     lines += ["", "### Next steps", "", "| Step | Kind | By | Could change a result | Cases | Decides |"]
     lines.append("|---|---|---|---|---|---|")
     for s in q["next_steps"]:
-        kind = s["kind"] + (f" ({s['level'].replace('_', ' ')})" if s.get("level") else "")
+        kind = s["kind"] + (f" ({s['held']})" if s.get("held") else "")
         change = "yes" if s["could_change"] else "no"
         lines.append(
             f"| {s['id']} | {kind} | {s['by']} | {change} | {len(s['cases'])} | {s['decides'].replace('|', '/')} |"

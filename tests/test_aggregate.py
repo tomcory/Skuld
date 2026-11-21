@@ -53,7 +53,6 @@ def minimisation(cid, pid, purpose_n, basis, status="not_established", uncertain
         "tier": "reasoning",
         "status": status,
         "uncertainty": uncertainty,
-        "observability": "E2",
         "purpose": f"claim:{pid}:{purpose_n}",
         "basis": basis,
         "reason": "…",
@@ -71,7 +70,6 @@ def not_specific(cid, did, text, status="supported", uncertainty=FROM_DOC):
         "tier": "reasoning",
         "status": status,
         "uncertainty": uncertainty,
-        "observability": "E2",
         "reason": f'"{text}": 3 of 3 samples judge it not specific (action lacking)',
     }
 
@@ -276,7 +274,6 @@ def test_collection_concerns_keep_their_condition_and_open_conditions_group_by_t
             "tier": "rule",
             "status": "supported",
             "uncertainty": BY_RULE,
-            "observability": "E1",
             "condition": ["dpo_designated"],
             "reason": "missing if dpo_designated",
         }

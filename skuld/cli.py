@@ -654,10 +654,14 @@ def main(argv: list[str] | None = None) -> int:
             for r in report["relations"]:
                 outcomes.setdefault(r["type"], Counter())[r["outcome"]] += 1
             relations = "; ".join(f"{t} {dict(c)}" for t, c in outcomes.items()) or "no relations"
+            # the gaps by the kind of their next step, an audit request by what it requests (Ratatoskr 0.39.0)
+            steps = Counter(
+                g["next"]["kind"] + (f" ({g['next']['held']})" if "held" in g["next"] else "") for g in report["gaps"]
+            )
             print(
                 f"{len(report['subjects']['practices'])} practices, {len(report['subjects']['declarations'])} declarations; "
-                f"{relations}; {len(report['concerns'])} concerns, {len(report['open'])} open conditions "
-                f"-> {args.workspace / REPORT}"
+                f"{relations}; {len(report['concerns'])} concerns, {len(report['open'])} open conditions; "
+                f"{len(report['gaps'])} gaps by next step {dict(sorted(steps.items()))} -> {args.workspace / REPORT}"
             )
         elif args.command == "aggregate":
             from skuld.aggregate import REPORT as AGGREGATE

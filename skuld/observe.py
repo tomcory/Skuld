@@ -74,13 +74,59 @@ def observe(
         raise ObservationError(
             f"{run_id}: the observation report is no JSON ({e}); delete it to analyse again"
         ) from None
-    # a report Verðandi made before Ratatoskr 0.34.0 states factor levels, which name no reason: read as low
-    report = uncertainty.converted(report)
+    # a report Verðandi made before Ratatoskr 0.34.0 states factor levels, which name no reason: read as low; one made
+    # before 0.39.0 states levels on claims and gaps, and free-text next steps (`levelled`)
+    report = levelled(uncertainty.converted(report))
     try:
         validate("observation_report", report)
     except jsonschema.ValidationError as e:
         raise ObservationError(f"{run_id}: the observation report does not conform: {e.message}"[:300]) from e
     return report
+
+
+def _bears_on(gap: dict) -> list[dict]:
+    concerns = gap.get("concerns") or {}
+    if concerns.get("claim"):
+        ref = f"claim:{concerns['claim']}"
+    else:
+        ref = f"cell:{concerns.get('claim_type') or 'unknown'}/{concerns.get('node') or 'unknown'}"
+    return [{"proposition": gap.get("missing") or ref, "ref": ref}]
+
+
+def _next(gap: dict) -> dict:
+    """An earlier gap's free-text next step as a structured one, by what Verðandi 3.7.0 gives such a gap: a claim
+    whose payload could not be read or cells of unknown status an instrument, a cell not found a run."""
+    text = gap.get("next_step") or gap.get("required") or "observe again"
+    concerns = gap.get("concerns") or {}
+    kind = "explore" if concerns.get("node") and not concerns.get("claim") else "improve_instrument"
+    return {"kind": kind, "text": text}
+
+
+def levelled(report: dict) -> dict:
+    """An observation report Verðandi made before Ratatoskr 0.39.0 in its shape: no observability level on a claim,
+    a gap or the header's constants, and a gap's free-text `next_step` as `next` with the propositions it bears on
+    (`bears_on`); a report in the new shape is unchanged."""
+
+    def strip(x):
+        if isinstance(x, list):
+            return [strip(v) for v in x]
+        if isinstance(x, dict):
+            return {k: strip(v) for k, v in x.items() if k != "observability"}
+        return x
+
+    out = strip(report)
+    if isinstance(report.get("gaps"), list):
+        out["gaps"] = [
+            strip(g)
+            if "next" in g and "bears_on" in g
+            else {
+                **{k: v for k, v in strip(g).items() if k != "next_step"},
+                "bears_on": _bears_on(g),
+                "next": _next(g),
+            }
+            for g in report["gaps"]
+        ]
+    return out
 
 
 def source_reads(report: dict, source: str) -> list[dict]:

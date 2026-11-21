@@ -22,8 +22,10 @@ from skuld.qualify.results import Con, Gap, Rel, Unassessed, View
 from skuld.uncertainty import is_high
 
 #: 2: only a declared purpose's specificity is set aside, not concern (iii); 3: an exhaustive channel closes its silence
-#: only where its document is complete, else the mismatch is an omission (def:qualification; 21 Nov 2026)
-VERSION = "3"
+#: only where its document is complete, else the mismatch is an omission (def:qualification; 21 Nov 2026); 4: a gap's
+#: next step is its own (`next`), and an open condition's steps follow from the levels of the propositions it bears on
+#: (Ratatoskr 0.39.0; 21 Nov 2026)
+VERSION = "4"
 COMPONENT = {"role": "method", "id": "skuld.qualify", "version": VERSION}
 COMPONENTS = [
     COMPONENT,
@@ -160,14 +162,20 @@ def _view(index: Index, holding: Holding, assessed: list, missing: list, inappli
                 c["status"],
                 conditions.of_concern(c, getattr(index, "applicability", frozenset())),
                 list(c.get("condition") or []),
-                c.get("observability", "E2"),
                 is_high(c.get("uncertainty")),
                 list(c.get("basis") or []),
                 attributes.evidence(c, index.claims),
             )
         )
     gaps = [
-        Gap(g, index.gaps[g]["reason"], index.gaps[g]["observability"], index.gaps[g].get("of")) for g in holding.gaps
+        Gap(
+            g,
+            index.gaps[g]["reason"],
+            (index.gaps[g].get("next") or {}).get("kind"),
+            index.gaps[g].get("of"),
+            (index.gaps[g].get("next") or {}).get("held"),
+        )
+        for g in holding.gaps
     ]
     return View(rels, cons, gaps, missing, assessed, inapplicable, aside)
 
@@ -193,11 +201,15 @@ def _pattern(view: View) -> dict:
     return {**parts, "reading": symbols.reading(parts["O-D"]["symbol"], parts["O-E"]["symbol"], parts["D-E"]["symbol"])}
 
 
-def qualify(report: dict, requirements: dict[str, str], data=None, registry=None, applicability=frozenset()) -> dict:
+def qualify(
+    report: dict, requirements: dict[str, str], data=None, registry=None, applicability=frozenset(), frame=None
+) -> dict:
     """The qualification of an assessment: `requirements` gives each requirement of the frame the kind of its subject
     (practice, declaration, collection); `data` is the data vocabulary, `registry` the recipient register;
-    `applicability` the frame's applicability conditions (`applies_if`), whose kind is applicability."""
+    `applicability` the frame's applicability conditions (`applies_if`), whose kind is applicability; `frame` the frame,
+    whose declared levels give an open condition's steps (gaps.py)."""
     index = Index(report, requirements)
+    index.frame = frame
     index.applicability = frozenset(applicability)
     index.complete = complete_channels(report)
     from skuld import select as selection  # select reads qualification's steps; import here, not at module load

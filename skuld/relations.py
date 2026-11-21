@@ -45,7 +45,7 @@ subject), against the experiments' claims for the practices of its data:
 
 A necessity is never supported (E's asymmetry); where no run refutes it, the claim is passed on with the reason. Not
 stated: a conflicted justification, since no channel of the instance refutes a Purpose claim (whether a provider's purpose
-is achieved is decided on its servers, observability E3).
+is achieved is decided on its servers, of a level E3 where it is achieved there).
 
 Pass-through: every claim of O's and D's reports passed on to the Investigator by reference (report digest and claim
 id, or JSON pointer for D's claims), with the relations it takes part in or the reason it has none. A claim passed on
@@ -63,13 +63,14 @@ from skuld.inputs import ReportRef
 from skuld.observe import claims as o_claims
 from skuld.transparency import INCOMPLETE, MISSING_IF, UNREAD, Status
 
-#: 10: the features condition qualifies only claims an experiment showed (strength run; an alternative demonstrated),
+#: 11: an open fact condition names the propositions it bears on (`bears_on`, as a gap does; Ratatoskr 0.39.0, 21 Nov
+#: 2026); 10: the features condition qualifies only claims an experiment showed (strength run; an alternative demonstrated),
 #: not one decided by documents (21 Nov 2026); 9: a substitutable Dependency claim supports a dependency (on a datum of its kind), refutes no declared necessity and
 #: holds for the features the case report covers (21 Nov 2026);
 #: 8: a recipient D names is the provider's own by its owner when D's documents were collected (20 Nov 2026);
 #: 7: D–E: a purpose, or its data, D could not place (Urda 2.1.0) is not comparable as such; 6: claims of practices
 #: left out for an unknown datum are passed on as such
-VERSION = "10"
+VERSION = "11"
 COMPONENT = {"role": "method", "id": "skuld.relations", "version": VERSION}
 
 CONFLICTING, INSUFFICIENT, NOT_ASSESSABLE, NOT_COMPARABLE = (
@@ -523,6 +524,8 @@ def open_conditions(
                 text = f"whether the {' and the '.join(unread)}, which no stage analysed, declares the practice"
             e = entry(f"condition:{r.condition}", text, r.condition_kind or "fact")
             e["qualifies"].append(r.id)
+            if getattr(r, "parts", None):  # the propositions it bears on, each with its level (gaps.py)
+                e["bears_on"] = [{"proposition": p["proposition"], "ref": p["ref"]} for p in r.parts]
             r.condition_open = e["id"]
     for p in subjects.practices:
         if (p.party or {}).get("relation") == "?":
@@ -542,7 +545,9 @@ def open_conditions(
                 text = f"whether the {channel}, which could not be analysed, gives the information"
                 entry(cid, text, "source")["qualifies"].append(information[s.requirement])
             else:
-                entry(f"frame:{cid}", frame.conditions[cid].text)["qualifies"].append(information[s.requirement])
+                e = entry(f"frame:{cid}", frame.conditions[cid].text)
+                e["qualifies"].append(information[s.requirement])
+                e["bears_on"] = [{"proposition": frame.conditions[cid].text, "ref": f"condition:{cid}"}]
     shown = [
         x["id"]
         for x in tested

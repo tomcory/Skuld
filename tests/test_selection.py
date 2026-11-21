@@ -156,7 +156,7 @@ def test_a_demonstrated_alternative_is_a_minimisation_concern():
     stated, covered = concerns.less_invasive_alternative(frame, [h], [], set(), {}, tested)
     assert [(c.requirement, c.subject) for c in covered] == [("data_minimised", "P-loc")] and len(stated) == 1
     c = stated[0]
-    assert (c.status, c.observability) == ("supported", "E2")
+    assert c.status == "supported"
     assert "forecast:G1 demonstrated" in c.reason
     assert c.channels == ["ex:forecast"] and c.supporting == ["x1"]
     # the run's, the purpose's and the judgement of minimal; demonstrated, so no not_demonstrated
@@ -181,7 +181,7 @@ def test_an_experiment_that_cannot_observe_the_purpose_leaves_the_concern_not_as
     for t in tested:
         t["basis"] = ["claim:P-ads:1"]
     stated, _ = concerns.less_invasive_alternative(frame, [h], [], set(), {}, tested)
-    assert (stated[0].status, stated[0].reason, stated[0].observability) == ("not_assessable", reason, "E3")
+    assert (stated[0].status, stated[0].reason) == ("not_assessable", reason)
 
 
 def test_an_experiment_that_decided_nothing_neither_merges_hypotheses_nor_gives_a_concern_a_premise():

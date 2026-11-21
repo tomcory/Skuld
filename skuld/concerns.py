@@ -47,7 +47,7 @@ from skuld.assessment import exhaustive
 from skuld.transparency import INCOMPLETE, MISSING, MISSING_IF, NOT_APPLICABLE, UNREAD, Status
 from skuld.uncertainty import needs, of, raised
 
-VERSION = "13"  # 13: one level with its reasons (Ratatoskr 0.34.0); 12: (iv) undecided where D specifies purposes for data it could not place (Urda 2.1.0); 11: concern (i) cites every item that decides it applies; 10: rule (iii), declaration contradicted
+VERSION = "14"  # 14: a concern carries no observability level (Ratatoskr 0.39.0: its requirement does); 13: one level with its reasons (Ratatoskr 0.34.0); 12: (iv) undecided where D specifies purposes for data it could not place (Urda 2.1.0); 11: concern (i) cites every item that decides it applies; 10: rule (iii), declaration contradicted
 COMPONENT = {"role": "method", "id": "skuld.concerns", "version": VERSION}
 
 #: Of a rule-tier concern of information not given: as certain as D's annotations and O's claims it reads
@@ -66,7 +66,6 @@ class Concern:
     tier: str
     status: str
     uncertainty: dict
-    observability: str
     id: str = ""
     condition: list[str] = field(default_factory=list)
     basis: list[str] = field(default_factory=list)  # the claims its rule reads
@@ -120,7 +119,6 @@ def information_not_given(frame: Frame, statuses: list[Status], evidence_of: dic
                 tier="rule",
                 status="supported",
                 uncertainty=uncertainty,
-                observability="E1",
                 condition=list(s.conditions),
                 supporting=evidence_of.get(r.id, []),
                 silence=[f"D: no accessible document bears the label {r.label}"]
@@ -185,7 +183,6 @@ def not_specific(frame: Frame, statements, judgements: list[dict], items, applic
                 tier="reasoning",
                 status=status,
                 uncertainty=FROM_DOC if agreed else raised(FROM_DOC, "samples_disagree"),
-                observability="E2",
                 condition=_condition(applicability, r.id),
                 reason=(
                     f'"{s.text}": {len(flagged)} of {len(mine)} samples judge it not specific'
@@ -242,7 +239,6 @@ def purpose_limitation(
                     tier="rule",
                     status="not_established" if unplaced else "supported",
                     uncertainty=raised(h["uncertainty"], "silence_not_exhaustive"),
-                    observability="E2",
                     reason=f"no purpose is specified for {node}'s data"
                     + (f"; {_unplaced(unplaced)}" if unplaced else ""),
                 )
@@ -278,7 +274,6 @@ def purpose_limitation(
                 uncertainty=needs(
                     h["uncertainty"], FROM_DOC if agreed else raised(FROM_DOC, "samples_disagree"), of_d(case.relevant)
                 ),
-                observability="E2",
                 reason=f"not compatible with {incompatible} of the {len(case.relevant)} purposes specified for its data"
                 + (f"; {'; '.join(reasons)}" if reasons else ""),
                 channels=sorted({ch for j in mine for ch in j["channels"]}),
@@ -349,9 +344,6 @@ def less_invasive_alternative(
             )
         else:
             uncertainty = needs(h["uncertainty"], FROM_DOC)
-        unobservable = status == "not_assessable" and any(
-            x["sufficiency"].get("reason") == "oracle_not_observable" for x in runs
-        )
         concerns.append(
             _concern(
                 frame,
@@ -361,7 +353,6 @@ def less_invasive_alternative(
                 tier="reasoning",
                 status=status,
                 uncertainty=uncertainty,
-                observability="E3" if unobservable else "E2",
                 condition=_condition(applicability, r.id),
                 basis=[c["id"] for c in decisive or mine],
                 reason=reason,
@@ -423,7 +414,6 @@ def declaration_contradicted(
                 tier="rule",
                 status="supported",
                 uncertainty=needs(*(rel.uncertainty for rel in rels), of(*(["open_condition"] if condition else []))),
-                observability="E1",
                 condition=condition,
                 supporting=items_of(d, rels),
                 reason=reason,

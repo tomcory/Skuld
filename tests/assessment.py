@@ -6,6 +6,20 @@ import copy
 O = "a" * 64  # noqa: E741 (the Observation dimension)
 D = "b" * 64
 LOW = {"level": "low", "reasons": []}
+#: A gap reason's next step by default (OBSERVABILITY_PLAN §8)
+KIND = {
+    "own_knowledge": "extend_corpus",
+    "not_admitted": "re-analyse",
+    "purpose_vague": "review",
+    "substitute_more_invasive": "review",
+    "purpose_not_in_vocabulary": "re-analyse",
+    "oracle_not_observable": "improve_instrument",
+    "source_not_analysable": "improve_instrument",
+    "requirements_not_reached": "explore",
+    "source_absent": "acquire",
+    "not_comparable": "acquire",
+    "applicability_unknown": "audit_request",
+}
 HIGH = {"level": "high", "reasons": [{"reason": "samples_disagree", "level": "high"}]}
 
 #: The frame's requirements by the kind of their subject, as qualification reads them
@@ -131,7 +145,6 @@ class Assessment:
         status="supported",
         step="less_invasive_alternative",
         condition=(),
-        observability="E2",
         uncertainty=LOW,
         basis=(),
     ) -> str:
@@ -148,16 +161,20 @@ class Assessment:
                 "tier": "reasoning",
                 "status": status,
                 "uncertainty": uncertainty,
-                "observability": observability,
                 **({"condition": list(condition)} if condition else {}),
                 "basis": list(basis),
             }
         )
         return cid
 
-    def gap(self, subject, reason, of=None, observability="E2", **fields) -> str:
+    def gap(self, subject, reason, of=None, kind=None, held=None, **fields) -> str:
+        """A gap with its next step: `kind` (and `held` for an audit request), else the kind its reason has by default
+        (OBSERVABILITY_PLAN §8)."""
         self.n += 1
         gid = f"gap:{subject}:{self.n}"
+        kind = kind or KIND.get(reason, "experiment")
+        if kind == "audit_request":
+            held = held or "record"
         self.report["gaps"].append(
             {
                 "id": gid,
@@ -165,8 +182,8 @@ class Assessment:
                 "proposition": f"p {gid}",
                 "required": "r",
                 "reason": reason,
-                "observability": observability,
-                "next": "",
+                "bears_on": [{"proposition": f"p {gid}", "ref": f"requirement:{subject}"}],
+                "next": {"kind": kind, "text": "t", **({"held": held} if held else {})},
                 **fields,
             }
         )

@@ -378,7 +378,6 @@ def _claim(cid: str, type_: str, node: str, recipient: dict | None, evidence: li
         "evidence": evidence,
         "uncertainty": LOW,
         "sufficiency": {"sufficient": True},
-        "observability": "E1",
     }
     if recipient:
         claim["recipient"] = recipient

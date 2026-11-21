@@ -229,7 +229,7 @@ def test_the_assessment_states_concerns_ii_to_iv_and_gate_3_holds(workspace):
     interactions = next(p.id for p in built.practices if p.data == "app-activity.app-interactions")
     identifier = next(p.id for p in built.practices if p.data.endswith("advertising-id"))
     vague = stated[("not_specific", "D-1")]
-    assert (vague["status"], vague["tier"], vague["observability"]) == ("supported", "reasoning", "E2")
+    assert (vague["status"], vague["tier"]) == ("supported", "reasoning") and "observability" not in vague
     items = {e["id"]: e for e in report["evidence"]}
     assert {items[x]["kind"] for x in vague["supporting"]} == {"claim", "doc"}  # the declaration and the norm
     assert ("not_specific", "D-2") not in stated

@@ -12,8 +12,9 @@ step records what made it hold.
        evidence                            supported only under a source or an applicability condition; an O–D
                                            relation is ≠ under a source condition; a requirement that applies was not
                                            assessed
-    4  not externally assessable           a concern is not assessable, or a gap has observability E3 or E4 (what
-                                           only the provider could show: its next step is a request to it)
+    4  not externally assessable           a concern is not assessable, or a gap's next step is an audit request
+                                           (what only the controller could show; Ratatoskr 0.39.0: a gap carries
+                                           no level, its next step says whether an external step remains)
     5  no concern detected within the      none of the above, and the case was assessed for a requirement
        tested scope
 
@@ -38,8 +39,9 @@ from skuld.qualify.conditions import APPLICABILITY, FACT, SOURCE
 #: 3: a supported concern of minimisation names the strength of its evidence (documented, demonstrated) (18 Nov 2026)
 #: 4: an omission (O≠D on the silence of channels that need not declare every case) is an externally supported
 #: concern, not a discrepancy; a concern under an applicability condition is insufficient evidence (framework report
-#: 0.6, def:qualification; 18 Nov 2026)
-VERSION = "4"
+#: 0.6, def:qualification; 18 Nov 2026); 5: step 4 reads a gap whose next step is an audit request, not a level
+#: (Ratatoskr 0.39.0, OBSERVABILITY_PLAN §9; 21 Nov 2026)
+VERSION = "5"
 COMPONENT = {"role": "method", "id": "skuld.qualify.results", "version": VERSION}
 
 DISCREPANCY = "externally_established_discrepancy"
@@ -82,7 +84,6 @@ class Con:
     status: str
     condition: str | None = None  # fact or source
     conditions: list[str] = field(default_factory=list)
-    observability: str = "E2"
     high: bool = False
     basis: list[str] = field(default_factory=list)
     evidence: str | None = None  # rule, documented or demonstrated (attributes.evidence)
@@ -92,8 +93,14 @@ class Con:
 class Gap:
     id: str
     reason: str
-    observability: str
+    next: str  # the kind of its next step
     of: str | None = None
+    held: str | None = None  # for an audit request: what the controller holds that it requests
+
+    @property
+    def audit(self) -> bool:
+        """Whether only the controller could settle it: its next step is an audit request."""
+        return self.next == "audit_request"
 
 
 @dataclass
@@ -206,10 +213,10 @@ def steps(view: View) -> list[Step]:
     if parts:
         out.append(Step(INSUFFICIENT, _list(parts), rests))
     beyond = [c for c in view.concerns if c.status == "not_assessable"]
-    external = [g for g in view.gaps if g.observability in ("E3", "E4")]
+    external = [g for g in view.gaps if g.audit]
     if beyond or external:
         parts = [f"{c.requirement} not assessable" for c in beyond] + [
-            f"{g.reason.replace('_', ' ')} ({g.observability})" for g in external
+            f"{g.reason.replace('_', ' ')} (an audit request: {g.held})" for g in external
         ]
         out.append(Step(NOT_ASSESSABLE, _list(sorted(set(parts))), [c.id for c in beyond] + [g.id for g in external]))
     if not out and view.assessed:

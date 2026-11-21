@@ -8,7 +8,7 @@ from ratatoskr.registry import Registry
 from ratatoskr.schemas import validate
 from ratatoskr.vocabularies import Vocabulary
 
-from skuld import assessment, concerns, correspondence, frame, inputs, relations, transparency, uncertainty
+from skuld import assessment, concerns, correspondence, frame, gaps, inputs, relations, transparency, uncertainty
 from skuld.assess import REPORT, assess
 from skuld.uncertainty import of
 from tests.test_assess import ROOT, claim, declared, o_report, workspace
@@ -562,12 +562,10 @@ def test_the_fixtures_reports_are_valid_and_pilates_reproduces_the_worked_exampl
 
     rebuilt, members = build(root, write=False)
     assert check_assessment(inputs.load_assessment(root), report, rebuilt, members) == []
-    # a proposition of class E3 or E4 is never supported or refuted (framework, observability)
-    assert not [
-        c["id"]
-        for c in report["concerns"]
-        if c["status"] in ("supported", "refuted") and c["observability"] in ("E3", "E4")
-    ]
+    # no concern or gap carries a level (Ratatoskr 0.39.0); no gap requests an audit of a complete-reach proposition
+    assert not [x["id"] for x in report["concerns"] + report["gaps"] if "observability" in x]
+    for g in report["gaps"]:
+        gaps.check(g, inputs.load_assessment(root).frame, {c["id"]: c for c in report["claims"]})
     claims = {c["id"]: c for c in report["claims"]}
     # the D analysis read is named, since the transparency concerns' calibration holds for it alone
     if inputs.load_assessment(root).declaration is not None:

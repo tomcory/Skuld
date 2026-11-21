@@ -54,7 +54,7 @@ def test_one_concern_per_declaration_supported_and_conditional_only_if_every_con
         "declaration_contradicted",
         "rule",
     )
-    assert unconditional.principle == "transparency" and unconditional.observability == "E1"
+    assert unconditional.principle == "transparency" and not hasattr(unconditional, "observability")
     assert unconditional.status == "supported" and unconditional.condition == []
     # needs over its relations, O's and D's reasons passed through; no open condition
     assert unconditional.uncertainty == {

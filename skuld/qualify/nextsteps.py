@@ -1,66 +1,65 @@
 """
-Next steps (plan/archive/QUALIFICATION_PLAN.md §4.1): every gap, open condition and broader O–D relation of a case yields one next
-step with its kind, who would take it, what it would decide and whether it could change the result of a case it
-serves. Duplicates across cases are merged and keep every case they serve. The Investigator takes those the suite can
-take within its pass; the rest stay in the dossier as recommended follow-up.
+Next steps (plan/archive/QUALIFICATION_PLAN.md §4.1; OBSERVABILITY_PLAN §8): every gap, open condition and broader O–D
+relation of a case yields a next step with its kind, who would take it, what it would decide and whether it could
+change the result of a case it serves. Duplicates across cases are merged and keep every case they serve. The
+Investigator takes those the suite can take within its pass; the rest stay in the dossier as recommended follow-up.
 
-    gap own_knowledge                                    extend_corpus  skuld (corpus), then the stage asked again
-    gap source_absent of the collection, a source        acquire        saga, then urda
-    condition, gap source_not_analysable
-    gap source_absent of a requirement (samples absent)  re-analyse     skuld, the question asked
-    gap not_comparable                                   acquire        saga (D of the observed version)
-    gap requirements_not_reached, not_covered            explore        loki
+A gap's step is the gap's own next step (`next`, gaps.py: kind, and `held` for an audit request), taken by:
+
+    acquire             saga (a channel), skuld (kept samples of a question)
+    explore             loki
+    experiment          skuld, through loki
+    re-analyse          skuld
+    extend_corpus       skuld (corpus), then the stage asked again
+    review              a person
+    improve_instrument  verdandi (a decoder, a hook for a payload it could not read), skuld (an oracle)
+    audit_request       the provider, for what it holds: a record (an evidence-assisted audit) or its organisation's
+                        assessment (a full accountability assessment)
+
+An open condition's steps: a source condition is acquired (saga); a fact condition yields one step per proposition it
+bears on (`bears_on`): its external step where its reach is not none, else an audit request with its held
+(gaps.condition_step), and a review where none is declared. Further:
+
     O–D broader                                          re-analyse     verdandi
-    gap needs_run, search_space_not_run,                 experiment     skuld, through loki
-    intervention_not_verified, substitution_not_
-    verifiable, precondition_failed; not_admitted of a
-    minimisation concern or of a dependency or
-    alternative claim
     a purpose skuld select finds eligible (its           experiment     skuld, through loki
     minimisation undecided, a component Skuld can
     impose on, no experiment tried it)
-    gap not_admitted of any other concern or claim       re-analyse     skuld, the reasoning tier asked again
-                                                                        (only minimisation has an experiment)
-    gap purpose_vague, substitute_more_invasive; an      review         a person
-    open fact condition
-    gap purpose_not_in_vocabulary                        re-analyse     skuld, the purpose map extended or the
-                                                                        stage asked again
-    gap oracle_not_observable, applicability_unknown,    audit_request  the provider: an evidence-assisted audit
-    observability                                                       (E3), a full accountability assessment (E4)
 
-An unknown reason is an error. Whether a step could change a result is the test of the review triggers (§5.2):
-qualifying the case under each resolution of what the step would decide, with the rules of results.py.
+A gap without a next step is an error. Whether a step could change a result is the test of the review triggers
+(§5.2): qualifying the case under each resolution of what the step would decide, with the rules of results.py.
 """
 
 import json
 
+from skuld import gaps as gap_steps
 from skuld.qualify import symbols
 from skuld.qualify.conditions import SOURCE
 from skuld.qualify.conditions import channel as source_channel
 from skuld.qualify.results import Con, View, result
 
-#: 4 (21 Nov 2026): the gap reason substitute_more_invasive (Ratatoskr 0.38.0) goes to a person's review; 3 (20 Nov
-#: 2026): the gap reason purpose_not_in_vocabulary (Ratatoskr 0.32.0) is re-analysed by Skuld
-VERSION = "4"
+#: 5 (21 Nov 2026): a gap's step is its own next step (Ratatoskr 0.39.0: kind and held, improve_instrument), an open
+#: fact condition's steps follow from the levels of the propositions it bears on, no audit request by a level; 4 (21
+#: Nov 2026): the gap reason substitute_more_invasive (Ratatoskr 0.38.0) goes to a person's review; 3 (20 Nov 2026): the
+#: gap reason purpose_not_in_vocabulary (Ratatoskr 0.32.0) is re-analysed by Skuld
+VERSION = "5"
 COMPONENT = {"role": "method", "id": "skuld.qualify.nextsteps", "version": VERSION}
 
-EXPERIMENT = (
-    "needs_run",
-    "search_space_not_run",
-    "intervention_not_verified",
-    "substitution_not_verifiable",
-    "precondition_failed",
-    "not_admitted",
-)
-AUDIT = ("oracle_not_observable", "applicability_unknown", "observability")
-#: The requirements an experiment can decide (the experimental channel supplies minimisation's premises)
-EXPERIMENTAL = ("data_minimised",)
-LEVEL = {"E3": "evidence_assisted_audit", "E4": "full_accountability_assessment"}
-KINDS = ("acquire", "explore", "experiment", "re-analyse", "extend_corpus", "review", "audit_request")
+KINDS = gap_steps.KINDS
+#: Who takes a step of a kind, where the gap does not say otherwise
+BY = {
+    "acquire": "saga",
+    "explore": "loki",
+    "experiment": "skuld",
+    "re-analyse": "skuld",
+    "extend_corpus": "skuld",
+    "review": "person",
+    "improve_instrument": "verdandi",
+    "audit_request": "provider",
+}
 
 
 class UnknownReason(ValueError):
-    """A gap reason no row of the table names."""
+    """A gap without a next step."""
 
 
 # -- resolutions: copies of a view with what a step would decide, decided one way or the other ------------------------
@@ -123,33 +122,25 @@ def changes(view: View, variants: list[View]) -> bool:
 
 
 def _gap_step(index, g: dict) -> dict:
-    reason, of = g["reason"], g.get("of")
-    target: dict = {}
+    nxt = g.get("next")
+    if not isinstance(nxt, dict) or nxt.get("kind") not in KINDS:
+        raise UnknownReason(f"{g['id']}: gap reason {g.get('reason')!r} has no next step")
+    reason, of, kind = g["reason"], g.get("of"), nxt["kind"]
+    by, target = BY[kind], {}
+    concern, claim = index.concerns.get(of or ""), index.claims.get(of or "")
     if reason == "own_knowledge":
-        kind, by = "extend_corpus", "skuld"
-        practice = of if of in index.practices else (index.claims.get(of) or {}).get("subject")
+        practice = of if of in index.practices else (claim or {}).get("subject")
         p = index.practices.get(practice or "")
         if p:
             target = {"practice": p["id"], "component": p.get("recipient") or p.get("actor") or "?"}
-    elif reason in ("source_absent", "source_not_analysable"):
+    elif kind == "acquire":
         if of in index.requirements:
-            kind, by, target = "re-analyse", "skuld", {"requirement": of}
+            by, target = "skuld", {"requirement": of}  # the question's samples, kept by skuld judge
         else:
-            kind, by = "acquire", "saga"
             target = {"channel": g.get("channel") or "all"}
-    elif reason == "not_comparable":
-        kind, by = "acquire", "saga"
-    elif reason in ("requirements_not_reached", "not_covered"):
-        kind, by = "explore", "loki"
+    elif kind == "explore":
         target = {k: v for k, v in (("feature", g.get("feature")), ("case", _subject(g))) if v}
-    elif reason in EXPERIMENT:
-        kind, by = "experiment", "skuld"
-        concern, claim = index.concerns.get(of or ""), index.claims.get(of or "")
-        if reason == "not_admitted" and not (
-            (concern and concern["requirement"] in EXPERIMENTAL)
-            or (claim and claim["type"] in ("dependency", "alternative"))
-        ):
-            kind = "re-analyse"  # no experiment decides a purpose's specificity or compatibility
+    elif kind == "experiment":
         subject = (concern or claim or {}).get("subject")
         if concern:
             target = {"concern": of}
@@ -157,17 +148,17 @@ def _gap_step(index, g: dict) -> dict:
             target["practice"] = subject
         elif not concern and not claim:
             target = {"case": _subject(g)}
-    elif reason in ("purpose_vague", "substitute_more_invasive"):
-        kind, by = "review", "person"
-    elif reason == "purpose_not_in_vocabulary":
-        kind, by = "re-analyse", "skuld"
-    elif reason in AUDIT:
-        kind, by = "audit_request", "provider"
-    else:
-        raise UnknownReason(f"{g['id']}: gap reason {reason!r} has no next step")
+    elif kind == "improve_instrument" and reason == "oracle_not_observable":
+        by = "skuld"  # an oracle is a case's
+        if claim:
+            target = {k: v for k, v in (("case", claim.get("case")), ("practice", claim.get("subject"))) if v}
+    elif kind == "improve_instrument" and _subject(g) in index.practices:
+        target = {"practice": _subject(g)}
+    elif kind == "re-analyse" and concern:
+        target = {"concern": of}
     step = {"kind": kind, "by": by, "target": target, "decides": g["proposition"], "from": [g["id"]]}
     if kind == "audit_request":
-        step["level"] = LEVEL.get(g["observability"], "evidence_assisted_audit")
+        step["held"] = nxt["held"]
     return step
 
 
@@ -185,7 +176,9 @@ def _gap_variants(index, holding, view: View, g: dict) -> list[View]:
     return variants
 
 
-def _open_step(index, o: dict) -> dict:
+def _open_steps(index, o: dict) -> list[dict]:
+    """An open condition's steps: a source condition acquired; a fact condition one step per proposition it bears on,
+    by its level (gaps.condition_step); a review where it names none."""
     source = o.get("kind") == SOURCE
     if source:
         channels = sorted(
@@ -199,14 +192,32 @@ def _open_step(index, o: dict) -> dict:
                 if (ch := source_channel(x))
             }
         )
-        return {
-            "kind": "acquire",
-            "by": "saga",
-            "target": {"channel": channels[0]} if len(channels) == 1 else {},
-            "decides": o["text"],
+        return [
+            {
+                "kind": "acquire",
+                "by": "saga",
+                "target": {"channel": channels[0]} if len(channels) == 1 else {},
+                "decides": o["text"],
+                "from": [o["id"]],
+            }
+        ]
+    if not o.get("bears_on"):
+        return [{"kind": "review", "by": "person", "target": {}, "decides": o["text"], "from": [o["id"]]}]
+    out = []
+    for b in o["bears_on"]:
+        level = gap_steps.level_of(b["ref"], getattr(index, "frame", None))
+        nxt = gap_steps.condition_step(b["ref"], level, b["proposition"])
+        step = {
+            "kind": nxt["kind"],
+            "by": BY[nxt["kind"]],
+            "target": {},
+            "decides": b["proposition"],
             "from": [o["id"]],
         }
-    return {"kind": "review", "by": "person", "target": {}, "decides": o["text"], "from": [o["id"]]}
+        if nxt.get("held"):
+            step["held"] = nxt["held"]
+        out.append(step)
+    return out
 
 
 def _open_variants(view: View, o: dict) -> list[View]:
@@ -258,7 +269,7 @@ def candidates(index, holding, view: View) -> list[tuple[dict, list[View]]]:
             out.append(_experiment_step(view, c))
     for oid in holding.open:
         o = index.open[oid]
-        out.append((_open_step(index, o), _open_variants(view, o)))
+        out += [(step, _open_variants(view, o)) for step in _open_steps(index, o)]
     for r in view.relations:
         if r.type == "O-D" and index.relations[r.id].get("partial") == "broader":
             step = {
@@ -279,7 +290,7 @@ def merge(served: list[tuple[str, dict, bool]]) -> tuple[list[dict], dict[str, l
     they decide; and per holding the ids of its steps."""
     merged: dict[str, dict] = {}
     for holding, step, could in served:
-        key = json.dumps([step["kind"], step["by"], step["target"], step["decides"]], sort_keys=True)
+        key = json.dumps([step["kind"], step["by"], step["target"], step["decides"], step.get("held")], sort_keys=True)
         m = merged.setdefault(key, {**step, "cases": [], "from": [], "could_change": False})
         if holding not in m["cases"]:
             m["cases"].append(holding)
@@ -294,8 +305,8 @@ def merge(served: list[tuple[str, dict, bool]]) -> tuple[list[dict], dict[str, l
     for n, s in enumerate(ordered, 1):
         sid = f"step:{n}"
         entry = {"id": sid, "kind": s["kind"], "by": s["by"]}
-        if s.get("level"):
-            entry["level"] = s["level"]
+        if s.get("held"):
+            entry["held"] = s["held"]
         if s["target"]:
             entry["target"] = s["target"]
         entry.update(

@@ -19,7 +19,12 @@ neither, a denial labelled with the root alone contradicts under a condition (th
 denial contradicts under a
 condition where what the denial means depends on what O cannot observe: a channel's own definitions (Google Play's
 Data safety section does not count a transfer to a service provider as sharing) or the legal role a denial names
-(that the recipient is a third party, not a processor). Denials of a sale are not related: O observes no
+(that the recipient is a third party, not a processor). Each part of a condition is a proposition of its own, with its
+level where it is declared (`parts`, gaps.py): a channel's definition (`ratatoskr.channels.DEFINITIONS`), a role
+(recipient-roles' `x-observability`), the root-category reading (gaps.READINGS), the denial's own scope and condition.
+The run's scope settles a denial's scope and condition where it can (scope.py, D3): a part that holds leaves the
+condition; a denial whose scope fails does not apply to what O observed and relates to no practice. Denials of a sale are
+not related: O observes no
 consideration. Without an aligned declaration in an analysed channel, a practice is observed without matching
 declaration; without an analysed channel that declares practices, the relation is insufficient evidence. D's
 declarations of practice that no practice aligns with are declared without observation, citing O's silence status of
@@ -31,21 +36,25 @@ one above it (D's purposes name no beneficiary, so none is compared).
 
 from dataclasses import asdict, dataclass, field
 
-from ratatoskr import align
+from ratatoskr import align, channels
 from ratatoskr import claims as claim_views
 from ratatoskr.registry import Registry
 from ratatoskr.vocabularies import Vocabulary
 
+from skuld import gaps
+from skuld import scope as run_scope
 from skuld.assessment import Declaration, Practice, Subjects, at, exhaustive
 from skuld.uncertainty import needs, raised
 
-#: 10: a silence is closed only on an exhaustive channel whose document was acquired complete (21 Nov 2026); 9: one
+#: 11: a condition's parts are propositions with their references (definition, role, reading, the denial's scope), its
+#: definitions and roles read from Ratatoskr 0.39.0, and the run's scope settles a denial's scope and condition (D3,
+#: 21 Nov 2026); 10: a silence is closed only on an exhaustive channel whose document was acquired complete (21 Nov 2026); 9: one
 #: level with its reasons (Ratatoskr 0.34.0): needs over the claims related, o_silence and
 #: silence_not_exhaustive where a relation reads a silence; 8: a practice's recipient and a declared one are compared by
 #: their owners when the practice was observed (20 Nov 2026); 7: D's marks on the root (Urda 2.1.0): a denial of no data in particular contradicts under no condition of
 #: its own, a value D could not place leaves the relation undecided; 6: a denial naming a recipient contradicts only a
 #: transmission to it; 5: denials relate to transmissions only; a root-category denial contradicts under a condition
-VERSION = "10"
+VERSION = "11"
 COMPONENT = {"role": "method", "id": "skuld.correspondence", "version": VERSION}
 
 EXACTLY, HIERARCHICALLY, PARTIALLY = "corresponds_exactly", "corresponds_hierarchically", "corresponds_partially"
@@ -56,17 +65,10 @@ CONTRADICTS, OBSERVED_ONLY, DECLARED_ONLY = (
 )
 NOT_COMPARABLE, INSUFFICIENT = "not_comparable", "insufficient_evidence"
 
-#: Channels whose definitions narrow what a declaration means, by aspect
-DEFINITIONS = {
-    ("google-play-data-safety", "recipient"): (
-        "the recipient is not a service provider (Google Play does not count a transfer to one as sharing)"
-    ),
-    ("google-play-data-safety", "data"): (
-        "the processing is not only ephemeral (Google Play does not count ephemeral processing as collection)"
-    ),
-}
-#: The legal roles a denial may name, and what O would have to know for it to contradict an observation
-ROLES = {"ThirdParty": "the recipient acts as a third party, not as a processor"}
+#: Channels whose definitions narrow what a declaration means, by aspect: their texts, from Ratatoskr's channels 1.1.0
+DEFINITIONS = {key: d["text"] for key, d in channels.DEFINITIONS.items()}
+#: The legal roles a denial may name whose naming adds a proposition O cannot observe (recipient-roles' x-observability)
+ROLES = ("ThirdParty",)
 #: The order of outcomes, best first, among the declarations a practice aligns with
 ORDER = (EXACTLY, HIERARCHICALLY, PARTIALLY)
 PRACTICE_CHANNELS = ("policy", "data_safety", "in_app")
@@ -88,6 +90,7 @@ class Relation:
     condition_kind: str | None = None  # fact or source (S-21): source where a mismatch reads D's silence and a
     # channel of D's that declares practices was not analysed (`analysed:<channel>, ...`, 8.9)
     condition_open: str | None = None  # the open condition that states it
+    parts: list[dict] = field(default_factory=list)  # the condition's propositions: {text, ref, proposition}
     silence: list[str] = field(default_factory=list)
     reason: str | None = None  # where no claim it relates explains its outcome
     uncertainty: dict | None = None  # of the claims it relates, or of the claim and the silence it reads
@@ -156,32 +159,63 @@ def _names_recipient(value, types: Vocabulary) -> bool:
     return bool(category) and category != types.root
 
 
+def _part(text: str, ref: str, proposition: str | None = None) -> dict:
+    return {"text": text, "ref": ref, "proposition": proposition or text}
+
+
 def _condition(
     declaration: Declaration,
     qualifiers: dict,
     aspect: str,
     channel_definitions: dict[str, str | None],
     data: Vocabulary | None = None,
-) -> str | None:
-    """What O cannot observe but a contradiction needs: a channel's definitions, the legal role a denial names, the
-    denial's own condition and applicability, and, for a denial D labelled only with the root category of data, that
-    it meant the data observed (plan/archive/POST_PAPER_FIXES 3: "we never collect or store those informations")."""
-    parts = []
+    scope: run_scope.RunScope | None = None,
+    settled: list | None = None,
+) -> list[dict] | None:
+    """What O cannot observe but a contradiction needs, as parts (`_part`): a channel's definitions, the legal role a
+    denial names, the denial's own condition and applicability, and, for a denial D labelled only with the root category
+    of data, that it meant the data observed (plan/archive/POST_PAPER_FIXES 3: "we never collect or store those
+    informations"). The run's scope settles the denial's applicability and condition where it can (scope.py): a part
+    that holds is left out, and recorded in `settled`; None where the denial does not apply to what O observed."""
+    parts, settled = [], settled if settled is not None else []
+    scope = scope or run_scope.RunScope()
     definitions = channel_definitions.get(declaration.channel)
-    if (definitions, aspect) in DEFINITIONS:
-        parts.append(DEFINITIONS[(definitions, aspect)])
+    found = channels.definition(definitions, aspect) if definitions else None
+    if found:
+        parts.append(_part(found["text"], f"definition:{definitions}/{aspect}"))
     role = declaration.value.get("role") if isinstance(declaration.value, dict) else None
     if role in ROLES and not parts:  # a channel's definitions already say what its role means
-        parts.append(ROLES[role])
-    if (qualifiers.get("condition") or {}).get("text"):
-        parts.append(f"the denial's condition held when the data were sent ({qualifiers['condition']['text']})")
-    if qualifiers.get("applicability"):
-        limits = ", ".join(f"{a.get('kind')} {a.get('value')}" for a in qualifiers["applicability"])
-        parts.append(f"the denial applies to the observation ({limits})")
+        named = gaps.role_level(role)
+        parts.append(_part(named[0] if named else role, f"role:{role}"))
+    for limit in qualifiers.get("applicability") or ():
+        applies = run_scope.applies(limit, scope)
+        said = f"{limit.get('kind')} {limit.get('value')}"
+        if applies is False:
+            settled.append({"declaration": declaration.id, "limit": said, "outcome": "fails"})
+            return None
+        if applies:
+            settled.append({"declaration": declaration.id, "limit": said, "outcome": "holds"})
+            continue
+        parts.append(_part(f"the denial applies to the observation ({said})", f"scope:{limit.get('kind')}"))
+    condition = qualifiers.get("condition") or {}
+    if condition.get("text"):
+        if run_scope.condition_held(condition, scope):
+            settled.append({"declaration": declaration.id, "limit": condition["text"], "outcome": "holds"})
+        else:
+            parts.append(
+                _part(
+                    f"the denial's condition held when the data were sent ({condition['text']})",
+                    "scope:condition",
+                )
+            )
     if data is not None and declaration.data == data.root and not (declaration.no_data or declaration.marked):
         # an earlier report's root stands both for all data and for a value D could not place (Urda before 2.1.0)
-        parts.append(f"the denial, labelled only {data.root}, means the data observed")
-    return "; and ".join(parts) or None
+        parts.append(_part(f"the denial, labelled only {data.root}, means the data observed", "reading:root-category"))
+    return parts
+
+
+def _joined(parts: list[dict]) -> str | None:
+    return "; and ".join(p["text"] for p in parts) or None
 
 
 #: Why a relation that only declarations of unplaced data could decide is insufficient evidence
@@ -199,8 +233,11 @@ def relate(
     registry: Registry | None,
     data: Vocabulary,
     types: Vocabulary,
+    scope: run_scope.RunScope | None = None,
+    settled: list | None = None,
 ) -> list[Relation]:
-    """The O–D relations of an assessment's practices and D's declarations of practice."""
+    """The O–D relations of an assessment's practices and D's declarations of practice; `scope` is the run's scope,
+    which settles a denial's own scope where it can, each settlement recorded in `settled`."""
     if d_report is None:
         return []
     d_claims = claim_views.of_report(d_report)
@@ -283,7 +320,9 @@ def relate(
                             pair = _recipient_outcome(p, d.value, registry, types)
                             if pair is None or pair[0] == PARTIALLY:
                                 continue
-                        contradicting.append(d)
+                        parts = _condition(d, qualifiers[d.claim["claim"]], aspect, definitions, data, scope, settled)
+                        if parts is not None:  # None: the run's scope settles that the denial does not apply
+                            contradicting.append((d, parts))
                     continue
                 if aspect == "data":
                     outcome, how = _data_outcome(d_data.kind), d_data.kind
@@ -306,9 +345,9 @@ def relate(
                     aspect=aspect,
                     alignment=UNPLACED.format(_unplaced_words(denied)),
                 )
-            for d in contradicting:
+            for d, parts in contradicting:
                 matched.add(d.id)
-                condition = _condition(d, qualifiers[d.claim["claim"]], aspect, definitions, data)
+                condition = _joined(parts)
                 add(
                     outcome=CONTRADICTS,
                     of=of,
@@ -317,6 +356,7 @@ def relate(
                     aspect=aspect,
                     condition=condition,
                     condition_kind="fact" if condition else None,
+                    parts=parts,
                 )
             if found:
                 found.sort(key=lambda f: f[0])
@@ -441,4 +481,6 @@ def number(relations: list[Relation]) -> None:
 
 
 def to_json(relations: list[Relation]) -> list[dict]:
-    return [{k: v for k, v in asdict(r).items() if k == "to" or v not in (None, [])} for r in relations]
+    return [
+        {k: v for k, v in asdict(r).items() if k == "to" or (v not in (None, []) and k != "parts")} for r in relations
+    ]
