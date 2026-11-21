@@ -12,7 +12,9 @@ For each statement:
 2. Give your reasoning as numbered steps, each citing the context ids it rests on (the statement, and the passages
    whose reading you apply), or "own knowledge" if it rests on none.
 
-Judge only what the statement says, not whether the processing it names takes place or is lawful.
+Judge only what the statement says, not whether the processing it names takes place. Lawfulness and the legal basis
+are not assessed here: judge a purpose only by whether its action, object and outcome determine which processing it
+includes.
 
 Answer with JSON only, in the form the response schema gives, naming each statement by its id.
 

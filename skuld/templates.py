@@ -11,7 +11,10 @@ version is part of every sample's identity, and so is the digest of its text.
                                           the schema (expectation.answer_schema; 21 Nov 2026); 5: the context last,
                                           after the fixed instructions (INFERENCE_GUIDE.md: a fixed part first and
                                           byte-identical, so the server reuses its prefix); 4 before
-    specificity, compatibility          2: the context last; 1 before
+    specificity                         3: lawfulness and the legal basis are not assessed, a purpose is judged only by
+                                          whether its action, object and outcome determine which processing it includes
+                                          (P10, 21 Nov 2026); 2: the context last; 1 before
+    compatibility                       2: the context last; 1 before
     minimisation                        3: the context last, and "list no entry for it" where a component admits no
                                           alternative, which the models wrote as "none" (2: "give none for it")
     propose                             2: the context (the flow) last, the answer's form before it; the generator's
@@ -25,7 +28,7 @@ from ratatoskr.errors import ConfigError
 CURRENT = {
     "expectation": "8",
     "expectation_traffic": "8",
-    "specificity": "2",
+    "specificity": "3",
     "compatibility": "2",
     "minimisation": "3",
     "propose": "2",
