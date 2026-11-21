@@ -147,6 +147,10 @@ KEYED_SINCE = 6
 #: The first version of the stage-1 prompts that asks where each purpose is achieved (`achieved_on`: DEVICE or SERVER,
 #: required in its answer schema; 21 Nov 2026); an earlier version's purposes do not say, and a case's purpose may
 ACHIEVED_SINCE = 7
+#: The first version of the stage-1 prompts whose context names, at each passage, the practices of the batch it was
+#: retrieved for, and which says that a passage documents only those (21 Nov 2026: 78% of the passages a practice saw
+#: in its batch had been retrieved for other practices of the batch); an earlier version's contexts do not
+LABELED_SINCE = 8
 #: Where a purpose is achieved, as the answer names it
 ACHIEVED_ON = {"DEVICE": "device", "SERVER": "server"}
 
@@ -163,6 +167,11 @@ def _without_practice(item: dict) -> dict:
 def keyed(prompt_version: str) -> bool:
     """Whether answers to a stage-1 prompt version are keyed by practice id."""
     return str(prompt_version).isdigit() and int(prompt_version) >= KEYED_SINCE
+
+
+def labeled(prompt_version: str) -> bool:
+    """Whether a stage-1 context for a prompt version names, at each passage, the practices it was retrieved for."""
+    return str(prompt_version).isdigit() and int(prompt_version) >= LABELED_SINCE
 
 
 def answer_schema(practices: list[str], prompt_version: str | None = None) -> dict:
@@ -365,24 +374,29 @@ def assemble(
     names: dict[str, str] | None = None,
     traffic: bool | None = None,
     notices: str | None = None,
+    prompt_version: str | None = None,
 ) -> Context:
     """The stage-1 context of a batch: the application, its practices as O states them, its screens, passages; with
-    `traffic` (config `expectation.traffic`), also each practice's messages as O annotated them."""
+    `traffic` (config `expectation.traffic`), also each practice's messages as O annotated them. From prompt version 8
+    (LABELED_SINCE; `prompt_version`, default the one in force) each passage names the practices it was retrieved for
+    (`labeled`); an earlier version's contexts are made as they were, so that its kept samples are found again."""
     names = names or {}
     traffic = traffic_enabled() if traffic is None else traffic
+    version = prompt_version if prompt_version is not None else templates.version(prompt_id())
     parts = [
         _part(
             "A1", "application", f"Android application {a.package}, version {a.version}.", ("input", "assessment.yaml")
         )
     ]
-    passages = []
+    passages: dict = {}  # a passage's file: the passage and the ids of the practices it was retrieved for, in order
     for p in batch.practices:
         part = _part(p.id, "practice", _describe(p, data, names), ("o_report", json.dumps(p.claims[0], sort_keys=True)))
         parts.append(part)
         entity = p.recipient if p.recipient and not p.recipient.startswith("domain:") and p.recipient != "?" else None
         for passage in corpus.about(p.data, entity, data):
-            if passage not in passages:
-                passages.append(passage)
+            retrieved_for = passages.setdefault(passage.path, (passage, []))[1]
+            if p.id not in retrieved_for:
+                retrieved_for.append(p.id)
     if traffic:
         shown = _Traffic(a)
         n = 0
@@ -392,8 +406,11 @@ def assemble(
                 parts.append(_part(f"T{n}", "traffic", f"{p.id}: {text}", ("o_report", ref_)))
     for n, (sid, text) in enumerate(batch.screens, 1):
         parts.append(_part(f"S{n}", "screen", text, ("run", f"events.jsonl#screen/{sid}"), batch.run))
-    for n, p in enumerate(passages, 1):
-        parts.append(_part(f"D{n}", "passage", f"{p.title} ({p.source}): {p.text}", ("corpus", p.path.name)))
+    for n, (p, retrieved_for) in enumerate(passages.values(), 1):
+        text = f"{p.title} ({p.source}): {p.text}"
+        if labeled(version):
+            text = f"(retrieved for {', '.join(retrieved_for)}) {text}"
+        parts.append(_part(f"D{n}", "passage", text, ("corpus", p.path.name)))
     context = Context(tuple(parts))
     check(context, notices)
     return context

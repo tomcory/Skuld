@@ -13,7 +13,8 @@ For each practice listed in the context (its id starts with P):
 1. State the purposes the practice plausibly serves, each as action, object, beneficiary (USER, PROVIDER or OTHER, for
    another party), context and outcome, with the node of the purpose vocabulary below that fits it best and its role
    (FUNCTIONAL if it serves something the user does on the screens, ANCILLARY otherwise). For the outcome, what the
-   processing is for, give the ids of the screens and passages that show it. The practice itself shows only that the
+   processing is for, give the ids of the screens and passages that show it. A passage documents only the practices
+   it names as retrieved for, so do not cite it for another practice. The practice itself shows only that the
    processing happens, not what it is for, so do not cite it for the outcome. Set "specific" to false if a purpose
    cannot be stated specifically. Say where the purpose is achieved ("achieved_on"): DEVICE if what it achieves happens
    on the device and the user could see it there (a screen shows the result, the application works offline with it),

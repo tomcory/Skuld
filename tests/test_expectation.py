@@ -555,14 +555,53 @@ def test_the_stage_1_prompt_tells_the_keyed_shape_and_earlier_versions_are_kept(
     from skuld import templates
 
     for prompt in ("expectation", "expectation_traffic"):
-        assert templates.CURRENT[prompt] == "7"
-        for keyed in ("6", "7"):
+        assert templates.CURRENT[prompt] == "8"
+        for keyed in ("6", "7", "8"):
             assert "under the practice's id" in templates.text(prompt, keyed)
         for earlier in ("4", "5"):
             assert "under the practice's id" not in templates.text(prompt, earlier)
         # version 7 asks where each purpose is achieved; the earlier ones do not
         assert '"achieved_on"' in templates.text(prompt, "7")
         assert all('"achieved_on"' not in templates.text(prompt, v) for v in ("4", "5", "6"))
+        # version 8 says that a passage documents only the practices it was retrieved for; the earlier ones do not
+        assert "documents only the practices" in templates.text(prompt, "8")
+        assert all("documents only the practices" not in templates.text(prompt, v) for v in ("4", "5", "6", "7"))
+
+
+def test_each_passage_names_the_practices_it_was_retrieved_for_from_prompt_version_8(workspace, tmp_path):
+    """21 Nov 2026: 78% of the passages a practice saw in its batch had been retrieved for other practices of it."""
+    from ratatoskr.vocabularies import Vocabulary
+
+    a, built = workspace
+    folder = a.corpus
+    (folder / "b.yaml").write_text(
+        "id: b\ntitle: Advertising ID\nsource: https://example.org/adid\nkind: platform\n"
+        "about: {nodes: [device-or-other-ids.advertising-id]}\ntext: The advertising ID is resettable.\n"
+    )
+    found, data = load_corpus(folder), Vocabulary.load("asgard-data")
+    two = [p for p in built.practices if p.data == "device-or-other-ids.advertising-id"][:1]
+    two += [p for p in built.practices if p.data != "device-or-other-ids.advertising-id"][:1]
+    assert len(two) == 2 and all(p.recipient == "adco" for p in two)
+    batch = expectation.Batch("e1", two, None, [], [])
+    passages = [
+        p["text"]
+        for p in expectation.assemble(batch, a, found, data, prompt_version="8").parts
+        if p["kind"] == "passage"
+    ]
+    first, second = two[0].id, two[1].id
+    assert passages[0].startswith(
+        f"(retrieved for {first}, {second}) Install attribution (https://example.org/attribution): "
+    )
+    assert passages[1].startswith(f"(retrieved for {first}) Advertising ID (https://example.org/adid): ")
+    rendered = expectation.render(expectation.assemble(batch, a, found, data, prompt_version="8"))
+    assert f"[D2] (retrieved for {first}) Advertising ID" in rendered
+    # an earlier version's context is made as it was, so that its kept samples are found again
+    earlier = expectation.assemble(batch, a, found, data, prompt_version="7")
+    assert [p["text"] for p in earlier.parts if p["kind"] == "passage"] == [t.split(") ", 1)[1] for t in passages]
+    # the version in force labels
+    from skuld import templates
+
+    assert expectation.labeled(templates.version(expectation.prompt_id())) and expectation.LABELED_SINCE == 8
 
 
 def test_a_model_given_the_keyed_schema_answers_every_practice_and_needs_no_topup(workspace, monkeypatch):
