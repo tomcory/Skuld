@@ -109,12 +109,20 @@ def test_every_family_of_the_catalogue_loads_and_its_newest_pass_the_strict_chec
 
 
 @needs_catalogue
-def test_the_launch_is_the_newest_and_checks_a_weather_apps_temperature_by_digit_and_degree():
+def test_the_launch_is_the_newest_and_checks_no_content():
+    # launch@5 (live check of 21 Nov 2026): a cold start with fresh data shows a weather app's welcome screen, not its
+    # forecast, so the launch checks only that the first screen is ready; content is left to goal-directed cases
     catalogue = cat.load(CATALOGUE)
     launch = catalogue.get(propose.RULE_FILLED)
-    assert launch.version >= 4
+    assert launch.version >= 5
     oracle = launch.data["purposes"][0]["oracle"]
     assert {"launcher_first": {}} in oracle["invalid"] and {"hold_above_ms": 1000} in oracle["invalid"]
+    assert not oracle.get("categories")
+    assert cat.success(oracle, "Weather") == [{"first_screen_ready": {}}]
+
+
+def test_launch_4_checked_a_weather_apps_temperature_by_digit_and_degree():
+    oracle = cat.load(CATALOGUE).get("launch", 4).data["purposes"][0]["oracle"]
     (weather,) = [e for e in oracle["categories"] if "Weather" in e["names"]]
     assert weather["success"] == [{"text_shown": {"any": [f"{d}°" for d in range(10)]}}]
     assert weather["control"] == {"intervention": "network", "expected": "breaks"} and weather["reach"] == ["R3"]

@@ -1,0 +1,61 @@
+id: launch
+version: 5
+name: launch
+entry: cold start from the launcher, fresh data
+path: no action
+outcome: an entry screen of the app, ready for input
+purposes:
+- id: P1
+  action: start and present
+  object: the app's entry screen
+  beneficiary: user
+  context: first launch
+  outcome: the app is ready for the user's first input
+  node: ServiceProvision
+  fit: broader
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: load the app's code and resources
+  - id: R2
+    statement: show an entry screen
+  oracle:
+    reach:
+    - R1
+    - R2
+    success:
+    - first_screen_ready: {}
+    invalid:
+    - hold_above_ms: 1000
+    - launcher_first: {}
+    measurements: []
+    slots: {}
+- id: P2
+  action: attribute
+  object: the installation
+  beneficiary: provider
+  context: first launch
+  outcome: the install is credited to the campaign that led to it
+  node: Marketing
+  fit: broader
+  specificity: sufficient
+  role: ancillary
+  requirements:
+  - id: R1
+    statement: tell the attribution service that this install launched
+  - id: R2
+    statement: let the attribution service match the install to a prior ad interaction
+  oracle: null
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026), after the live check on catalyst:
+    a cold start with fresh data shows a weather app''s welcome screen, not its forecast, so launch@4''s content check by
+    store category failed the launch baseline. Version 4 without the category table (its content checks and the weather entry''s
+    network control) and without R3; content is tested by the deeper cases (current-location-forecast, location-search-forecast)
+    as goal-directed runs. first_screen_ready, invalid [hold_above_ms, launcher_first] as in version 4'
+created: '2026-11-21'
+derived_from:
+  family: launch
+  version: 4
