@@ -37,10 +37,13 @@ def markdown(report: dict) -> str:
         status = r["verification"]["status"]
         if r["verification"].get("substitutes"):
             status += f" (substitute: {', '.join(r['verification']['substitutes'])})"
-        lines.append(
-            f"| {r['id'][-6:]} | {r['alternative'] or 'baseline'} | {', '.join(r['cases'])} "
-            f"| {status} | {unv} | {decisions} |"
-        )
+        condition = r["alternative"] or ("control" if r.get("control") else "baseline")
+        if r.get("goal"):
+            g = r["goal"]
+            condition += f" (goal {'reached' if g['reached'] else 'not reached'}" + (
+                f", window {g['window'][0]}–{g['window'][1]})" if g.get("window") else ")"
+            )
+        lines.append(f"| {r['id'][-6:]} | {condition} | {', '.join(r['cases'])} | {status} | {unv} | {decisions} |")
     lines += [
         "",
         "## Comparisons",
@@ -53,6 +56,11 @@ def markdown(report: dict) -> str:
         runs = f"{len(k['baseline_runs'])} + {len(k['alternative_runs'])}"
         outcome = k["outcome"] + (f" (substitute: {', '.join(k['substitutes'])})" if k.get("substitutes") else "")
         lines.append(f"| {k['case']} | {k['purpose']} | {k['alternative']} | {runs} | {outcome} | {worse} |")
+    lines += controls_markdown(report)
+    proposed = [c for c in report["cases"] if len(c.get("proposers") or ()) > 1]
+    if proposed:
+        lines += ["", "## Cases of several proposers", ""]
+        lines += [f"- {c['id']}: {', '.join(p['name'] for p in c['proposers'])}" for c in proposed]
     lines += ["", "## Not compared", ""]
     untested = [
         f"- {c['id']}: {u['alternative']} for {u['purpose']}: {u['reason']}"
@@ -67,3 +75,32 @@ def markdown(report: dict) -> str:
     ]
     lines += untested + problems or ["None."]
     return "\n".join(lines) + "\n"
+
+
+def controls_markdown(report: dict, heading: str = "## Controls") -> list[str]:
+    """The case report's controls by family: each control's outcome against what was expected; a control expected to
+    break that preserves is a sensitivity failure of the family's oracle. Nothing where no case has a control."""
+    controls = [(c["id"], k) for c in report["cases"] for k in c.get("controls") or ()]
+    if not controls:
+        return []
+    lines = [
+        "",
+        heading,
+        "",
+        "Controls test the oracles, not the application: none is a comparison, and no claim is made from one.",
+        "",
+        "| family | case | purpose | intervention | expected | outcome | runs | sensitivity |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for case, k in sorted(controls, key=lambda x: (x[1].get("family") or "?", x[0])):
+        runs = f"{len(k.get('baseline_runs') or ())} + {len(k.get('control_runs') or ())}"
+        outcome = k["outcome"] + (f" ({k['reason']})" if k.get("reason") else "")
+        flag = "**failure**" if k["sensitivity_failure"] else "–"
+        lines.append(
+            f"| {k.get('family') or '?'} | {case} | {k['purpose']} | {k['intervention']} | {k['expected']} "
+            f"| {outcome} | {runs} | {flag} |"
+        )
+    failed = sorted({k.get("family") or "?" for _, k in controls if k["sensitivity_failure"]})
+    if failed:
+        lines += ["", f"Sensitivity failures of the oracles of: {', '.join(failed)}."]
+    return lines

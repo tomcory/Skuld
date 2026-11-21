@@ -138,9 +138,21 @@ class Oracle:
         return f"{self.id}@{self.version}"
 
 
+#: The condition of a case's control runs (`Case.control`), beside the baseline and the alternatives' conditions
+CONTROL = "control"
+
+
 @dataclass(frozen=True)
 class Case:
-    """A case: a feature, its purposes, the components considered and their search space."""
+    """
+    A case: a feature, its purposes, the components considered and their search space.
+
+    Attributes:
+        control: The control its family declares, {intervention, expected} (`catalogue`), or None
+        family: The family it was generated from, {id, version, sha256, category?}, or None
+        proposers: Who proposed it (`propose.merge`): each model whose identical proposals merged into it, or the rule
+            that filled it
+    """
 
     id: str
     feature: Feature
@@ -148,6 +160,9 @@ class Case:
     components: tuple[Component, ...]
     alternatives: tuple[Alternative, ...]
     path: Path
+    control: dict | None = None
+    family: dict | None = None
+    proposers: tuple[dict, ...] = ()
 
     def purpose(self, purpose_id: str) -> Purpose:
         return next(p for p in self.purposes if p.id == purpose_id)
@@ -163,6 +178,9 @@ class RunEntry:
 
     Attributes:
         excluded: Why the assessor excluded the run (an interference from outside the experiment), or None
+        regime: 'goal' for a goal-directed run (`skuld run --case` of a case with a path), else None (a replay)
+        goal_id: The case a goal-directed run seeks
+        control_of: The case whose control the run is (condition `control`)
     """
 
     id: str
@@ -170,6 +188,9 @@ class RunEntry:
     condition: str
     order: int
     excluded: str | None = None
+    regime: str | None = None
+    goal_id: str | None = None
+    control_of: str | None = None
 
 
 @dataclass
@@ -398,6 +419,8 @@ def _case(path: Path) -> Case:
         _require(a, ("id", "component", "changes", "intervention"), where)
         if a["component"] not in known or any(ch["component"] not in known for ch in a["changes"]):
             raise InputError(f"{where}: names a component the case does not list")
+        if a.get("condition", a["id"]) == CONTROL:
+            raise InputError(f"{where}: the condition {CONTROL} is the control's")
         alternatives.append(
             Alternative(
                 id=a["id"],
@@ -408,6 +431,14 @@ def _case(path: Path) -> Case:
                 condition=a.get("condition", a["id"]),
             )
         )
+    control = data.get("control")
+    if control is not None:
+        from skuld.catalogue import CatalogueError, check_control
+
+        try:
+            check_control(control, f"{path}: control")
+        except CatalogueError as e:
+            raise InputError(str(e)) from e
     return Case(
         id=data["id"],
         feature=feature,
@@ -415,6 +446,9 @@ def _case(path: Path) -> Case:
         components=tuple(components),
         alternatives=tuple(alternatives),
         path=path,
+        control=control,
+        family=data.get("family"),
+        proposers=tuple(data.get("proposers") or ()),
     )
 
 
@@ -474,6 +508,9 @@ def _runs(root: Path, settings: dict) -> list[RunEntry]:
                     e["condition"],
                     e["order"],
                     e.get("excluded"),
+                    e.get("regime"),
+                    e.get("goal_id"),
+                    e.get("control_of"),
                 )
             )
     return entries

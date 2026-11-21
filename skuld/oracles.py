@@ -21,6 +21,17 @@ A run is `invalid` if any invalid condition holds, `met` if every success condit
 `unmet` otherwise. The predicates read the run's record and events only; the capture is read by
 the verification, not by an oracle. The costs a run records (messages, connections, time) are
 reported with every comparison and are not part of an oracle.
+
+`launcher_first` (0.4.0, 21 Nov 2026) holds where the first screen after a cold start, past the system's, is not the
+app's: the launcher, or another app. Such a launch says nothing of the app, so the launch families count the run
+invalid (it is dropped from both sides of a comparison, and `skuld run` makes it once more), not unmet.
+
+The window of `text_shown` and `screen_reached` is given in actions of a replay of the recording (`after_action`,
+`until_action`, filled from the feature's path: `{path_start}`, `{path_end}`). A goal-directed run follows no
+recording: its window is its goal episode (`runs.Window`), from the episode's start to where Loki's agent said it
+reached the goal (else to the episode's end). `decide` reads the oracle's window against the case's path there: a
+bound at or before the path's start is the episode's start, a bound at or after the path's end is the statement,
+and one between them widens to the episode (21 Nov 2026).
 """
 
 import builtins
@@ -32,7 +43,9 @@ from skuld.common import under
 from skuld.inputs import Oracle
 from skuld.runs import Run
 
-VERSION = "0.3.0"  # 0.3.0: first_screen_ready; 0.2.1: first_screen skips the system's screens (permission dialog, starting window)
+#: 0.4.0: launcher_first, and a goal-directed run's window is its goal episode; 0.3.0: first_screen_ready; 0.2.1:
+#: first_screen skips the system's screens (permission dialog, starting window)
+VERSION = "0.4.0"
 
 
 @dataclass(frozen=True)
@@ -100,6 +113,13 @@ def _actions(run: Run) -> dict[str, int]:
     return counts
 
 
+def _launcher_first(run: Run) -> bool:
+    """Whether the first screen after a cold start, past the system's, is the launcher's or another app's, not the
+    app's (Weather's baseline, 13 Nov 2026): the launch did not bring the app up, which says nothing of it."""
+    shown = _launched(run)
+    return bool(shown) and shown[0].get("package") != run.package
+
+
 def _first_screen_not(run: Run, exact_keys: list[str]) -> bool:
     shown = _launched(run)
     return bool(shown) and shown[0].get("exact_key") not in exact_keys
@@ -113,13 +133,17 @@ def _replay_complete(run: Run) -> bool:
 def after_actions(run: Run) -> list[tuple[int, dict]]:
     """
     The screens of the app, each with the number of actions taken before it. Loki records the screen an action led to
-    (label 'post_action') before the action's own event, so such a screen counts as after the next action.
+    (label 'post_action') before the action's own event, so such a screen counts as after the next action. Of a
+    goal-directed run, only the screens of its goal episode up to the agent's statement (`Run.window`).
     """
+    window = getattr(run, "window", None)
     taken, out = 0, []
-    for event in run.events:
+    for i, event in enumerate(run.events):
         if event.get("type") == "action":
             taken += 1
         elif event.get("type") == "screen" and event.get("package") == run.package:
+            if window is not None and not window.first <= i <= window.last:
+                continue
             out.append((taken + (1 if event.get("label") == "post_action" else 0), event))
     return out
 
@@ -167,7 +191,11 @@ PREDICATES = {
     "screen_reached": _screen_reached,
     "text_shown": _text_shown,
     "hold_above_ms": _hold_above_ms,
+    "launcher_first": _launcher_first,
 }
+
+#: The predicates whose window is given in actions (`after_action`, `until_action`)
+WINDOWED = ("screen_reached", "text_shown")
 
 
 def _messages_to(run: Run, domains: list[str]) -> int:
@@ -200,14 +228,36 @@ def _call(table: dict, spec, run: Run):
     return table[name](run, arguments)
 
 
-def decide(oracle: Oracle, run: Run) -> Decision:
-    """The oracle's decision on a run, with its measurements."""
+def decide(oracle: Oracle, run: Run, path: tuple[int, int] | None = None) -> Decision:
+    """
+    The oracle's decision on a run, with its measurements. `path`: the case's path in actions of the recording (its
+    start and end), by which a goal-directed run's window is read (`rebased`).
+    """
+    window = getattr(run, "window", None)
     measurements = {m.name: _call(METRICS, m.metric, run) for m in oracle.measurements}
-    invalid = [str(spec) for spec in oracle.invalid if _call(PREDICATES, spec, run)]
+    invalid = [str(spec) for spec in oracle.invalid if _call(PREDICATES, rebased(spec, window, path), run)]
     if invalid:
         return Decision("invalid", measurements, tuple(invalid))
-    failed = [str(spec) for spec in oracle.success if not _call(PREDICATES, spec, run)]
+    failed = [str(spec) for spec in oracle.success if not _call(PREDICATES, rebased(spec, window, path), run)]
     return Decision("unmet" if failed else "met", measurements, tuple(failed))
+
+
+def rebased(spec, window, path: tuple[int, int] | None):
+    """
+    An oracle's condition with its window in actions of a goal-directed run: a bound at or before the path's start is
+    the goal episode's start, one at or after the path's end its end (the agent's statement), one between them widens
+    to the episode; without a bound, the episode's. A condition of a replay, or without a window, is left as it is.
+    """
+    if window is None or not isinstance(spec, dict) or len(spec) != 1:
+        return spec
+    (name, arguments), *_ = spec.items()
+    if name not in WINDOWED or not isinstance(arguments, dict):
+        return spec
+    start, end = path if path is not None else (None, None)
+    low, high = arguments.get("after_action", 0), arguments.get("until_action")
+    after = window.end if end is not None and low >= end and end > (start or 0) else window.start
+    until = window.start if high is not None and start is not None and high <= start < end else window.end
+    return {name: {**arguments, "after_action": after, "until_action": until}}
 
 
 def costs(run: Run) -> dict:

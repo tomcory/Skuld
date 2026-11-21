@@ -11,6 +11,12 @@ record that does not conform to Ratatoskr's schemas, which Skuld checks again it
 
 Whether an intervention held is not decided here. `Run.verification` is Loki's answer to "was the
 app handed what the settings say"; Skuld's own verifier adds the traffic and the device state.
+
+A goal-directed run (Loki's regime goal, `loki crawl --goal … --goal-id <case>`, 21 Nov 2026) also has its episodes
+(`episodes.json`) and its scope (`run_scope.json`, whose `goal` names the goal and where Loki's agent said it reached
+it). Its `window` is the goal episode: from the episode's start to the agent's statement (a `goal_reached` event),
+or to the episode's end where the agent made none. That the feature was reached is the agent's statement only; an
+oracle decides it.
 """
 
 import json
@@ -66,6 +72,28 @@ class SettingChange:
 
 
 @dataclass(frozen=True)
+class Window:
+    """
+    The goal episode of a goal-directed run, which its oracles judge.
+
+    Attributes:
+        episode: The goal episode (the one the agent said it reached the goal in, else the last that sought it)
+        start: The run's actions before the episode's first
+        end: The run's actions up to the agent's statement, or to the episode's end
+        first: The index in the run's events of the episode's start
+        last: The index of the statement, or of the episode's end (the events after it are outside the window)
+        reached: Whether the agent said it reached the goal
+    """
+
+    episode: int | None
+    start: int
+    end: int
+    first: int
+    last: int
+    reached: bool
+
+
+@dataclass(frozen=True)
 class Run:
     """
     What a run folder holds, as far as Skuld uses it. Records are the dicts Loki wrote.
@@ -82,6 +110,8 @@ class Run:
             run was not instrumented
         scans: The scans of the apps (`app_scan`) by package: the permissions each requests and the
             tracker libraries it contains; None if the capture was not read or the run exported no scans
+        episodes: The records of `episodes.json` (an exploration's or a goal-directed run's), in order
+        scope: The run's `run_scope.json`; None if it has none
     """
 
     directory: Path
@@ -94,6 +124,8 @@ class Run:
     connections: tuple[dict, ...] | None
     instrumentation: dict | None
     scans: dict[str, dict] | None = None
+    episodes: tuple[dict, ...] = ()
+    scope: dict | None = None
 
     @property
     def run_id(self) -> str:
@@ -112,6 +144,73 @@ class Run:
     def verified(self) -> bool:
         """Whether Loki verified the intervention. A run without a verification is not verified."""
         return bool((self.verification or {}).get("verified"))
+
+    @property
+    def regime(self) -> str | None:
+        """How Loki made the run: 'goal', 'replay', or its crawl regime; None if its record does not say."""
+        if self.meta.get("regime"):
+            return str(self.meta["regime"])
+        return "replay" if self.meta.get("replay_of") else None
+
+    @property
+    def goal(self) -> dict | None:
+        """A goal-directed run's goal as Loki records it (run_scope.json, else run.json's regime summary): feature, id,
+        reached, where, unreachable, attempts, episodes, method; None for another run."""
+        return goal_of(self.meta, self.scope)
+
+    @property
+    def goal_id(self) -> str | None:
+        goal = self.goal or {}
+        if goal.get("id"):
+            return str(goal["id"])
+        started = next((e for e in self.events if e.get("type") == "episode_start" and e.get("kind") == "goal"), None)
+        return None if started is None or not started.get("item_id") else str(started["item_id"])
+
+    @property
+    def goal_reached(self) -> bool:
+        """Whether Loki's agent said it reached the goal: a `goal_reached` event. The statement alone; an oracle
+        decides whether the feature was reached."""
+        return any(e.get("type") == "goal_reached" for e in self.events)
+
+    @property
+    def window(self) -> Window | None:
+        """The goal episode of a goal-directed run; None for another run, or one with no goal episode."""
+        if self.regime != "goal":
+            return None
+        return goal_window(self.events)
+
+
+def goal_of(meta: dict, scope: dict | None) -> dict | None:
+    """The goal of a goal-directed run's record: run_scope.json's `goal`, else run.json's `regime_summary.goal`."""
+    goal = (scope or {}).get("goal") or ((meta.get("regime_summary") or {}).get("goal"))
+    return goal if isinstance(goal, dict) else None
+
+
+def goal_window(events: tuple[dict, ...] | list[dict]) -> Window | None:
+    """
+    The goal episode of a goal-directed run's events: the episode of its `goal_reached` event, else the last episode
+    of kind goal; from that episode's start to the statement, else to the episode's end (or the run's).
+    """
+    reached = next((e for e in events if e.get("type") == "goal_reached"), None)
+    goals = [e.get("episode") for e in events if e.get("type") == "episode_start" and e.get("kind") == "goal"]
+    episode = reached.get("episode") if reached is not None else (goals[-1] if goals else None)
+    if episode is None:
+        return None
+    taken, first, start = 0, None, 0
+    for i, event in enumerate(events):
+        kind = event.get("type")
+        if first is None and kind == "episode_start" and event.get("episode") == episode:
+            first, start = i, taken
+        elif first is not None and (
+            (reached is not None and event is reached)
+            or (reached is None and kind == "episode_end" and event.get("episode") == episode)
+        ):
+            return Window(episode, start, taken, first, i, reached is not None)
+        if kind == "action":
+            taken += 1
+    if first is None:
+        return None
+    return Window(episode, start, taken, first, len(events), reached is not None)
 
 
 def load(run_dir: str | Path, capture: bool = True) -> Run:
@@ -148,6 +247,8 @@ def load(run_dir: str | Path, capture: bool = True) -> Run:
     messages = connections = scans = None
     if capture:
         messages, connections, scans = _read_capture(directory, meta.get("capture"))
+    episodes = _json(directory / "episodes.json")
+    scope = _json(directory / "run_scope.json")
 
     return Run(
         directory=directory,
@@ -160,6 +261,8 @@ def load(run_dir: str | Path, capture: bool = True) -> Run:
         connections=connections,
         instrumentation=instrumentation,
         scans=scans,
+        episodes=tuple(e for e in episodes if isinstance(e, dict)) if isinstance(episodes, list) else (),
+        scope=scope if isinstance(scope, dict) else None,
     )
 
 

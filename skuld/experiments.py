@@ -6,6 +6,15 @@ For each case: the runs of its feature made after its inputs were fixed; the bas
 from O's reports of the baseline runs; the verification of every run under an alternative; the
 oracles' decisions; the comparisons; and the experimental channel's claims, with their evidence,
 uncertainty and sufficiency, the channel's silence, open conditions and gaps.
+
+A goal-directed run (`execute`, 21 Nov 2026) is a run of the case its goal names only, judged in its goal episode
+(`oracles.decide`). One whose goal Loki's agent did not say it reached (`goal_not_reached`, `goal_unreachable`) is no
+run of the feature: it is excluded, and a purpose and alternative left without a comparison by it has the gap
+reason `requirements_not_reached`, whose next step is an exploration, not a break.
+
+A case's control (`execute`: the condition `control`, its family's `control`) is judged as a comparison is, against
+the valid baseline runs, and recorded in the case's `controls`; it is never a comparison and no claim is made from it.
+A control expected to break that preserves is a sensitivity failure of the family's oracle.
 """
 
 import json
@@ -19,7 +28,8 @@ import skuld
 from skuld import configuration, oracles, rules, space, yamlio
 from skuld.common import vocabulary
 from skuld.comparison import Comparison, compare
-from skuld.inputs import Case, InputError, Workspace, check_frozen, digest
+from skuld.comparison import outcome as compared_outcome
+from skuld.inputs import CONTROL, Case, InputError, Workspace, check_frozen, digest
 from skuld.observe import ObservationError, annotators, observe, report_path, source_reads
 from skuld.runs import Run, RunRefused, load
 from skuld.uncertainty import needs, of
@@ -27,6 +37,8 @@ from skuld.verify import VERSION as verify_version
 from skuld.verify import Verification, baseline_problem, imposes, settings, verify
 
 BASELINE = "baseline"
+#: What a goal-directed run whose goal was not reached gives as its problem (qualification, exclusion)
+GOAL_NOT_REACHED = "the goal was not reached"
 DATA_VOCABULARY = "asgard-data"
 PURPOSE_VOCABULARY = "dpv-purposes"
 
@@ -120,11 +132,38 @@ def unqualified(root: Path) -> dict[str, list[str]]:
     return {c: p for c, p in cases.items() if p}
 
 
+def goal_id(state: RunState) -> str | None:
+    """The case a goal-directed run seeks (runs.jsonl's `goal_id`, else Loki's record of the goal); None for a run of
+    another regime."""
+    given = getattr(state.entry, "goal_id", None)
+    if given:
+        return str(given)
+    run = state.run
+    if run is None or getattr(run, "regime", None) != "goal":
+        return None
+    return getattr(run, "goal_id", None) or "?"
+
+
+def unreached(run) -> str | None:
+    """Why a goal-directed run is no run of its feature: Loki's agent did not say it reached the goal (the stop reason
+    names why); None for a run that reached it, or a run of another regime."""
+    if getattr(run, "regime", None) != "goal" or run.goal_reached:
+        return None
+    return f"{GOAL_NOT_REACHED} ({run.meta.get('stop_reason') or '?'})"
+
+
 def runs_of(case: Case, state: RunState) -> bool:
-    """Whether a run is meant as a run of the experimental case's feature: a replay of the recording its path is taken
-    from, and, for a replay of a prefix of it (`skuld run --case`), one that went as far as the path's last action."""
+    """Whether a run is meant as a run of the experimental case's feature: a goal-directed run whose goal is the case;
+    a control run of the case's control; else a replay of the recording its path is taken from, and, for a replay of a
+    prefix of it (`skuld run --case`), one that went as far as the path's last action."""
     feature = case.feature
     run = state.run
+    goal = goal_id(state)
+    if goal is not None:
+        return goal == case.id
+    control_of = getattr(state.entry, "control_of", None)
+    if control_of is not None and control_of != case.id:
+        return False
     until = ((run.meta.get("replay") or {}) if run is not None else {}).get("until_action")
     if until is not None and until < feature.actions:
         return False
@@ -197,6 +236,7 @@ class _Report:
         accepted = self.accepted_versions[case.id] = []
 
         usable, excluded = [], {}
+        not_reached: set[str] = set()  # the conditions of goal-directed runs that did not reach the feature
         for state in self.states.values():
             if state.refused:
                 excluded[state.id] = state.refused
@@ -204,6 +244,9 @@ class _Report:
                 continue
             elif departure := departed(case, state.run):
                 excluded[state.id] = departure
+            elif missed := unreached(state.run):
+                excluded[state.id] = missed
+                not_reached.add(state.entry.condition)
             elif (ran := str((state.run.meta.get("app") or {}).get("version_name", version))) != version and (
                 ran not in stated
             ):
@@ -240,8 +283,15 @@ class _Report:
             else:
                 alternatives_ok.append(alt)
         if case.id in self.unqualified:
+            why = self.unqualified[case.id]
             for alt in case.alternatives:
-                problems[alt.id] = [f"the case did not qualify: {'; '.join(self.unqualified[case.id])}"]
+                if all(p.startswith(GOAL_NOT_REACHED) for p in why):
+                    # the qualifying goal-directed run did not reach the feature: an exploration is the next step,
+                    # and the alternative stays a member of the search space
+                    for p in case.purposes:
+                        missing_why[(p.id, alt.id)] = "requirements_not_reached"
+                    continue
+                problems[alt.id] = [f"the case did not qualify: {'; '.join(why)}"]
                 for p in case.purposes:
                     missing_why[(p.id, alt.id)] = "precondition_failed"
             alternatives_ok = []
@@ -271,23 +321,33 @@ class _Report:
                     excluded.setdefault(s.id, f"intervention for {alt.id} not verified")
             under[alt.id] = verified
             for p in case.purposes:
-                if not runs:
+                if not runs and alt.condition in not_reached:
+                    missing_why[(p.id, alt.id)] = "requirements_not_reached"
+                elif not runs:
                     missing_why[(p.id, alt.id)] = "search_space_not_run"
                 elif not verified:
                     missing_why[(p.id, alt.id)] = "intervention_not_verified"
 
-        comparisons = {}
+        controls = [s for s in usable if s.entry.condition == CONTROL] if case.control else []
+        for s in controls:
+            if not ((s.run.meta.get("config") or {}).get("capture") or {}).get("block_hosts"):
+                excluded[s.id] = "a control run that blocked no host"
+        controls = [s for s in controls if s.id not in excluded]
+        path = (case.feature.start, case.feature.actions)
+        comparisons, checked = {}, []
         for purpose in case.purposes:
             if purpose.oracle is None:
                 continue
             oracle = ws.oracles[purpose.oracle]
             decided = {}
-            judged = {s.id: s for s in [*baseline, *(r for runs in under.values() for r in runs)]}
+            judged = {s.id: s for s in [*baseline, *(r for runs in under.values() for r in runs), *controls]}
             for s in judged.values():
-                d = s.decisions[(case.id, purpose.id)] = oracles.decide(oracle, s.run)
+                d = s.decisions[(case.id, purpose.id)] = oracles.decide(oracle, s.run, path)
                 decided[s.id] = d
                 self._decision_evidence(case, purpose.id, oracle, s, d)
             valid_baseline = {s.id: decided[s.id] for s in baseline if decided[s.id].decision != "invalid"}
+            if case.control:
+                checked.append(self._control(case, purpose.id, oracle, valid_baseline, controls, decided))
             for alt in alternatives_ok:
                 if not present[alt.component]:
                     # C2 (author, 14 Nov 2026): no baseline run of the case's path read the source or reached the
@@ -296,9 +356,16 @@ class _Report:
                     continue
                 valid = {s.id: decided[s.id] for s in under[alt.id] if decided[s.id].decision != "invalid"}
                 if not valid_baseline or not valid:
-                    # every run of a side was invalid for the oracle, or no baseline run was usable
+                    # every run of a side was invalid for the oracle, or no baseline run was usable: where a side's
+                    # goal-directed runs did not reach the feature, an exploration is the next step
+                    side = (BASELINE if not valid_baseline else alt.condition) in not_reached
                     missing_why.setdefault(
-                        (purpose.id, alt.id), "precondition_failed" if judged else "search_space_not_run"
+                        (purpose.id, alt.id),
+                        "requirements_not_reached"
+                        if side
+                        else "precondition_failed"
+                        if judged
+                        else "search_space_not_run",
                     )
                     continue
                 k = compare(
@@ -322,7 +389,42 @@ class _Report:
                 comparisons[(purpose.id, alt.id)] = k
                 self._comparison(k, case)
 
-        self._case_record(case, inputs, u0, present, usable, excluded, problems, missing_why)
+        if not baseline and BASELINE in not_reached:
+            for p in case.purposes:
+                for alt in case.alternatives:
+                    if missing_why.get((p.id, alt.id)) in (None, "search_space_not_run", "precondition_failed"):
+                        if alt.id not in problems:
+                            missing_why[(p.id, alt.id)] = "requirements_not_reached"
+        self._case_record(case, inputs, u0, present, usable, excluded, problems, missing_why, checked)
+
+    def _control(self, case: Case, purpose: str, oracle, baseline: dict, runs: list, decided: dict) -> dict:
+        """The control of a purpose: its runs judged by the purpose's oracle against the valid baseline runs, as a
+        comparison is; a sensitivity failure where it was expected to break and preserves."""
+        valid = {s.id: decided[s.id] for s in runs if decided[s.id].decision != "invalid"}
+        hosts = sorted(
+            {h for s in runs for h in ((s.run.meta.get("config") or {}).get("capture") or {}).get("block_hosts") or ()}
+        )
+        expected = case.control["expected"]
+        found = compared_outcome(list(baseline.values()), list(valid.values())) if baseline and valid else None
+        family = case.family or {}
+        out = {
+            "id": f"{case.id}:{purpose}:{CONTROL}",
+            "purpose": purpose,
+            "oracle": oracle.key,
+            **({"family": f"{family['id']}@{family['version']}"} if family.get("id") else {}),
+            "intervention": case.control["intervention"],
+            "expected": expected,
+            "block_hosts": hosts,
+            "baseline_runs": list(baseline),
+            "control_runs": list(valid),
+            "outcome": found or "not_compared",
+            "sensitivity_failure": expected == "breaks" and found == "preserves",
+        }
+        if found is None:
+            out["reason"] = (
+                "no control run" if not runs else "no valid control run" if not valid else "no valid baseline run"
+            )
+        return out
 
     # -- evidence -------------------------------------------------------------------------------------------------
 
@@ -451,6 +553,7 @@ class _Report:
         excluded: dict,
         problems: dict,
         missing_why: dict,
+        controls: list[dict] = (),
     ) -> None:
         recorded = []
         for name in inputs:
@@ -515,6 +618,8 @@ class _Report:
                 "sources": sources,
                 "acquisition": {"run_record": "acquired" if usable else "absent"},
                 "excluded": excluded,
+                **({"controls": list(controls)} if case.control else {}),
+                **({"proposers": [dict(p) for p in case.proposers]} if case.proposers else {}),
             }
         )
 
@@ -529,7 +634,8 @@ class _Report:
                 {
                     "id": state.id,
                     "cases": state.cases,
-                    "alternative": None if state.entry.condition == BASELINE else state.entry.condition,
+                    "alternative": None if state.entry.condition in (BASELINE, CONTROL) else state.entry.condition,
+                    **_regime(state),
                     "order": state.entry.order,
                     "time": {"start": run.meta.get("started_at", "?"), "end": run.meta.get("finished_at", "?")},
                     "settings": {
@@ -603,6 +709,30 @@ class _Report:
 
 #: The uncertainty of a record of a run: low, a run's records state what they state
 LOW = of()
+
+
+def _regime(state: RunState) -> dict:
+    """A run's regime for the report: a goal-directed run's goal and window, a control run's case."""
+    run = state.run
+    out: dict = {}
+    if run.regime in ("replay", "goal"):
+        out["regime"] = run.regime
+    if run.regime == "goal":
+        window = run.window
+        out["goal"] = {
+            "id": goal_id(state),
+            "reached": run.goal_reached,
+            "stop_reason": str(run.meta.get("stop_reason") or "?"),
+            "episode": window.episode if window else None,
+            "window": [window.start, window.end] if window else None,
+            "method": str((run.goal or {}).get("method") or "the agent's statement"),
+        }
+    if state.entry.condition == CONTROL:
+        out["control"] = {
+            "case": getattr(state.entry, "control_of", None) or next(iter(state.cases), "?"),
+            "intervention": "network",  # the only control intervention (catalogue.CONTROL_INTERVENTIONS)
+        }
+    return out
 
 
 def _shared_scope(reports: list[dict]) -> dict:

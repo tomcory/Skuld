@@ -410,7 +410,10 @@ def build(
         (root / REPORT).write_text(
             json.dumps(report, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
         )
-        (root / MARKDOWN).write_text(markdown(report, built, a.frame, settled, scope), encoding="utf-8", newline="\n")
+        case_report = experiments.case_report(a.cases, Path(root))
+        (root / MARKDOWN).write_text(
+            markdown(report, built, a.frame, settled, scope, case_report), encoding="utf-8", newline="\n"
+        )
     return report, stage1 + tier["members"] + premises
 
 
@@ -1053,9 +1056,12 @@ def _coverage_markdown(frame) -> list[str]:
     return lines
 
 
-def markdown(report: dict, built, frame=None, settled: list | None = None, scope=None) -> str:
-    """The report for a reader: the relations, the concerns, the experiments, the open conditions, what the run's
-    scope settled, the gaps by next step and the frame's coverage statement."""
+def markdown(
+    report: dict, built, frame=None, settled: list | None = None, scope=None, cases: dict | None = None
+) -> str:
+    """The report for a reader: the relations, the concerns, the experiments (with the case report's controls by
+    family, `cases`), the open conditions, what the run's scope settled, the gaps by next step and the frame's coverage
+    statement."""
     app = report["application"]
     what = _what(built)
     claims = {c["id"]: c for c in report["claims"]}
@@ -1132,6 +1138,10 @@ def markdown(report: dict, built, frame=None, settled: list | None = None, scope
             lines.append(
                 f"| {c['subject']} | {c['purpose']['id']} ({c['purpose']['node']}) of {c['case']} | {claim} | {status} | {spoke} |"
             )
+    if cases is not None:
+        from skuld.report import controls_markdown
+
+        lines += controls_markdown(cases, "## Experiments' controls")
     if report["open"]:
         lines += ["", "## Open conditions", ""]
         lines += [f"- {o['text']} (qualifies {', '.join(o['qualifies'])})" for o in report["open"]]

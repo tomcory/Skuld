@@ -17,7 +17,8 @@ For a purpose p and a component ε of the baseline u_0:
   with the reason naming the substitute.
 
 A claim is not applicable if ε is not a component of u_0, and not assessable if p is vague or has no observable
-oracle. A comparison is in the supporting evidence of the claim it makes supported and in the challenging evidence
+oracle. Where the goal-directed runs did not reach the feature for every alternative of ε (`requirements_not_reached`),
+whether ε is a component of u_0 is not known: the claims are not established, with that reason (21 Nov 2026). A comparison is in the supporting evidence of the claim it makes supported and in the challenging evidence
 of the claim it makes refuted. Without a comparison, the claim is not established, with the reason none was made.
 """
 
@@ -29,12 +30,13 @@ from skuld.comparison import Comparison
 from skuld.configuration import coarser
 from skuld.inputs import Alternative, Case, Component, Purpose
 
-#: The status rule as a named method of the report: 4 since a purpose without an observable oracle says where it is
+#: The status rule as a named method of the report: 5 since a component of a feature the goal-directed runs did not
+#: reach is not known to be absent (21 Nov 2026); 4 since a purpose without an observable oracle says where it is
 #: achieved, where the case states it (21 Nov 2026); 3 since an alternative survived by a more invasive substitute has
 #: the gap reason substitute_more_invasive (Ratatoskr 0.38.0, 21 Nov 2026); 2 since a removal the application survived by a substitute is
 #: substitutable, and an alternative survived by a substitute more invasive than its datum is not demonstrated
 #: (21 Nov 2026); 1 was recorded as Skuld's version
-VERSION = "4"
+VERSION = "5"
 COMPONENT = {"role": "method", "id": "skuld.rules", "version": VERSION}
 
 
@@ -179,7 +181,12 @@ def claims(
         for component in case.components:
             alternatives = [a for a in case.alternatives if a.component == component.id and a.id not in invalid]
             removal = next((a for a in alternatives if a.removal), None)
-            pre = precondition(purpose, present[component.id])
+            # a feature not reached shows no component: whether this one is in u_0 is not known (an exploration is
+            # the next step), so it is not taken for absent
+            unreached = bool(alternatives) and all(
+                missing_why.get((purpose.id, a.id)) == "requirements_not_reached" for a in alternatives
+            )
+            pre = precondition(purpose, present[component.id] or unreached)
             if pre:
                 status, reason, why = pre
                 made = [Claim("dependency", purpose.id, component.id, status)] if removal else []

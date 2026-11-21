@@ -59,6 +59,30 @@ note: <what the reviewer found, or empty>
 A review names the digest of the family file it read; a review of another text than the family's is no review of it.
 A `reviewed: {by, time, note}` field in a family file, as families written before carry it, is still read as its
 review where no review file is stored (deprecated: record a review with `skuld catalogue --review`).
+
+A family may declare a control (21 Nov 2026): a condition whose outcome is expected before the runs, which tests the
+family's oracles rather than the application. `network` blocks every host the case's baseline runs contacted, so a
+purpose that needs the network must break; a control that preserves it is a sensitivity failure of the oracle.
+
+```yaml
+control: {intervention: network, expected: breaks}
+```
+
+An oracle template may add conditions by the application's store category (Sága's `store_listing.category`, in the
+store's language; matched without regard to case), each entry with the category names it applies to, its conditions
+of success and, optionally, its own control, which replaces the family's; a category no entry names keeps the
+template's own conditions (`launch@3`):
+
+```yaml
+oracle:
+  success:
+    - first_screen_ready: {}
+  categories:
+    - names: [Weather, Wetter]
+      success:
+        - text_shown: {any: ["°"]}
+      control: {intervention: network, expected: breaks}
+```
 """
 
 import hashlib
@@ -76,6 +100,13 @@ SLOT_KINDS = ("text", "screen", "activity")
 BUILT_IN = ("path_start", "path_end")
 #: The invalid conditions of every generated oracle: a hold at start that changes how the application starts
 INVALID = ({"hold_above_ms": 1000},)
+#: The invalid conditions of the launch families' oracles: also a launch that brought up the launcher or another app
+#: first, which says nothing of the application (21 Nov 2026)
+LAUNCH_INVALID = (*INVALID, {"launcher_first": {}})
+#: The interventions of a control: `network` blocks every host the case's baseline runs contacted
+CONTROL_INTERVENTIONS = ("network",)
+#: The outcomes a control may expect
+EXPECTED = ("breaks", "preserves")
 
 _SLOT = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
 _ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -263,6 +294,8 @@ def check(data: dict) -> None:
         raise CatalogueError(f"the id {data['id']!r} is not lower-case words joined by hyphens")
     if not data["purposes"]:
         raise CatalogueError("no purpose")
+    if data.get("control") is not None:
+        check_control(data["control"], "the family's control")
     for p in data["purposes"]:
         where = f"purpose {p.get('id')}"
         parts = ("id", "action", "object", "beneficiary", "context", "outcome", "node", "specificity", "role")
@@ -276,7 +309,20 @@ def check(data: dict) -> None:
             raise CatalogueError(f"{where}: the oracle reaches {oracle.get('reach')}, not requirements of the purpose")
         if not oracle.get("success"):
             raise CatalogueError(f"{where}: the oracle has no condition of success")
-        for spec in [*oracle["success"], *(oracle.get("invalid") or ())]:
+        by_category = oracle.get("categories") or []
+        if not isinstance(by_category, list):
+            raise CatalogueError(f"{where}: the oracle's categories are a list of entries")
+        for n, entry in enumerate(by_category, 1):
+            names = entry.get("names") if isinstance(entry, dict) else None
+            if not names or not all(isinstance(x, str) and x.strip() for x in names) or not entry.get("success"):
+                raise CatalogueError(f"{where}: category entry {n} needs names and conditions of success")
+            if entry.get("control") is not None:
+                check_control(entry["control"], f"{where}: category entry {n}'s control")
+        for spec in [
+            *oracle["success"],
+            *(oracle.get("invalid") or ()),
+            *(s for e in by_category for s in e["success"]),
+        ]:
             if _name(spec) not in PREDICATES:
                 raise CatalogueError(f"{where}: unknown predicate {_name(spec)!r}")
         for m in oracle.get("measurements") or ():
@@ -286,11 +332,56 @@ def check(data: dict) -> None:
         for name, slot in slots.items():
             if slot.get("kind") not in SLOT_KINDS or not slot.get("description"):
                 raise CatalogueError(f"{where}: slot {name} needs a kind of {SLOT_KINDS} and a description")
-        used = slots_in([oracle["success"], oracle.get("invalid") or [], oracle.get("measurements") or []])
+        used = slots_in(
+            [
+                oracle["success"],
+                oracle.get("invalid") or [],
+                oracle.get("measurements") or [],
+                [e["success"] for e in by_category],
+            ]
+        )
         if undeclared := used - set(slots) - set(BUILT_IN):
             raise CatalogueError(f"{where}: undeclared slots {sorted(undeclared)}")
         if unused := set(slots) - used:
             raise CatalogueError(f"{where}: slots {sorted(unused)} are declared but not used")
+
+
+def check_control(control, where: str) -> None:
+    """Refuses a control that names no known intervention or expected outcome."""
+    if not isinstance(control, dict) or set(control) != {"intervention", "expected"}:
+        raise CatalogueError(f"{where} is {{intervention, expected}}")
+    if control["intervention"] not in CONTROL_INTERVENTIONS:
+        raise CatalogueError(f"{where}: the intervention is one of {', '.join(CONTROL_INTERVENTIONS)}")
+    if control["expected"] not in EXPECTED:
+        raise CatalogueError(f"{where}: the expected outcome is one of {', '.join(EXPECTED)}")
+
+
+def category_entry(oracle: dict, category: str | None) -> dict | None:
+    """The entry of an oracle template's category table that names the application's store category, or None."""
+    if not category:
+        return None
+    wanted = " ".join(category.split()).casefold()
+    for entry in oracle.get("categories") or ():
+        if any(" ".join(n.split()).casefold() == wanted for n in entry["names"]):
+            return entry
+    return None
+
+
+def success(oracle: dict, category: str | None) -> list:
+    """An oracle template's conditions of success for an application of the store category: its own, and those of
+    the category's entry where its table has one."""
+    entry = category_entry(oracle, category)
+    return [*oracle["success"], *(entry["success"] if entry else ())]
+
+
+def control(family: dict, category: str | None = None) -> dict | None:
+    """The control a family declares for an application of the store category: a category entry's (of the first
+    oracle whose table names the category), else the family's own; None if it declares none."""
+    for p in family.get("purposes") or ():
+        entry = category_entry(p.get("oracle") or {}, category)
+        if entry is not None:
+            return entry.get("control") or family.get("control")
+    return family.get("control")
 
 
 def slots_in(value) -> set[str]:

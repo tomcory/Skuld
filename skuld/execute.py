@@ -19,6 +19,24 @@ excluded them, `experiments`). A version that differs stops the series, unless t
 (`compatible_versions` of `assessment.yaml`, `skuld compat add`): the series is then made, and each of its entries in
 `runs.jsonl` carries the drift (`version_drift`). A replay whose record names another version than the one checked
 (the application updated during the series) stops the series after it.
+
+Goal-directed runs (21 Nov 2026). The replays of a deeper case's recorded path departed from it in every case of the
+study (Loki's "episode start screen unreachable"), so a case whose feature has a path is run in Loki's goal regime:
+`loki -c <configuration> crawl <package> -d <device> --goal "<feature>: <outcome>" --goal-id <case> --max-duration
+<s>`, per condition in the same rotated order and with the same configuration as a replay. Loki's agent seeks the
+feature and says whether it reached it; its entry in `runs.jsonl` records `regime: goal` and the `goal_id`, by which
+the analysis takes it as a run of that case only. The duration cap is config.json's
+`experiments.goal_max_duration_s` (900 s by default: Loki's three attempts of a goal at a 27–31B model's pace, with
+its own logout after the cap). The launch stays a replay of the cold start; `replay=True` (`skuld run --replay`)
+replays a deeper case's path as before.
+
+A launch that brought up the launcher or another app first is an invalid run (`oracles.launcher_first`); a run whose
+launch case's oracle decides invalid is made once more (`LAUNCH_REPEATS`), the first kept in `runs.jsonl`.
+
+A case's control (`catalogue`: `control: {intervention: network, expected: breaks}`) is the condition `control`,
+scheduled and rotated as the alternatives are. `network` blocks every host the case's baseline runs made so far
+contacted (their captured connections and messages), so a control run needs a baseline run of the case before it
+(`--qualify` makes one first); its entry records the case (`control_of`).
 """
 
 import copy
@@ -30,12 +48,16 @@ from pathlib import Path
 
 import yaml
 
-from skuld import yamlio
+from skuld import config, yamlio
 from skuld.experiments import BASELINE, _compatible
-from skuld.inputs import InputError, Workspace, check_frozen, portable, write_atomically
+from skuld.inputs import CONTROL, Case, InputError, Workspace, check_frozen, portable, write_atomically
 from skuld.verify import SOURCE_NODES
 
 QUALIFICATION = "qualification.json"
+#: The duration cap of a goal-directed run, unless config.json's `experiments.goal_max_duration_s` gives another
+GOAL_MAX_DURATION_S = 900
+#: How often a run whose launch decided invalid (the launcher first) is made once more
+LAUNCH_REPEATS = 1
 
 
 class ExecutionError(Exception):
@@ -130,6 +152,16 @@ def version_drift(workspace: Workspace, recorded: Path, installed: str | None) -
     return {"installed": installed, "recorded": recording, "workspace": ours, "stated": statements}
 
 
+def goal_max_duration() -> float:
+    """The duration cap of a goal-directed run, in seconds (config.json's `experiments.goal_max_duration_s`)."""
+    return float((config.load().get("experiments") or {}).get("goal_max_duration_s", GOAL_MAX_DURATION_S))
+
+
+def goal_text(case: Case) -> str:
+    """What Loki's agent is asked to reach: the case's feature and its outcome, as a user would name them."""
+    return f"{case.feature.name}: {case.feature.outcome}"
+
+
 def schedule(conditions: list[str], repeat: int) -> list[str]:
     """The conditions in rotated order: ABC, BCA, CAB, …, so that each comes first, last and between."""
     return [conditions[(i + r) % len(conditions)] for r in range(repeat) for i in range(len(conditions))]
@@ -148,6 +180,8 @@ def run(
     case: str | None = None,
     keep_going: bool = False,
     installed: Callable[[str, str], str | None] | None = None,
+    replay: bool = False,
+    max_duration: float | None = None,
 ) -> list[dict]:
     """
     Makes the runs and appends them to runs.jsonl; returns the entries written.
@@ -161,10 +195,13 @@ def run(
         base: Loki's base configuration
         loki: The command that runs Loki, e.g. ["../Loki/.venv/bin/loki"] (cli.component)
         cwd: Where Loki is run (its configuration's output folder is relative to it)
-        case: Replay only up to the end of this case's path
+        case: The runs of this case: goal-directed runs for a case whose feature has a path, else replays of the cold
+            start (the launch); its control is the condition `control`
         keep_going: Loki goes on with an episode's next actions after one it could not replay (`--keep-going`)
         installed: Reads the installed version, (device, package) -> version name or None; `installed_version` if
             None (a test passes its own)
+        replay: Replay a deeper case's path up to its end (`--until-action`) instead of seeking it
+        max_duration: A goal-directed run's duration cap in seconds (default: `goal_max_duration`)
 
     Raises:
         ExecutionError: Also before the first run, for a version on the device that is neither the recording's nor
@@ -176,19 +213,31 @@ def run(
         raise ExecutionError(f"the inputs are not fixed: {e}") from e
     on_device = (installed or installed_version)(device, str(workspace.application.get("package", "")))
     drift = version_drift(workspace, recorded, on_device)
-    until = None
+    until, chosen, goal = None, None, False
     if case is not None:
         chosen = next((c for c in workspace.cases if c.id == case), None)
         if chosen is None:
             raise ExecutionError(f"no case {case}")
-        if chosen.feature.path_run not in (None, recorded.name):
+        goal = bool(chosen.feature.path_run) and not replay
+        if not goal and chosen.feature.path_run not in (None, recorded.name):
             raise ExecutionError(f"case {case} follows the recording {chosen.feature.path_run}, not {recorded.name}")
-        until = chosen.feature.actions if chosen.feature.path_run else system_prefix(recorded)
+        if not goal:
+            until = chosen.feature.actions if chosen.feature.path_run else system_prefix(recorded)
     known = interventions(workspace)
-    flags = ["--keep-going"] if keep_going else []
-    unknown = [c for c in conditions if c != BASELINE and c not in known]
+    flags = ["--keep-going"] if keep_going and not goal else []
+    unknown = [c for c in conditions if c not in (BASELINE, CONTROL) and c not in known]
     if unknown:
         raise ExecutionError(f"no case defines the conditions {unknown}")
+    if CONTROL in conditions and (chosen is None or chosen.control is None):
+        raise ExecutionError(
+            "the condition control is a case's control: give the case (--case), one whose family declares a control"
+        )
+    how = {
+        "goal": chosen if goal else None,
+        "control": chosen if CONTROL in conditions else None,
+        "max_duration": max_duration or goal_max_duration(),
+        "package": str(workspace.application.get("package", "")),
+    }
     base_config = yamlio.load(base.read_text(encoding="utf-8")) or {}
     folder = workspace.root / "configs"
     folder.mkdir(exist_ok=True)
@@ -223,6 +272,7 @@ def run(
                 flags,
                 on_device,
                 drift,
+                how,
             )
             order = written[-1]["order"]
             problems, covered = qualification(workspace, Path(written[-1]["dir"]), with_covered=True)
@@ -257,6 +307,8 @@ def run(
             flags,
             on_device,
             drift,
+            how,
+            earlier=written,
         )
     finally:
         if frida:
@@ -329,21 +381,63 @@ def _series(
     flags=(),
     version=None,
     drift=None,
+    how=None,
+    earlier=(),
 ) -> list[dict]:
     """The runs of the conditions; stops after a run whose record names another version than `version`, the one
-    checked before the series."""
+    checked before the series. `how`: the goal-directed case and the case whose control is run (`run`); `earlier`:
+    the runs this call made before the series (the qualifying run), whose hosts a control blocks too."""
+    how = how or {}
+    goal, controlled = how.get("goal"), how.get("control")
     written = []
     for condition in schedule(conditions, repeat):
-        for attempt in range(1 + RETRIES):
+        retries = repeats = 0
+        while True:
             order += 1
             config_path = folder / f"{order:03d}-{condition}.yaml"
-            config = configuration(base_config, {} if condition == BASELINE else known[condition])
+            if condition == CONTROL:
+                hosts = baseline_hosts(workspace, controlled, [*earlier, *written])
+                if not hosts:
+                    raise ExecutionError(
+                        f"run {order} (control of {controlled.id}): the control blocks the hosts the case's baseline "
+                        "runs contacted, and none is known yet; make a baseline run of the case first (--qualify)"
+                    )
+                intervention = {"block_hosts": hosts}
+            else:
+                intervention = {} if condition == BASELINE else known[condition]
+            config = configuration(base_config, intervention)
             config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8", newline="\n")
-            command = (
-                [*loki, "-c", str(config_path.resolve()), "replay", str(recorded.resolve()), "-d", device, "--force"]
-                + ([] if until is None else ["--until-action", str(until)])
-                + list(flags)
-            )
+            if goal is not None:
+                command = [
+                    *loki,
+                    "-c",
+                    str(config_path.resolve()),
+                    "crawl",
+                    how["package"],
+                    "-d",
+                    device,
+                    "--goal",
+                    goal_text(goal),
+                    "--goal-id",
+                    goal.id,
+                    "--max-duration",
+                    f"{how['max_duration']:g}",
+                ]
+            else:
+                command = (
+                    [
+                        *loki,
+                        "-c",
+                        str(config_path.resolve()),
+                        "replay",
+                        str(recorded.resolve()),
+                        "-d",
+                        device,
+                        "--force",
+                    ]
+                    + ([] if until is None else ["--until-action", str(until)])
+                    + list(flags)
+                )
             result = subprocess.run(command, capture_output=True, text=True, cwd=cwd, stdin=subprocess.DEVNULL)
             run_dir = _run_dir(result.stdout, cwd)
             if run_dir is None:
@@ -353,10 +447,14 @@ def _series(
                 )
             base = workspace.runs_base or workspace.root
             entry = {"run": run_dir.name, "dir": portable(run_dir, base), "condition": condition, "order": order}
+            if goal is not None:
+                entry |= {"regime": "goal", "goal_id": goal.id, "max_duration_s": how["max_duration"]}
             if until is not None:
                 entry["until_action"] = until
             if "--keep-going" in flags:
                 entry["keep_going"] = True
+            if condition == CONTROL:
+                entry["control_of"] = controlled.id
             if drift:
                 entry["version_drift"] = drift
             with (workspace.root / "runs.jsonl").open("a", encoding="utf-8", newline="\n") as runs:
@@ -369,11 +467,89 @@ def _series(
                     f"run {order} ({condition}) is of version {ran}, not {version} as installed before the series: "
                     "the application changed during the series, which is stopped"
                 )
-            if not _not_instrumented(result.stdout):
-                break
-            if attempt < RETRIES:
+            if _not_instrumented(result.stdout) and retries < RETRIES:
+                retries += 1
                 written[-1]["retried"] = True  # replaced by the next attempt
+                continue
+            invalid = launch_invalid(workspace, run_dir, written[-1])
+            if invalid and repeats < LAUNCH_REPEATS:
+                repeats += 1
+                written[-1]["repeated"] = invalid  # an invalid launch, made once more; the analysis drops it
+                continue
+            break
     return written
+
+
+def launch_invalid(workspace: Workspace, run_dir: Path, entry: dict) -> str | None:
+    """Why a run's launch is invalid (an oracle of a launch case, one without a path, decides `invalid`: the launcher
+    first, a hold at start), or None; also None for a run that cannot be read."""
+    from skuld.experiments import RunState, runs_of
+    from skuld.oracles import decide
+    from skuld.runs import RunRefused, load
+
+    try:
+        run = load(run_dir, capture=False)
+    except RunRefused:
+        return None
+    state = RunState(run.run_id, _entry(entry), run=run)
+    for case in workspace.cases:
+        if case.feature.path_run is not None or not runs_of(case, state):
+            continue
+        for purpose in case.purposes:
+            if purpose.oracle is None:
+                continue
+            decision = decide(workspace.oracles[purpose.oracle], run)
+            if decision.decision == "invalid":
+                return f"{case.id}: {purpose.oracle} decides invalid ({'; '.join(decision.reasons)})"
+    return None
+
+
+def baseline_hosts(workspace: Workspace, case: Case, made: list[dict] = ()) -> list[str]:
+    """
+    The hosts the case's baseline runs contacted, those in runs.jsonl and those just made: of their captured
+    connections and messages, the ones not blocked; a run that cannot be read adds none.
+    """
+    from skuld.experiments import RunState, runs_of
+    from skuld.runs import RunRefused, load
+
+    entries = [(e.id, e.directory, e) for e in workspace.runs if e.condition == BASELINE and not e.excluded]
+    entries += [(m["run"], Path(m["dir"]), _entry(m)) for m in made if m["condition"] == BASELINE]
+    hosts: set[str] = set()
+    seen = set()
+    for rid, directory, entry in entries:
+        if rid in seen:
+            continue
+        seen.add(rid)
+        try:
+            run = load(directory)
+        except RunRefused:
+            continue
+        if not runs_of(case, RunState(rid, entry, run=run)):
+            continue
+        for c in run.connections or ():
+            host = c.get("host") or c.get("sni")
+            if host and not c.get("blocked"):
+                hosts.add(str(host))
+        for m in run.messages or ():
+            host = (m.get("http_request") or {}).get("host")
+            if host:
+                hosts.add(str(host))
+    return sorted(hosts)
+
+
+def _entry(made: dict):
+    """A run just made, as an entry of runs.jsonl reads (`inputs.RunEntry`)."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        id=made["run"],
+        condition=made["condition"],
+        order=made["order"],
+        regime=made.get("regime"),
+        goal_id=made.get("goal_id"),
+        control_of=made.get("control_of"),
+        excluded=None,
+    )
 
 
 # A replay whose app process Frida did not instrument imposed no condition (Loki stops it: app_not_instrumented); it
@@ -393,19 +569,21 @@ def _not_instrumented(stdout: str) -> bool:
 
 def qualification(workspace: Workspace, run_dir: Path, with_covered: bool = False):
     """
-    What keeps a baseline replay from qualifying its recording for an experimental case, by case (the cases it
-    qualifies have none): the replay cannot be read, departs from the path of the case's feature, or an observable
-    oracle of the case does not decide `met` for it. With `with_covered`, also the cases the replay is a run of (None
-    for a replay that cannot be read, which is a run of no case it could show).
+    What keeps a baseline run from qualifying its recording for an experimental case, by case (the cases it
+    qualifies have none): the run cannot be read, a replay departs from the path of the case's feature, a
+    goal-directed run did not reach its goal (Loki's agent said so, `GOAL_NOT_REACHED`), or an observable oracle of
+    the case does not decide `met` for it (in a goal-directed run, in its goal episode: the agent's statement alone
+    qualifies nothing). With `with_covered`, also the cases the run is a run of (None for a run that cannot be read,
+    which is a run of no case it could show).
     """
-    from skuld.experiments import RunState, departed, runs_of
+    from skuld.experiments import RunState, departed, runs_of, unreached
     from skuld.oracles import decide
     from skuld.runs import RunRefused, load
 
     try:
         run = load(run_dir)
     except RunRefused as e:
-        unread = {case.id: [f"the replay cannot be read: {e}"] for case in workspace.cases}
+        unread = {case.id: [f"the run cannot be read: {e}"] for case in workspace.cases}
         return (unread, None) if with_covered else unread
     problems: dict[str, list[str]] = {}
     covered = []
@@ -416,9 +594,12 @@ def qualification(workspace: Workspace, run_dir: Path, with_covered: bool = Fals
         if departure := departed(case, run):
             problems.setdefault(case.id, []).append(departure)
             continue
+        if missed := unreached(run):
+            problems.setdefault(case.id, []).append(missed)
+            continue
         for purpose in case.purposes:
             if purpose.oracle is not None:
-                decision = decide(workspace.oracles[purpose.oracle], run)
+                decision = decide(workspace.oracles[purpose.oracle], run, (case.feature.start, case.feature.actions))
                 if decision.decision != "met":
                     problems.setdefault(case.id, []).append(
                         f"{purpose.oracle} decides {decision.decision} ({'; '.join(decision.reasons)})"
