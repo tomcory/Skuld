@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.9.2.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.10.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -15,7 +15,12 @@ expert (`skuld calibrate`). Not built: the reasoning tier's argument form (P10).
 [`docs/architecture.md`](docs/architecture.md). Since 0.8.0 (Ratatoskr 0.34.0) a result's uncertainty is one level
 with the reasons that set it (`skuld/uncertainty.py`); since 0.9.0 (Ratatoskr 0.37.0) D's reasons count at their own
 level, a removal survived by a substitute is `substitutable`, an omission respects the silent document's completeness,
-and stage 1's answer schema requires every practice of a batch. Checked against the code on 2026-11-21.
+and stage 1's answer schema requires every practice of a batch. Since 0.10.0 (Ratatoskr 0.39.0) an observability level
+belongs to a proposition, never to a concern or a gap: a gap names the propositions it bears on (`bears_on`) and a
+structured next step (`next`: its kind, and for an audit request what the controller holds, `held`), and a proposition
+the observer's evidence settles completely never ends in an audit request (`skuld/gaps.py`); the run's scope settles a
+denial limited to a jurisdiction, a user group, a product or the user's consent where it can (`skuld/scope.py`); and
+stage 1 says where each purpose is achieved (`achieved_on`, device or server). Checked against the code on 2026-11-21.
 
 ## Role in Asgard
 
@@ -71,7 +76,7 @@ skuld check workspaces/app@1.0       # every digest and pointer resolves, the as
 | `skuld describe <ws>` | describes an assessment workspace | O's and D's reports, the exploration, the frame, the corpus | `assessment.yaml` | no |
 | `skuld expect <ws>` | the expectation stage's samples, without D | O's practices, the exploration's screens, the corpus | `expectation/`, `manifests/expect_<time>.json` | yes |
 | `skuld judge <ws>` | the reasoning tier's samples: specificity first (a declared purpose judged not specific specifies nothing), then compatibility and minimisation; `--question compatibility` alone reads the kept specificity samples, so ask specificity first | stage-1 samples, D's declarations, the norms | `assessment/`, `manifests/judge_<time>.json` | yes |
-| `skuld assess <ws>` | the assessment, ending with its qualification | everything above, kept samples, the case report | `subjects.json`, `assessment.json`, `assessment.md` | no |
+| `skuld assess <ws>` | the assessment, ending with its qualification; prints the gaps by the kind of their next step | everything above, kept samples, the case report | `subjects.json`, `assessment.json`, `assessment.md` (with the gaps by next step, what the run's scope settled and the frame's coverage statement) | no |
 | `skuld aggregate <ws>` | groups the assessment's concerns into aggregated concerns and themes by structural keys, and its open conditions by text; lossless | `assessment.json` | `aggregate.json`, `aggregate.md` | no |
 | `skuld review draw\|score\|agree <folder> …` | the reviewers' non-blind verification of aggregated concerns, blind to the model run: draws units from several runs' aggregates, scores agreement (per unit and per member), anchoring and misses, and two reviewers' κ | `aggregate.json`, `assessment.json`, the reviews | `sample.json`, `key.json`, `scores.json`, `agreement.json` | no |
 | `skuld review export <package.zip> <samples…> --reviewer <id>` / `import <returned.zip> <reviews folder>` | a reviewer's standalone package (the review tool with its modules, their samples without key or manifest, launchers, a guide, a packer for the returns), and the filing of what they send back | drawn samples; a returned zip | a zip; `<sample>-<id>/reviews.json` | no |
@@ -119,6 +124,35 @@ Options (from `--help`):
 `propose`, `expect`, `judge`, `assess` and `check` the same one, or none. Where `registry.sha256` pins a build, a
 registry of other content is refused.
 
+## Gaps and next steps
+
+Every gap of an assessment names the propositions it bears on (`bears_on`: `requirement:<id>` and `condition:<id>`
+of the frame, `definition:google-play-data-safety/<aspect>`, `role:ThirdParty`, `reading:root-category`,
+`claim:<id>`), and those carry the observability levels: the frame's requirements and conditions (gdpr-art5 1.4.0),
+Ratatoskr's channel definitions and recipient roles, and what Skuld declares beside its rules (`gaps.READINGS`). Its
+next step is the external step that could still change it, otherwise an audit request
+(plan/archive/OBSERVABILITY_PLAN.md §8):
+
+| Gap reason | Next step |
+|---|---|
+| `own_knowledge` | `extend_corpus` (with `gaps.own_knowledge_exhausted`: `audit_request`, organisation, where the corpus documents the recipient or actor) |
+| `not_admitted` | `experiment` for a minimisation concern or a Dependency or Alternative claim, else `re-analyse` |
+| `purpose_vague`, `substitute_more_invasive` | `review` |
+| `purpose_not_in_vocabulary` | `re-analyse` |
+| `oracle_not_observable` | `improve_instrument` where the purpose is achieved on the device (or where is not known), `audit_request` (record) where on servers |
+| `source_not_analysable` | `improve_instrument` (encrypted, binary), `explore` (damaged), by O's reason for the payloads |
+| `requirements_not_reached` | `explore` |
+| `needs_run`, `search_space_not_run`, `intervention_not_verified`, `substitution_not_verifiable`, `not_covered`, `precondition_failed` | `experiment` |
+| `source_absent`, `not_comparable` | `acquire` |
+| `applicability_unknown` (the frame's applicability conditions only) | the condition's external step where its reach is not none (`explore`, `acquire`, `review`), else `audit_request` with its `held` |
+
+A concern's source and fact conditions are open conditions, not gaps; an open fact condition names its propositions
+(`bears_on`) and qualification gives each the same rule's step. The run's scope (the egress country, the store country
+and the locale's region where all three agree, the persona's age, the application observed, a readable consent state;
+Verðandi 3.7.0 carries them into O's scope) settles a denial's own scope first: a settled condition leaves the case, a
+denial whose scope fails relates to no practice. Qualification reads "a gap whose next step is an audit request" for
+the result "not externally assessable" and the trigger `beyond_external_observability`.
+
 ## Configuration
 
 `config.json`, laid over Ratatoskr's defaults (`ratatoskr/config.json`):
@@ -139,6 +173,7 @@ registry of other content is refused.
 | `expectation.topup` | off | stage 1 asks again, alone, for the practices its batches left out |
 | `expectation.batch_size` | none | at most this many practices per batch: an episode's practices are split, in order, into batches `e<episode>.<n>` with the same screens (one remedy, to be measured, for qwen3.8 answering only a batch's first practice) |
 | `assessment.known_data_only` | off | the practices whose datum O could not identify are left out |
+| `gaps.own_knowledge_exhausted` | off | a practice without a purpose whose recipient's or actor's documentation the corpus holds ends in an audit request to the controller (`held` organisation: the purposes it pursues, Arts. 13(1)(c), 30) instead of `extend_corpus`; the author's decision D4, adopted only after its effect is measured |
 | `registry.path`, `.sha256` | none, the rerun's build, `51758dd9…` (the ownership list 0.36.0 and the sources fetched on 2026-11-20) | the recipient registry and the digest of the build a study decides on (Ratatoskr's `Registry.from_config`): a registry of other content, or none, is refused; unset, Ratatoskr's built one, unchecked |
 | `vocabularies.<id>` | the bundled version | the version of a vocabulary, e.g. `{"dpv-purposes": "2.3"}`: the purpose vocabulary's nodes are part of the stage-1 prompt, so samples asked under one version are found only under it |
 | `prompts.<id>` | the current version | an earlier version of a prompt (`skuld/templates.py`; kept as `skuld/prompts/versions/<id>-<version>.md`), so that samples asked with it are found again |
@@ -234,7 +269,7 @@ generator's feature families; local until deployed), and a calibration sample's 
 ## Tests
 
 ```bash
-uv run pytest                     # 458 tests on 2026-11-21
+uv run pytest                     # 511 tests on 2026-11-21
 ruff format . && ruff check .
 ```
 
