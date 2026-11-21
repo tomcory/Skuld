@@ -32,8 +32,9 @@ A passage stands in for its source, so each is checked against it by a person be
 no passage is about.
 
 Passages are retrieved per processing component, or per requirement, by what they are about; nothing is searched at
-analysis time. The norms are a corpus of their own (`load(directory / NORMS)`), so that the expectation stage's corpus
-and its digest do not change with them: that stage reads no norm.
+analysis time. A component's are capped (PER_ENTITY about its recipient, PER_NODE about its datum). The norms are a
+corpus of their own (`load(directory / NORMS)`), so that the expectation stage's corpus and its digest do not change
+with them: that stage reads no norm.
 """
 
 import hashlib
@@ -51,8 +52,11 @@ class CorpusError(Exception):
     """A passage file that cannot be read: no YAML mapping, or without its id, title or text."""
 
 
-#: Passages given per component at most
-PER_COMPONENT = 3
+#: Passages about a practice's recipient (its register entity) given at most
+PER_ENTITY = 3
+#: Passages about a practice's datum (its data node, or a node above or below it) given at most: four since 21 Nov
+#: 2026, when the Advertising ID had four (three before, as about the entity)
+PER_NODE = 4
 #: The folder of the norms and guidelines, inside the corpus folder
 NORMS = "norms"
 
@@ -100,11 +104,12 @@ class Corpus:
 
     def about(self, node: str | None, entity: str | None, vocabulary: Vocabulary) -> list[Passage]:
         """The passages about a datum's node (or a node above or below it) or about an entity, in the corpus's order:
-        at most PER_COMPONENT in all where no more are found, else at most PER_COMPONENT about the entity and as many
-        about the node, so that the passages about the datum never push out those about its recipient (18 Nov 2026;
-        a corpus of no more than PER_COMPONENT passages per practice gives the same contexts as before). The
-        vocabulary's root matches no node: every node is below it, so it would find every passage about a node, the
-        first PER_COMPONENT of them by file order (21 Nov 2026; coverage and the gate leave the root out alike)."""
+        at most PER_ENTITY about the entity and at most PER_NODE about the node, each capped on its own, so that the
+        passages about the datum never push out those about its recipient (18 Nov 2026, three and three, with three in
+        all where no more were found, which the separate caps keep). A passage about both counts as about the entity.
+        PER_NODE is four since 21 Nov 2026, so that the Advertising ID's fourth passage is given. The vocabulary's
+        root matches no node: every node is below it, so it would find every passage about a node, the first PER_NODE
+        of them by file order (21 Nov 2026; coverage and the gate leave the root out alike)."""
         if node is not None and node == vocabulary.root:
             node = None
         found, by_entity, by_node = [], [], []
@@ -115,9 +120,7 @@ class Corpus:
             elif node and any(_related(node, n, vocabulary) for n in p.nodes):
                 found.append(p)
                 by_node.append(p)
-        if len(found) <= PER_COMPONENT:
-            return found
-        kept = {id(p) for p in by_entity[:PER_COMPONENT] + by_node[:PER_COMPONENT]}
+        kept = {id(p) for p in by_entity[:PER_ENTITY] + by_node[:PER_NODE]}
         return [p for p in found if id(p) in kept]
 
     def on(self, requirement: str) -> list[Passage]:
