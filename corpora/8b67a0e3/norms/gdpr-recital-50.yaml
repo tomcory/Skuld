@@ -1,0 +1,17 @@
+id: gdpr-recital-50
+title: GDPR Recital 50, further processing and reasonable expectations
+source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
+retrieved: 2026-10-24
+verified: {by: Thomas Cory, date: 2026-10-24}
+kind: norm
+authority: gdpr
+about:
+  requirements: [purpose_compatible]
+text: >-
+  [...] In order to ascertain whether a purpose of further processing is compatible with the purpose for which the 
+  personal data are initially collected, the controller, after having met all the requirements for the lawfulness of the 
+  original processing, should take into account, inter alia: any link between those purposes and the purposes of the 
+  intended further processing; the context in which the personal data have been collected, in particular the reasonable 
+  expectations of data subjects based on their relationship with the controller as to their further use; the nature of 
+  the personal data; the consequences of the intended further processing for data subjects; and the existence of 
+  appropriate safeguards in both the original and intended further processing operations. [...]

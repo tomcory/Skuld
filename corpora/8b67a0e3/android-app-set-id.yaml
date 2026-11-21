@@ -1,0 +1,20 @@
+id: android-app-set-id
+title: App set ID (Android Developers)
+source: https://developer.android.com/identity/app-set-id
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+kind: platform
+about:
+  nodes: [device-or-other-ids.app-set-id]
+  entities: []
+# Drafted 21 Nov 2026: verbatim from the page (last updated 2026-11-09); omissions marked […]. Licence: the
+# Android Developers licence (developer.android.com/license: documentation under Apache 2.0, to confirm). What the scope and resets of the App set ID are: it is the
+# alternative android-identifiers-analytics names for analytics across one developer's apps.
+text: >-
+  For use cases such as analytics or fraud prevention on a given device, you might need to correlate usage or actions
+  across a set of apps owned by your organization. Google Play services offers a privacy-friendly option called app
+  set ID. […] For apps that are installed by the Google Play store, the app set ID API returns an ID scoped to the set
+  of apps published under the same Google Play developer account. […] Under any of the following conditions, the app
+  set ID for a given set of Google Play store-installed apps on a device can be reset: - The app set ID API hasn't
+  been accessed by the groups of apps that share the same ID value for over 13 months. - The last app from a given set
+  of apps is uninstalled from the device. - The user performs a factory reset of the device.

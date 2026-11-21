@@ -1,0 +1,26 @@
+id: admob-non-personalised-ads
+title: Personalized and non-personalized ads (Google AdMob Help)
+source: https://support.google.com/admob/answer/7676680?hl=en
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+kind: component
+about:
+  nodes: []
+  entities: [google-doubleclick]
+# Drafted 21 Nov 2026: verbatim from the article (no date shown); omissions marked […]. The page states no
+# licence ("©2026 Google"): a short quotation for analysis (§ 51 UrhG), to confirm, as for
+# android-advertising-id. Tagged with google-doubleclick only, where AdMob's ad requests go: the registry's entity
+# google also holds Firebase and Google's other SDKs, whose practices would otherwise be shown a passage on
+# personalised advertising, both in the inference of purposes and as documentation. No recipient types: a
+# type tag would make this passage about Google's ads document an alternative for every advertising recipient
+# (gate b of E's status rule, Passage.concerns). It documents the less invasive alternative for advertising that the corpus lacked
+# beside android-identifiers-ads, and that it still uses the identifier for frequency capping and reporting.
+text: >-
+  Google considers ads to be personalized when they are based on previously collected or historical data to determine
+  or influence ad selection, including activity like previous search queries, visits to sites or apps, location, or
+  demographic information. […] Non-personalized ads are not based on a user’s past behavior. Instead, they use
+  contextual information, including coarse geo-targeting (such as city-level) based on current location, content on
+  the current site or app, or current query terms. When serving non-personalized ads, Google Ad Manager disallows all
+  data used for personalization, including demographic targeting and user list targeting. Although non-personalized
+  ads don’t use cookies or mobile ad identifiers for ad targeting, they do still use cookies or mobile ad identifiers
+  for frequency capping and aggregated ad reporting.

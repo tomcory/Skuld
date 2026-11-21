@@ -1,0 +1,50 @@
+id: wp203-factors
+title: Opinion 03/2013 on purpose limitation (WP 203), the key factors of the compatibility assessment (Sect. III.2.2, pp. 23–27; WP29 under Directive 95/46/EC; not adopted by the EDPB, which notes that it may still be relevant as the wording of the principle is the same under the GDPR (Guidelines 4/2019, fn. 34))
+source: https://ec.europa.eu/justice/article-29/documentation/opinion-recommendation/files/2013/wp203_en.pdf
+retrieved: 2026-11-21
+kind: guideline
+authority: wp29
+verified: {by: Thomas Cory, date: 2026-11-21, note: "added or changed by the author's decision of 21 Nov (second round); each quoted segment checked against its source by script, in order, and by an independent review (corpora/adoption-2026-11-21.md)"}
+about:
+  requirements: [purpose_compatible]
+# Verbatim from the PDF (adopted 2 April 2013), Sect. III.2.2, in the source's order: each factor's heading a) to
+# d), then one or two of its sentences in both directions, and the closing sentences on the multi-criteria
+# weighing; omissions marked […]. For compatibility: implied or a logical next step; both positive and negative
+# consequences count; deficiencies may be compensated. Against: the distance between purposes; the unexpected;
+# sensitivity; another controller in another context; uncertain impact; compensation depends on the assessment as
+# a whole, and unspecified purposes must first be re-specified. Footnote markers 54, 55, 70 and 75 removed (56, 69,
+# 73 fall before an omission). Added by the author's decision of 21 Nov, after a review found the compatibility
+# context the thinnest; named so that it sorts after wp203-compatibility, the list of the four factors.
+text: >-
+  a) the relationship between the purposes for which the data have been collected and the purposes of further
+  processing […] This may cover situations where the further processing was already more or less implied in the
+  initial purposes, or assumed as a logical next step in the processing according to those purposes, as well as
+  situations where there is only a partial or even non-existent link with the original purposes. In any case, the
+  greater the distance between the purposes of collection and the purposes of further processing, the more problematic
+  this would be for the compatibility assessment. […] b) the context in which the data have been collected and the
+  reasonable expectations of the data subjects as to their further use […] In other words, the issue here is what a
+  reasonable person in the data subject's situation would expect his or her data to be used for based on the context
+  of the collection. […] This requires not only a review of any legal statements made, but also consideration of what
+  would be customary and generally expected practice in the given context, and in the given (commercial or other)
+  relationship. In general, the more unexpected or surprising the further use is, the more likely it is that it would
+  be considered incompatible. […] c) the nature of the data and the impact of the further processing on the data
+  subjects […] In general, the more sensitive the information involved, the narrower the scope for compatible use
+  would be. […] In assessing the impact of the further processing, both positive and negative consequences should be
+  taken into account. […] Relevant impact in a larger sense may also involve the way in which data are further
+  processed: such as whether the data are processed by a different controller in another context with unknown
+  consequences, whether the data are publicly disclosed or otherwise made accessible to a large number of persons, or
+  whether large amounts of personal data are processed or combined with other data (e.g. in case of profiling, for
+  commercial, law enforcement or other purposes), particularly if such operations were not foreseeable at the time of
+  collection. […] Again, in general, the more negative or uncertain the impact of further processing might be, the
+  more unlikely it is to be considered as compatible use. […] d) the safeguards applied by the controller to ensure
+  fair processing and to prevent any undue impact on the data subjects […] An inherent characteristic of a
+  multi-factor assessment is that deficiencies at certain points may in some cases be compensated by a better
+  performance on other aspects. […] Appropriate additional measures could thus, in principle, serve as ‘compensation’
+  for a change of purpose or for the fact that the purposes have not been specified as clearly in the beginning as
+  they should have been. […] Whether the result is acceptable will depend on the compatibility assessment as a whole
+  (i.e. including those measures and their effect on the other aspects mentioned above). […] If the purposes have
+  changed or have not been specified clearly, a first necessary (but not always sufficient) condition towards ensuring
+  compatibility is to re-specify the purposes. […] It should be emphasised that the assessment of compatibility will
+  often imply a multi-criteria evaluation. While there may be cases where not all the considerations mentioned above
+  will be relevant, typically the assessment will require the evaluation of a number of relevant factors applied in a
+  cumulative way. Their different weight will therefore have an impact on the global assessment. […]

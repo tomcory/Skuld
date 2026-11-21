@@ -117,6 +117,7 @@ def test_a_norm_needs_the_regulation_as_its_authority_and_a_documentation_passag
             [
                 "gdpr-art-12-1",
                 "gdpr-art-13-1-c",
+                "gdpr-art-5-1-a",
                 "gdpr-art-5-1-b",
                 "gdpr-recital-39-transparency",
                 "edpb-4-2019-purpose-limitation",
@@ -132,6 +133,7 @@ def test_a_norm_needs_the_regulation_as_its_authority_and_a_documentation_passag
                 "gdpr-recital-50",
                 "edpb-4-2019-purpose-limitation",
                 "wp203-compatibility",
+                "wp203-factors",
             ],
         ),
         ("data_minimised", ["gdpr-art-25-2", "gdpr-art-5-1-c", "gdpr-recital-39", "edpb-4-2019-minimisation"]),

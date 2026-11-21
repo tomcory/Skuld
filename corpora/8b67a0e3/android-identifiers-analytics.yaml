@@ -1,0 +1,26 @@
+id: android-identifiers-analytics
+title: Best practices for unique identifiers, analytics and app development (Android Developers)
+source: https://developer.android.com/identity/user-data-ids
+retrieved: 2026-11-18
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+# Drafted 21 Nov 2026: the use cases' headings as the page gives them, without the full stops the passage of 18 Nov
+# added; text otherwise unchanged.
+kind: platform
+about:
+  nodes: [device-or-other-ids.installation-id, device-or-other-ids.app-set-id]
+  entities: []
+# Verbatim from the use cases "App analytics", which the page lists under its heading "Ads", and "Crash reporting"
+# and "App testing", under "App development"; omissions marked […]. Left out after the App set ID: "If you're
+# targeting devices powered by Google Play services, we recommend that you use App Set ID."
+# Tagged only with the identifiers it names; the Android ID, which it does not name, is left to the principles.
+text: >-
+  App analytics In this case, your app evaluates a user's behavior to help you determine the following: Which of
+  your organization's other products or apps might be suitable for the user. How to keep users interested in using
+  your app. Measure usage statistics and analytics for signed-out or anonymous users. Possible solutions include: App
+  set ID: An App Set ID lets you analyze a user's behavior across multiple apps that your organization owns, as long
+  as you don't use user data for advertising purposes. […] Firebase ID (FID): An FID is scoped to the app that creates
+  it, which prevents the identifier from being used to track users across apps. It is also user-resettable, as the
+  user can clear app data or reinstall the app. […] Crash reporting In this case, your app collects data regarding
+  when and why it crashes on a user's devices. Recommended identifier to use: FID or App set ID […] App testing In
+  this case, your app evaluates a user's experience with your app for testing or debugging purposes. Recommended
+  identifier to use: FID or App set ID

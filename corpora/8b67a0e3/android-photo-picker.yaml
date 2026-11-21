@@ -1,0 +1,16 @@
+id: android-photo-picker
+title: Photo picker (Android Developers)
+source: https://developer.android.com/training/data-storage/shared/photo-picker
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+kind: platform
+about:
+  nodes: [photos-videos.photos, photos-videos.videos]
+  entities: []
+# Drafted 21 Nov 2026: verbatim from the page (last updated 2026-11-16), the first paragraph; the link text
+# "privacy best practices codelab" kept as text. Licence: Apache 2.0 (developer.android.com/license), to confirm.
+# The alternative to access to the whole media library (TODO.md: photo picker against storage access).
+text: >-
+  The photo picker provides a browsable interface that presents the user with their media library, sorted by date from
+  newest to oldest. As shown in the privacy best practices codelab, the photo picker provides a safe, built-in way for
+  users to grant your app access to only selected images and videos, instead of their entire media library.

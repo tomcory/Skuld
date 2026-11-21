@@ -1,0 +1,13 @@
+id: gdpr-recital-39
+title: GDPR Recital 39, processing only where other means do not suffice
+source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
+retrieved: 2026-10-24
+verified: {by: Thomas Cory, date: 2026-10-24}
+kind: norm
+authority: gdpr
+about:
+  requirements: [data_minimised]
+text: >-
+  [...] The personal data should be adequate, relevant and limited to what is necessary for the purposes for which they 
+  are processed. [...] Personal data should be processed only if the purpose of the processing could not reasonably be 
+  fulfilled by other means. [...]

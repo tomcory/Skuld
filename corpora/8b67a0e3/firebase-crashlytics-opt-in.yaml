@@ -1,0 +1,23 @@
+id: firebase-crashlytics-opt-in
+title: Enable opt-in reporting, Android (Firebase Crashlytics)
+source: https://firebase.google.com/docs/crashlytics/android/customize-crash-reports#enable-reporting
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+kind: component
+about:
+  nodes: []
+  entities: [google]
+# Drafted 21 Nov 2026: verbatim from the section "Enable opt-in reporting" (page last updated 2026-11-19), code
+# samples left out; omissions marked […]. Licence: CC BY 4.0 (page footer). The section's first sentence states
+# the cost of the alternative (less accurate metrics), kept so that the passage is not one-sided. Known limit: the
+# registry's entity google also holds YouTube, Sign-in, Drive, Maps, fonts and Google's ad hosts, so the passage is
+# shown for, and counts as documentation for, every practice whose recipient is google (in the study 48
+# practices, of which 16 involve a Crashlytics or Firebase host). Kept by the author's decision of 21 Nov.
+text: >-
+  If you enable opt-in reporting by disabling automatic reporting, you will reduce the accuracy of your app's event
+  count and crash-free metrics, which makes them less reflective of the overall stability of your app. […] By default,
+  Crashlytics automatically collects crash reports for all your app's users. To give users more control over the data
+  they send, you can enable opt-in reporting by disabling automatic reporting and only sending data to Crashlytics
+  when you choose to in your code. […] When data collection is disabled for a user, Crashlytics will store crash
+  information locally on the device. If data collection is subsequently enabled, any crash information stored on the
+  device will be sent to Crashlytics for processing.

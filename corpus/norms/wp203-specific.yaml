@@ -2,7 +2,7 @@ id: wp203-specific
 title: Opinion 03/2013 on purpose limitation (WP 203), on specific purposes (pp. 15–16; WP29 under Directive 95/46/EC; not adopted by the EDPB, which notes that it may still be relevant as the wording of the principle is the same under the GDPR (Guidelines 4/2019, fn. 34))
 source: https://ec.europa.eu/justice/article-29/documentation/opinion-recommendation/files/2013/wp203_en.pdf
 retrieved: 2026-11-21
-verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+verified: {by: Thomas Cory, date: 2026-11-21, note: "added or changed by the author's decision of 21 Nov (second round); each quoted segment checked against its source by script, in order, and by an independent review (corpora/adoption-2026-11-21.md)"}
 kind: guideline
 authority: wp29
 about:
@@ -13,6 +13,8 @@ about:
 # purpose may cover related operations but must not justify remotely related ones. Footnote markers 33, 34, 35
 # and 39 removed. The title states the opinion's status, which the paper states in Sect. 2 and the model did not
 # see.
+# Changed 21 Nov (author's decision): WP203's paragraph on the layered notice (p. 16) added after the
+# sentences on precision, as in the source; footnote marker 36 removed.
 text: >-
   The purpose of the collection must be clearly and specifically identified: it must be detailed enough to determine
   what kind of processing is and is not included within the specified purpose, and to allow that compliance with the
@@ -25,7 +27,11 @@ text: >-
   not mean that longer, more detailed specifications are always necessary or helpful. Indeed, a detailed description
   may at times even be counter-productive. This may particularly be the case if the written, detailed specifications
   of purpose are overly legalistic and provide disclaimers rather than helpful information to data subjects and other
-  stakeholders. […] For ‘related’ processing operations, the concept of an overall purpose, under whose umbrella a
-  number of separate processing operations take place, can be useful. That said, controllers should avoid identifying
-  only one broad purpose in order to justify various further processing activities which are in fact only remotely
-  related to the actual initial purpose.
+  stakeholders. In light of this, the approach of a 'layered notice' to data subjects often works well, especially on
+  the Internet, and has thus been recommended in many situations by the WP29. This means that key information is
+  provided to data subjects in a very concise and user-friendly manner, while additional information (perhaps via a
+  link to a more detailed description of the processing on another Internet page) is provided for the benefit of those
+  who require further clarification. […] For ‘related’ processing operations, the concept of an overall purpose, under
+  whose umbrella a number of separate processing operations take place, can be useful. That said, controllers should
+  avoid identifying only one broad purpose in order to justify various further processing activities which are in fact
+  only remotely related to the actual initial purpose.

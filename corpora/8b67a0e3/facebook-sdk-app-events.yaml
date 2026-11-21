@@ -1,0 +1,29 @@
+id: facebook-sdk-app-events
+title: Get Started with App Events (Android), Facebook SDK (Meta for Developers)
+source: https://developers.facebook.com/documentation/app-events/getting-started-app-events-android
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+kind: component
+about:
+  nodes: []
+  entities: [facebook]
+# Drafted 21 Nov 2026: verbatim from the page (no date shown), with the manifest lines of its snippets (their
+# <application> wrappers left out, […]) and without links; omissions marked […]. The page states no licence: a
+# short quotation for analysis (§ 51 UrhG), to confirm. The SDK's hosts resolve to the registry's entity facebook
+# (owner meta). Only what bears on the data the SDK collects and the switches that limit it; left out: the
+# sentence that the events are "relevant for all use cases - targeting, measurement and optimization" (a vendor's
+# claim of use, which would colour the inference of purposes) and the sentences on delaying collection or
+# initialisation "to obtain user consent" (consent and ePrivacy are outside the frame, paper Sect. 2).
+# "advertiser-id" is the page's link text.
+text: >-
+  When you use the Facebook SDK, certain events in your app are automatically logged and collected for Facebook unless
+  you disable automatic event logging. […] There are three key events collected as part of the Automatic App Event
+  Logging: App Install, App Launch, and Purchase. […] However, if you have disabled automatic logging, but still want
+  to log specific events, such as install or purchase events, manually implement logging for these events in your app.
+  […] Facebook SDK will identify and send app metadata, like app links and screen titles. These will be included with
+  logged events by default. […] To disable automatic event logging, add the following to your AndroidManifest.xml
+  file: […] <meta-data android:name="com.facebook.sdk.AutoLogAppEventsEnabled" android:value="false"/> […] To disable
+  including additional app details in logged events, add the following: […] <meta-data
+  android:name="com.facebook.sdk.AutoLogMetaDataEnabled" android:value="false"/> […] To disable collection of
+  advertiser-id, add the following to your AndroidManifest.xml file: […] <meta-data
+  android:name="com.facebook.sdk.AdvertiserIDCollectionEnabled" android:value="false"/> […]

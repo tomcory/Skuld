@@ -2,7 +2,7 @@ id: gdpr-art-13-1-c
 title: GDPR Article 13(1)(c), information on the purposes of the processing
 source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
 retrieved: 2026-11-21
-verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+verified: {by: Thomas Cory, date: 2026-11-21, note: "added or changed by the author's decision of 21 Nov (second round); each quoted segment checked against its source by script, in order, and by an independent review (corpora/adoption-2026-11-21.md)"}
 kind: norm
 authority: gdpr
 about:
@@ -10,8 +10,10 @@ about:
 # Drafted 21 Nov 2026: Art. 13(1) chapeau and point (c), from the EUR-Lex HTML of the OJ text, read by a fetcher
 # in segments; check against the OJ before `verified`. Art. 14(1)(c) is identical for data not obtained from the
 # data subject; left out, as the apps' practices are collected from the data subject's device.
+# Changed 21 Nov (author's decision): "as well as the legal basis for the processing" cut, […], so that
+# the specificity question does not judge a purpose unspecific for want of a legal basis (lawfulness is
+# outside the frame).
 text: >-
   Where personal data relating to a data subject are collected from the data subject, the controller shall, at the
   time when personal data are obtained, provide the data subject with all of the following information: […] (c) the
-  purposes of the processing for which the personal data are intended as well as the legal basis for the processing;
-  […]
+  purposes of the processing for which the personal data are intended […]

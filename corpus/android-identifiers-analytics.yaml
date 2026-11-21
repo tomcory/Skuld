@@ -1,18 +1,22 @@
 id: android-identifiers-analytics
 title: Best practices for unique identifiers, analytics and app development (Android Developers)
 source: https://developer.android.com/identity/user-data-ids
-retrieved: 2026-11-18
-verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "added or changed by the author's decision of 21 Nov (second round); each quoted segment checked against its source by script, in order, and by an independent review (corpora/adoption-2026-11-21.md)"}
 # Drafted 21 Nov 2026: the use cases' headings as the page gives them, without the full stops the passage of 18 Nov
 # added; text otherwise unchanged.
 kind: platform
 about:
-  nodes: [device-or-other-ids.installation-id, device-or-other-ids.app-set-id]
+  nodes: [device-or-other-ids.installation-id, device-or-other-ids.app-set-id, device-or-other-ids.advertising-id]
   entities: []
 # Verbatim from the use cases "App analytics", which the page lists under its heading "Ads", and "Crash reporting"
 # and "App testing", under "App development"; omissions marked […]. Left out after the App set ID: "If you're
 # targeting devices powered by Google Play services, we recommend that you use App Set ID."
-# Tagged only with the identifiers it names; the Android ID, which it does not name, is left to the principles.
+# Tagged with the identifiers it names (App set ID, FID as the installation ID) and, by the author's decision of
+# 21 Nov, with the Advertising ID: for analytics the page recommends these instead of an identifier for ads, the
+# paper's showcase alternative. An exception to the tagging rule (the excerpt does not name the Advertising ID);
+# the Android ID, which it does not name either, is left to the principles. Needs the node cap of 4 (Skuld 0.11.7).
+# Changed 21 Nov (author's decision): also tagged with the Advertising ID.
 text: >-
   App analytics In this case, your app evaluates a user's behavior to help you determine the following: Which of
   your organization's other products or apps might be suitable for the user. How to keep users interested in using

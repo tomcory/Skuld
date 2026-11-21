@@ -1,0 +1,22 @@
+id: edpb-4-2019-purpose-limitation
+title: EDPB Guidelines 4/2019 on Article 25 (version 2.0), purpose limitation (para. 72 and fn. 34, pp. 19–20)
+source: https://www.edpb.europa.eu/sites/default/files/files/file1/edpb_guidelines_201904_dataprotection_by_design_and_by_default_v2.0_en.pdf
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+kind: guideline
+authority: edpb
+about:
+  requirements: [purpose_specific, purpose_compatible]
+# Drafted 21 Nov 2026: verbatim from the PDF; three of the eight elements of para. 72, and footnote 34 (on p. 19,
+# attached to the section heading 3.4), which states the status of WP29's Opinion 03/2013 that the passages
+# wp203-specific and wp203-compatibility quote; "EDBP" is the source's spelling; the footnote's URL is left out
+# ([…]). The footnote comes first, as in the source, where it stands at the heading of section 3.4 before
+# paras. 71-72. The paper (Sect. 2) cites para. 72 and fn. 34.
+text: >-
+  [Footnote 34:] The Article 29 Working Party provided guidance for the understanding of the principle of purpose
+  limitation under Directive 95/46/EC. Although the Opinion is not adopted by the EDBP [sic], it may still be relevant
+  as the wording of the principle is the same under the GDPR. Article 29 Working Party. “Opinion 03/2013 on purpose
+  limitation”. WP 203, 2 April 2013. […] Key design and default purpose limitation elements may include: […]
+  Specificity – The purposes shall be specified and explicit as to why personal data is being processed. […] Necessity
+  – The purpose determines what personal data is necessary for the processing. Compatibility – Any new purpose must be
+  compatible with the original purpose for which the data was collected and guide relevant changes in design. […]
