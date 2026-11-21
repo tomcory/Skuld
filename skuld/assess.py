@@ -400,6 +400,7 @@ def build(
         registry,
         {cid for r in a.frame.requirements.values() for cid in r.applies_if},
         a.frame,
+        root.parent / "catalogue",
     )
     report["report"]["components"] += qualify.COMPONENTS
     validate("expectation_assessment", report)

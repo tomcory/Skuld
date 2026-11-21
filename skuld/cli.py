@@ -83,7 +83,15 @@ def build_parser() -> argparse.ArgumentParser:
     where = propose_.add_mutually_exclusive_group(required=True)
     where.add_argument("--pilot", help="the pilot: the workspace is pilots/<pilot>/skuld/<package>@<version>")
     where.add_argument("--workspace", help="the workspace's folder")
-    propose_.add_argument("--catalogue", default=str(CATALOGUE), help="the catalogue folder (default: Skuld's)")
+    propose_.add_argument(
+        "--catalogue", default=str(CATALOGUE), help="the base catalogue, read only (default: Skuld's)"
+    )
+    propose_.add_argument(
+        "--new-families",
+        type=Path,
+        help="the study's catalogue, which the families models propose are written into, read with the base "
+        "(default: the folder catalogue beside the workspace, <workspace>/../catalogue)",
+    )
     propose_.add_argument(
         "--model",
         default=None,
@@ -464,6 +472,12 @@ def main(argv: list[str] | None = None) -> int:
             }
             # relative to the workspace, which Verðandi is run from
             verdandi = component("verdandi", ASGARD / "Verdandi", relative_to=root)
+            # Skuld's committed catalogue is the base, read only; new families go into the study's catalogue
+            study = args.new_families or root.parent / "catalogue"
+            if study.resolve() == Path(args.catalogue).resolve():
+                raise propose.ProposalError(f"--new-families {study} is the base catalogue itself")
+            catalogue_roots = (args.catalogue, study)
+            settings["catalogue"], settings["new_families"] = str(args.catalogue), str(study)
             category, source = args.category, ("--category" if args.category else None)
             if category is None and args.listing:
                 category, source = propose.store_category(args.listing), str(args.listing)
@@ -473,7 +487,7 @@ def main(argv: list[str] | None = None) -> int:
                     summary = propose.propose_model(
                         args.exploration,
                         root,
-                        args.catalogue,
+                        catalogue_roots,
                         args.model,
                         verdandi,
                         args.api,
@@ -484,7 +498,7 @@ def main(argv: list[str] | None = None) -> int:
                         category_source=source,
                     )
                 if args.merge or lone:
-                    summary = propose.merge(args.exploration, root, args.catalogue, verdandi, args.registry)
+                    summary = propose.merge(args.exploration, root, catalogue_roots, verdandi, args.registry)
             for key, entry in summary["episodes"].items():
                 for case in entry["cases"]:
                     by = f"  ({', '.join(case['proposers'])})" if len(case.get("proposers") or ()) > 1 else ""

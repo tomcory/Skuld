@@ -48,9 +48,10 @@ Candidates are decided in groups (author, 12 Nov 2026): one per data type and pu
 unit of the aggregated concerns (`skuld aggregate`). A group's eligible candidates are chosen or refused together, its
 ineligible ones are refused each with its own reason, as before. The runs an alternative needs are shared by every
 experimental case that imposes it (`space`: a condition depends on the recording only), so the device time counts each
-intervention once: one baseline per selection, (repeats + 1) runs with its qualifying replay, and repeats runs per
-intervention not yet counted, of `run_seconds` each. A candidate's `cost_seconds` in a selection is what it adds; in
-the listing, what it would cost alone ((1 + its alternatives) × repeats runs and one replay), as Odin reads it. A selection is fixed once: making another replaces it only on request (`--replace`), and keeps the
+intervention once: one baseline per selection, (repeats + 1) runs with its qualifying run and repeats control runs at
+their cap (`control_run_seconds`), and repeats runs per intervention not yet counted, of `run_seconds` each. A
+candidate's `cost_seconds` in a selection is what it adds; in the listing, what it would cost alone (the baseline and
+its alternatives' repeats runs), as Odin reads it. A selection is fixed once: making another replaces it only on request (`--replace`), and keeps the
 one it replaces. Within one investigation it may be extended (`--extend`), which keeps every earlier choice and
 refusal that does not depend on the budget, counts the device time already chosen, and decides the others again:
 the candidates it did not yet hold and those an earlier budget refused (the Investigator gives each batch just the
@@ -87,7 +88,12 @@ UNBUDGETED = ("pursue", "calibrate", "union")
 #: Qualified results an experiment cannot change: a minimisation concern adds nothing to a higher result
 CHOICE, REFUSAL = "experiment_choice", "experiment_refusal"
 #: The defaults of config.json's `experiments`
-DEFAULTS = {"budget_seconds": 0, "repeats": 3, "run_seconds": 240}
+#: run_seconds: a run's device time; 360 s since 21 Nov 2026 (a goal-directed run of a deeper case took 5 to 6 minutes
+#: in the live check; a replay of the cold start less), 240 s before. control_run_seconds: a control run's, at its
+#: cap, since a control that does not reach its goal runs until it (`experiments.goal_max_duration_s`); counted with
+#: every baseline, since which family a candidate's case takes, and whether it declares a control, is open until
+#: `propose`.
+DEFAULTS = {"budget_seconds": 0, "repeats": 3, "run_seconds": 360}
 
 
 class SelectionError(Exception):
@@ -95,7 +101,15 @@ class SelectionError(Exception):
 
 
 def settings() -> dict:
-    return {**DEFAULTS, **(config.load().get("experiments") or {})}
+    found = {**DEFAULTS, **(config.load().get("experiments") or {})}
+    found.setdefault("control_run_seconds", found.get("goal_max_duration_s", 900))
+    return found
+
+
+def _baseline_seconds(s: dict) -> int:
+    """The device time of a baseline: (repeats + 1) runs with its qualifying run, and repeats control runs at their
+    cap (`control_run_seconds`; none where the settings give none)."""
+    return (s["repeats"] + 1) * s["run_seconds"] + s["repeats"] * int(s.get("control_run_seconds", 0))
 
 
 def _chosen(root: Path) -> dict[str, tuple[str, int]]:
@@ -117,7 +131,7 @@ def _chosen(root: Path) -> dict[str, tuple[str, int]]:
 
 def _cost(c: dict, s: dict) -> int:
     alternatives = sum(len(x["alternatives"]) for x in c["components"])
-    return ((1 + alternatives) * s["repeats"] + 1) * s["run_seconds"]
+    return _baseline_seconds(s) + alternatives * s["repeats"] * s["run_seconds"]
 
 
 def _entry_id(c: dict) -> str:
@@ -137,7 +151,7 @@ def _added(c: dict, counted: set[str], baseline: bool, s: dict) -> int:
     """The device time a candidate adds to what is counted: the baseline if none is yet, and its interventions not
     yet counted."""
     new = _alternatives(c) - counted
-    return ((0 if baseline else s["repeats"] + 1) + len(new) * s["repeats"]) * s["run_seconds"]
+    return (0 if baseline else _baseline_seconds(s)) + len(new) * s["repeats"] * s["run_seconds"]
 
 
 def _grouped(found: list[dict]) -> list[list[dict]]:
@@ -180,7 +194,7 @@ def listing(root: str | Path) -> list[dict]:
     s = settings()  # a candidate's device time; the budget is select's, not the listing's
     change = _could_change(report)
     out = []
-    for c in candidates(report, practices):
+    for c in candidates(report, practices, root.parent / "catalogue"):
         refused = refusal(c)
         out.append(
             {
@@ -209,7 +223,7 @@ def group_listing(root: str | Path) -> list[dict]:
     s = settings()
     listed = {x["id"]: x for x in listing(root)}
     out = []
-    for members in _grouped(candidates(report, practices)):
+    for members in _grouped(candidates(report, practices, root.parent / "catalogue")):
         eligible = [c for c in members if refusal(c) is None]
         interventions = sorted({a for c in eligible for a in _alternatives(c)})
         first = members[0]
@@ -221,7 +235,7 @@ def group_listing(root: str | Path) -> list[dict]:
                 "members": [_entry_id(c) for c in members],
                 "eligible_members": [_entry_id(c) for c in eligible],
                 "interventions": interventions,
-                "cost_seconds": (s["repeats"] + 1 + len(interventions) * s["repeats"]) * s["run_seconds"]
+                "cost_seconds": _baseline_seconds(s) + len(interventions) * s["repeats"] * s["run_seconds"]
                 if eligible
                 else 0,
                 "eligible": bool(eligible),
@@ -235,12 +249,14 @@ def group_listing(root: str | Path) -> list[dict]:
 CATALOGUE = Path(__file__).resolve().parents[1] / "catalogue"
 
 
-def observed_purposes(folder: Path = CATALOGUE) -> list[tuple[str, str]]:
-    """The (node, beneficiary) of every purpose with an oracle in the newest version of each family of the catalogue."""
+def observed_purposes(folder: Path = CATALOGUE, study: Path | None = None) -> list[tuple[str, str]]:
+    """The (node, beneficiary) of every purpose with an oracle in the newest version of each family of the catalogue;
+    with `study`, of the study's catalogue too (the families models proposed, `skuld propose --new-families`)."""
+    found = catalogue.load(study, base=folder) if study is not None and study.is_dir() else catalogue.load(folder)
     return sorted(
         {
             (p["node"], combine.beneficiary(p.get("beneficiary")))
-            for f in catalogue.load(folder).latest()
+            for f in found.latest()
             for p in f.data.get("purposes") or ()
             if p.get("oracle") and p.get("node")
         }
@@ -262,12 +278,13 @@ def unobservable(node: str | None, who: str | None, observed: list[tuple[str, st
     )
 
 
-def candidates(report: dict, practices: list[dict]) -> list[dict]:
-    """The practices and supported inferred purposes whose minimisation is undecided, with what Skuld could impose."""
+def candidates(report: dict, practices: list[dict], study: Path | None = None) -> list[dict]:
+    """The practices and supported inferred purposes whose minimisation is undecided, with what Skuld could impose;
+    observable by the families of Skuld's catalogue and of the study's (`study`, beside the workspace)."""
     from skuld.common import PURPOSES, vocabulary
 
     purposes = vocabulary(PURPOSES)
-    observed = observed_purposes()
+    observed = observed_purposes(study=study)
     by_id = {p["id"]: p for p in practices}
     concern = {c.get("purpose"): c for c in report["concerns"] if c["step"] == "less_invasive_alternative"}
     tested = [c for c in report["claims"] if c.get("case") and c["type"] == "alternative"]
@@ -340,7 +357,7 @@ def select(
         entries = [e for e in earlier["entries"] if e["kind"] == CHOICE or refusal(e) is not None]
         spent = earlier["device_seconds"]
     held = {e["id"] for e in entries}
-    found = [c for c in candidates(report, practices) if _entry_id(c) not in held]
+    found = [c for c in candidates(report, practices, root.parent / "catalogue") if _entry_id(c) not in held]
     # what earlier choices of an extended selection already count: their interventions, and the baseline
     chosen_before = [e for e in entries if e["kind"] == CHOICE]
     counted = {a for e in chosen_before for a in _alternatives(e)}

@@ -202,12 +202,19 @@ def _pattern(view: View) -> dict:
 
 
 def qualify(
-    report: dict, requirements: dict[str, str], data=None, registry=None, applicability=frozenset(), frame=None
+    report: dict,
+    requirements: dict[str, str],
+    data=None,
+    registry=None,
+    applicability=frozenset(),
+    frame=None,
+    study=None,
 ) -> dict:
     """The qualification of an assessment: `requirements` gives each requirement of the frame the kind of its subject
     (practice, declaration, collection); `data` is the data vocabulary, `registry` the recipient register;
     `applicability` the frame's applicability conditions (`applies_if`), whose kind is applicability; `frame` the frame,
-    whose declared levels give an open condition's steps (gaps.py)."""
+    whose declared levels give an open condition's steps (gaps.py); `study` the study's catalogue beside the workspace,
+    whose families select reads with Skuld's (`select.candidates`)."""
     index = Index(report, requirements)
     index.frame = frame
     index.applicability = frozenset(applicability)
@@ -215,7 +222,7 @@ def qualify(
     from skuld import select as selection  # select reads qualification's steps; import here, not at module load
 
     index.experiments = {}
-    for c in selection.candidates(report, report["subjects"]["practices"]):
+    for c in selection.candidates(report, report["subjects"]["practices"], study):
         if selection.refusal(c) is None:
             index.experiments.setdefault(c["practice"], []).append(c)
     coverage = _Coverage(report)

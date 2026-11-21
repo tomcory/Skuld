@@ -294,12 +294,17 @@ def _review(root: Path, key: str, sha256: str, data: dict) -> tuple[dict | None,
     return {**(legacy if isinstance(legacy, dict) else {"note": str(legacy)}), "legacy": True}, None
 
 
-def load(root: str | Path) -> Catalogue:
+def load(root: str | Path, base: str | Path | None = None) -> Catalogue:
     """Reads a catalogue folder; an absent one is empty. Raises CatalogueError for a family that fails the checks, but
     for slot keys (`slot_problems`), which a family written before the strict check may have: it is read with them as
-    its `problems`."""
+    its `problems`.
+
+    With `base`, the catalogue is layered: the families of `base` (Skuld's committed catalogue, read only) and of
+    `root` (a study's catalogue, where `add` writes the families models propose and `review` their reviews). A family
+    in both is refused."""
     root = Path(root)
-    families = []
+    families = list(load(base).families) if base is not None else []
+    below = {f.key for f in families}
     for path in sorted((root / "families").glob("*.yaml")):
         text = path.read_text(encoding="utf-8")
         data = yamlio.load(text)
@@ -314,6 +319,8 @@ def load(root: str | Path) -> Catalogue:
         key, sha256 = f"{data['id']}@{data['version']}", _digest(text)
         review, problem = _review(root, key, sha256, data)
         problems = tuple(slot_problems(data))
+        if key in below:
+            raise CatalogueError(f"{path.name}: {key} is also in the base catalogue {base}")
         families.append(Family(data["id"], int(data["version"]), data, sha256, path, review, problem, problems))
     return Catalogue(root, families)
 

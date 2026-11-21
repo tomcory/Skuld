@@ -560,10 +560,19 @@ def _refuse_fixed(root: Path) -> None:
         raise ProposalError(f"{root} has fixed inputs already")
 
 
+def load_catalogue(catalogue_root: str | Path | tuple) -> cat.Catalogue:
+    """The catalogue the generator reads and adds to: one folder, or (base, study) where the families models propose are
+    written into the study's folder and Skuld's committed catalogue is the base, read only (`cli`'s default)."""
+    if isinstance(catalogue_root, (tuple, list)):
+        base, study = catalogue_root
+        return cat.load(study, base=base)
+    return cat.load(catalogue_root)
+
+
 def propose(
     exploration: str | Path,
     root: str | Path,
-    catalogue_root: str | Path,
+    catalogue_root: str | Path | tuple,
     model: str,
     verdandi: list[str],
     api: str = "ollama",
@@ -603,7 +612,7 @@ def propose(
 def propose_model(
     exploration: str | Path,
     root: str | Path,
-    catalogue_root: str | Path,
+    catalogue_root: str | Path | tuple,
     model: str,
     verdandi: list[str],
     api: str = "ollama",
@@ -627,7 +636,7 @@ def propose_model(
     root = Path(root)
     _refuse_fixed(root)
     exp = read(exploration)
-    catalogue = cat.load(catalogue_root)
+    catalogue = load_catalogue(catalogue_root)
     purposes = vocabulary(PURPOSES)
     data = vocabulary(DATA)
     application = f"{exp.package}@{exp.version}"
@@ -769,7 +778,7 @@ def propose_model(
 def merge(
     exploration: str | Path,
     root: str | Path,
-    catalogue_root: str | Path,
+    catalogue_root: str | Path | tuple,
     verdandi: list[str],
     registry: str | Path | None = None,
 ) -> dict:
@@ -787,7 +796,7 @@ def merge(
     root = Path(root)
     _refuse_fixed(root)
     exp = read(exploration)
-    catalogue = cat.load(catalogue_root)
+    catalogue = load_catalogue(catalogue_root)
     data = vocabulary(DATA)
     proposed = []
     for path in sorted((root / "proposals").glob("*/summary.json")):
