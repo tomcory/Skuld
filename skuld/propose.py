@@ -9,19 +9,34 @@ Per episode the model is given the flow (the explorer's task, the verifier's rea
 the outcome) and the newest version of every family, and answers with a family of the catalogue or a new one, and the
 values of its slots, for each feature the flow carries out (at most three). The answer is checked (`problems`); a
 refused answer is asked once more with the refusal, and of the second answer only the features that pass are taken,
-the others recorded with why. Every prompt and answer is kept:
+the others recorded with why. Every prompt and answer is kept, per model:
 
 ```text
-proposals/e<episode>/a<attempt>/
+proposals/<model>/e<episode>/a<attempt>/
   record.json    the episode, the generator's version, prompt, model and options, the catalogue's digest
   prompt.txt     the prompt as sent
   answer.json    the model's answer as received
-proposals/summary.json   per episode: the experimental case written, or why none was
+proposals/<model>/summary.json   per episode: the cases proposed (family, slot values, path, author), or why none was
+proposals/summary.json           the merged cases: per episode, each case with its proposers, and the inputs fixed
 ```
 
 and asked again only when the prompt, the model or its options change (the prompt holds the episode and the families
 offered; a new generator version or a change to the catalogue that the prompt does not show asks nothing again). A new family is added to the catalogue; the search space is derived
-by rules (`skuld.space`); the inputs are fixed with the generator, the model and the family as their author.
+by rules (`skuld.space`).
+
+Each model family proposes, and the union is run once (21 Nov 2026; before, one model proposed and the others were
+scored against its cases): `skuld propose --model <m>` keeps a model's proposals in `proposals/<model>/` without
+writing or fixing the inputs, and `skuld propose --merge` (`merge`) writes the union of every model's cases, one case
+for identical proposals (the same feature episode, purpose nodes and alternative conditions) naming every proposer,
+and fixes the inputs once, each with its first proposer, the model and the family as its author. A lone `skuld
+propose` (no `--model`, no `--merge`) is the single-model path: the configuration's model proposes and its cases
+are merged and fixed at once, as before (`propose`).
+
+The launch is filled by rule from the newest `launch` family. Its oracle adds the conditions of the application's
+store category (`launch@3`: a forecast, a search field, a document list), read from the store listing Sága collected
+(`store_category`: a listing, a collection, or D's report on it; `skuld propose --listing`, else the D report the
+workspace's assessment.yaml names); a category without an entry keeps the family's own conditions. A family's control
+(`catalogue`) is written into its cases.
 """
 
 import hashlib
@@ -36,15 +51,16 @@ from ratatoskr import notices as notice_rules
 from ratatoskr.notices import classify, notice_texts
 from ratatoskr.vocabularies import Vocabulary
 
-from skuld import ask, config, inputs, parties, select, space, templates
+from skuld import ask, config, inputs, parties, select, space, templates, yamlio
 from skuld import catalogue as cat
 from skuld.common import DATA, PURPOSES, vocabulary
 from skuld.observe import observe
 
-#: 2 (20 Nov 2026): the flow's screens without what Ratatoskr's notice definition takes for notices, as the
+#: 3 (21 Nov 2026): per-model proposals merged into one set of cases with their proposers, the launch's conditions by
+#: the store category, a family's control in its cases. 2 (20 Nov 2026): the flow's screens without what Ratatoskr's notice definition takes for notices, as the
 #: expectation stage's (C3: the proposer saw consent dialogs and privacy notices), and the prompt's version 2 (the
 #: flow last). Changes the experimental cases' digests
-VERSION = "2"
+VERSION = "3"
 #: The version of Ratatoskr's notice definition the flow's screens leave notices out by
 NOTICES = notice_rules.VERSION
 PROMPT = "propose"
@@ -483,6 +499,66 @@ def _changes(screens: list[Screen]) -> list[Screen]:
 # -- the workspace ------------------------------------------------------------------------------------------------
 
 
+def folder_name(model: str) -> str:
+    """A model's folder below `proposals/`: its name with what a file system refuses (':', '/') written as '-'."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", model).strip("-") or "model"
+
+
+def store_category(source: str | Path | None) -> str | None:
+    """
+    The application's store category (Sága's `store_listing.category`, in the store's language) from a store
+    listing (`listing.json`), a Sága collection folder (its `documents/listing/listing.json`) or D's report on a
+    collection (Urda's `report.json`, whose `collection.path` names the collection; it is looked for from the
+    report's folder and each folder above it). None if none of them names one.
+    """
+    if source is None:
+        return None
+    path = Path(source)
+    if path.is_dir():
+        for candidate in (path / "documents" / "listing" / "listing.json", path / "listing.json"):
+            if candidate.is_file():
+                return store_category(candidate)
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    if "collection" in data and isinstance(data["collection"], dict):
+        named = str(data["collection"].get("path") or "").replace("\\", "/")
+        if not named:
+            return None
+        for base in path.resolve().parents:
+            if (base / named).is_dir():
+                return store_category(base / named)
+        return None
+    category = data.get("category")
+    return str(category) if category else None
+
+
+def assessment_category(root: Path) -> tuple[str | None, str | None]:
+    """The store category of the application of an assessment workspace, from the D report its assessment.yaml names:
+    the category and where it was read, or (None, None)."""
+    path = root / inputs.ASSESSMENT
+    if not path.is_file():
+        return None, None
+    try:
+        declaration = (yamlio.load(path.read_text(encoding="utf-8")) or {}).get("declaration") or {}
+    except Exception:  # noqa: BLE001 (an assessment.yaml that cannot be read names no category)
+        return None, None
+    if not declaration.get("path"):
+        return None, None
+    report = (root / declaration["path"]).resolve()
+    found = store_category(report)
+    return (found, inputs.portable(report, root)) if found else (None, None)
+
+
+def _refuse_fixed(root: Path) -> None:
+    if (root / inputs.FROZEN).is_file():
+        raise ProposalError(f"{root} has fixed inputs already")
+
+
 def propose(
     exploration: str | Path,
     root: str | Path,
@@ -494,24 +570,67 @@ def propose(
     provider=None,
     selection: dict | None = None,
     registry: str | Path | None = None,
+    category: str | None = None,
+    category_source: str | None = None,
+    fix: bool = True,
 ) -> dict:
     """
-    Writes and fixes the workspace's inputs; returns the summary (per episode: the case, or why there is none).
-    With a selection (`skuld select`), only the episodes of the practices it chose, and in each case only the
-    components that vary a chosen practice's, so that no run is made that the assessment did not ask for.
+    The single-model path: proposes for `model` (`propose_model`) and, with `fix`, builds the workspace's inputs from
+    every model's proposals and fixes them (`merge`); returns the merged summary, or the model's without `fix`.
 
     Raises ProposalError if the workspace already has fixed inputs: generated inputs are fixed once, before the runs.
     """
+    proposed = propose_model(
+        exploration,
+        root,
+        catalogue_root,
+        model,
+        verdandi,
+        api,
+        offline,
+        provider,
+        selection,
+        registry,
+        category,
+        category_source,
+    )
+    if not fix:
+        return proposed
+    return merge(exploration, root, catalogue_root, verdandi, registry)
+
+
+def propose_model(
+    exploration: str | Path,
+    root: str | Path,
+    catalogue_root: str | Path,
+    model: str,
+    verdandi: list[str],
+    api: str = "ollama",
+    offline: bool = False,
+    provider=None,
+    selection: dict | None = None,
+    registry: str | Path | None = None,
+    category: str | None = None,
+    category_source: str | None = None,
+) -> dict:
+    """
+    One model's proposals: per episode, the cases its answer gives, kept in `proposals/<model>/` (the samples, and
+    `summary.json` with every case's family, slot values and path, from which `merge` writes the inputs), without
+    writing or fixing the workspace's inputs; returns the summary. With a selection (`skuld select`), only the
+    episodes of the practices it chose, and in each case only the components that vary a chosen practice's, so that
+    no run is made that the assessment did not ask for. The launch is filled by rule, with the conditions of the
+    application's store category (`category`; else the one the workspace's D report names, `assessment_category`).
+
+    Raises ProposalError if the workspace already has fixed inputs.
+    """
     root = Path(root)
-    if (root / inputs.FROZEN).is_file():
-        raise ProposalError(f"{root} has fixed inputs already")
+    _refuse_fixed(root)
     exp = read(exploration)
     catalogue = cat.load(catalogue_root)
     purposes = vocabulary(PURPOSES)
     data = vocabulary(DATA)
     application = f"{exp.package}@{exp.version}"
-    (root / "cases").mkdir(parents=True, exist_ok=True)
-    (root / "oracles").mkdir(exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
     settings = {
         "application": {"package": exp.package, "version": exp.version},
         "runs": inputs.portable(exp.directory.parent, root),
@@ -522,12 +641,22 @@ def propose(
     report = observe(root, exp.run_id, exp.directory, verdandi)
     template = prompt_template()
     generator = {"id": "skuld.propose", "version": VERSION, "prompt_sha256": _sha(template), "notices": NOTICES}
-    summary: dict = {"generator": generator, "recording": exp.run_id, "catalogue": catalogue.sha256, "episodes": {}}
-    authors: dict[str, dict] = {}
+    mine = root / "proposals" / folder_name(model)
+    if category is None and category_source is None:
+        category, category_source = assessment_category(root)
+    summary: dict = {
+        "generator": generator,
+        "model": model,
+        "api": api,
+        "recording": exp.run_id,
+        "catalogue": catalogue.sha256,
+        "category": {"name": category, "source": category_source} if category else None,
+        "selection": selection,
+        "episodes": {},
+        "cases": [],
+    }
     wanted, keep = (None, None) if selection is None else select.keeps(selection, data)
     own = space.provider_own(parties.load_registry(registry), parties.controller(None, exp.package))
-    if selection is not None:
-        summary["selection"] = {"created": selection["created"], "chosen": [e["id"] for e in select.chosen(selection)]}
 
     launch = catalogue.get(RULE_FILLED)
     if launch is not None and exp.first is not None and (wanted is None or wanted & {"?", "0"}):
@@ -539,11 +668,20 @@ def propose(
             "path": None,
             "outcome": launch.data["outcome"],
         }
-        author = _author(generator, None, launch)
-        written = _write_case(
-            root, "launch", feature, launch, bindings, report, {"?", "0"}, exp.package, data, authors, author, keep, own
-        )
-        if written is not None:
+        if space.derive(report, {"?", "0"}, exp.package, keep, own)[0] or keep is None:
+            summary["cases"].append(
+                {
+                    "case": "launch",
+                    "episode": "launch",
+                    "episodes": ["?", "0"],
+                    "family": launch.key,
+                    "feature": feature,
+                    "bindings": bindings,
+                    "category": category,
+                    "author": _author(generator, None, launch),
+                    "proposer": {"kind": "rule", "name": "skuld.propose", "family": launch.key},
+                }
+            )
             summary["episodes"]["launch"] = {"cases": [{"case": "launch", "family": launch.key}], "title": "launch"}
 
     sampling = config.options("propose")
@@ -568,7 +706,7 @@ def propose(
             return found
 
         sample, refused, _ = ask.ask_with_feedback(
-            lambda attempt, key=key: root / "proposals" / key / f"a{attempt}",
+            lambda attempt, key=key: mine / key / f"a{attempt}",
             prompt,
             ANSWER_SCHEMA,
             lambda asked, flow=flow: {
@@ -595,7 +733,7 @@ def propose(
             summary["episodes"][key]["refused"] = refused
         for n, chosen in enumerate(passing):
             case_id = key if n == 0 else f"{key}{chr(ord('a') + n)}"
-            entry = _feature_case(
+            record = _feature_case(
                 root,
                 case_id,
                 chosen,
@@ -608,18 +746,155 @@ def propose(
                 folder,
                 generator,
                 report,
-                data,
-                authors,
-                contains_launch="launch" in summary["episodes"],
                 keep=keep,
                 own=own,
+                contains_launch="launch" in summary["episodes"],
             )
-            if entry is None:
+            if record is None:
                 summary["episodes"][key].setdefault("refused", []).append(
                     f"case {case_id}: no component of it varies a chosen practice's"
                 )
                 continue
-            summary["episodes"][key]["cases"].append(entry)
+            summary["cases"].append(record)
+            summary["episodes"][key]["cases"].append({"case": case_id, "family": record["family"]})
+
+    mine.mkdir(parents=True, exist_ok=True)
+    (mine / "summary.json").write_text(
+        json.dumps(summary, indent=2, ensure_ascii=False, default=str) + "\n", encoding="utf-8", newline="\n"
+    )
+    return summary
+
+
+def merge(
+    exploration: str | Path,
+    root: str | Path,
+    catalogue_root: str | Path,
+    verdandi: list[str],
+    registry: str | Path | None = None,
+) -> dict:
+    """
+    The workspace's inputs from every model's proposals (`proposals/<model>/summary.json`), written and fixed once:
+    the union of their cases, where identical cases (the same feature episode, purpose nodes and alternative
+    conditions) are one, naming every proposer (`proposers`). Ids stay `e<episode>`, with `b`, `c`, … for an
+    episode's further cases, in the order of the episode, then of the models by name, then of each model's answer;
+    the launch is `launch`. A case keeps the family, slots and author of its first proposer. Returns the summary
+    (`proposals/summary.json`).
+
+    Raises ProposalError if the workspace already has fixed inputs, has no proposals, or the proposals were made of
+    other recordings or selections.
+    """
+    root = Path(root)
+    _refuse_fixed(root)
+    exp = read(exploration)
+    catalogue = cat.load(catalogue_root)
+    data = vocabulary(DATA)
+    proposed = []
+    for path in sorted((root / "proposals").glob("*/summary.json")):
+        summary = json.loads(path.read_text(encoding="utf-8"))
+        if "cases" in summary and "model" in summary:
+            proposed.append(summary)
+    if not proposed:
+        raise ProposalError(f"{root}: no model's proposals in proposals/<model>/ (skuld propose --model first)")
+    proposed.sort(key=lambda m: m["model"])
+    if len({m["recording"] for m in proposed}) > 1 or proposed[0]["recording"] != exp.run_id:
+        raise ProposalError("the proposals were made of other recordings than " + exp.run_id)
+    selections = {json.dumps(m.get("selection"), sort_keys=True, default=str) for m in proposed}
+    if len(selections) > 1:
+        raise ProposalError("the proposals were made with different selections; propose every model with the same one")
+    selection = proposed[0].get("selection")
+    _, keep = (None, None) if selection is None else select.keeps(selection, data)
+    own = space.provider_own(parties.load_registry(registry), parties.controller(None, exp.package))
+    report = observe(root, exp.run_id, exp.directory, verdandi)
+    for folder in ("cases", "oracles"):
+        (root / folder).mkdir(parents=True, exist_ok=True)
+        for stale in (root / folder).glob("*.yaml"):
+            stale.unlink()  # the inputs of an earlier merge, never fixed
+
+    def episode_key(record: dict) -> tuple:
+        e = record["episode"]
+        return (0, 0) if e == "launch" else (1, int(e))
+
+    merged: list[dict] = []
+    for m in proposed:
+        for record in m["cases"]:
+            family = _family(catalogue, record["family"])
+            conditions = sorted(
+                a.get("condition", a["id"])
+                for a in space.derive(report, set(record["episodes"]), exp.package, keep, own)[1]
+            )
+            identity = (
+                str(record["episode"]),
+                tuple(sorted(p["node"] for p in family.data["purposes"])),
+                tuple(conditions),
+            )
+            proposer = record.get("proposer") or {"kind": "model", "name": m["model"]}
+            # identical to a case another model proposed (two cases of one model's answer stay two)
+            same = next((x for x in merged if x["identity"] == identity and m["model"] not in x["models"]), None)
+            if same is not None:
+                same["models"].add(m["model"])
+                if proposer not in same["proposers"]:
+                    same["proposers"].append(proposer)
+                continue
+            merged.append(
+                {
+                    "identity": identity,
+                    "record": record,
+                    "family": family,
+                    "proposers": [proposer],
+                    "models": {m["model"]},
+                }
+            )
+
+    out: dict = {
+        "generator": proposed[0]["generator"],
+        "recording": exp.run_id,
+        "catalogue": catalogue.sha256,
+        "models": [m["model"] for m in proposed],
+        "episodes": {},
+    }
+    if any(m.get("selection") for m in proposed):
+        out["selection"] = {"created": selection["created"], "chosen": [e["id"] for e in select.chosen(selection)]}
+    for m in proposed:
+        for key, entry in m["episodes"].items():
+            held = out["episodes"].setdefault(key, {"cases": [], "title": entry["title"]})
+            for refused in entry.get("refused") or ():
+                held.setdefault("refused", []).append(f"{m['model']}: {refused}" if len(proposed) > 1 else refused)
+    authors: dict[str, dict] = {}
+    numbered: dict[str, int] = {}
+    for item in sorted(merged, key=lambda x: episode_key(x["record"])):
+        record, family = item["record"], item["family"]
+        if record["episode"] == "launch":
+            case_id, key = "launch", "launch"
+        else:
+            key = f"e{record['episode']}"
+            n = numbered[key] = numbered.get(key, -1) + 1
+            case_id = key if n == 0 else f"{key}{chr(ord('a') + n)}"
+        feature = {**record["feature"], "id": f"F-{case_id}"}
+        named = _write_case(
+            root,
+            case_id,
+            feature,
+            family,
+            record["bindings"],
+            report,
+            set(record["episodes"]),
+            exp.package,
+            data,
+            authors,
+            record["author"],
+            keep,
+            own,
+            category=record.get("category"),
+            proposers=item["proposers"],
+        )
+        held = out["episodes"].setdefault(key, {"cases": [], "title": key})
+        if named is None:
+            held.setdefault("refused", []).append(f"case {case_id}: no component of it varies a chosen practice's")
+            continue
+        entry = {"case": case_id, "family": family.key, "proposers": [p["name"] for p in item["proposers"]]}
+        if named:
+            entry["requirements"] = named
+        held["cases"].append(entry)
 
     from skuld.execute import ExecutionError, interventions
 
@@ -627,13 +902,21 @@ def propose(
         interventions(inputs.load(root))
     except (ExecutionError, inputs.InputError) as e:
         raise ProposalError(f"the generated cases cannot be run together: {e}") from e
-    fixed = inputs.freeze(root, {"kind": "model", "name": model, "prompt": f"skuld.propose {VERSION}"}, authors=authors)
-    summary["fixed"] = fixed
-    (root / "proposals").mkdir(exist_ok=True)
+    names = ", ".join(out["models"])
+    fixed = inputs.freeze(root, {"kind": "model", "name": names, "prompt": f"skuld.propose {VERSION}"}, authors=authors)
+    out["fixed"] = fixed
     (root / "proposals" / "summary.json").write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+        json.dumps(out, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
     )
-    return summary
+    return out
+
+
+def _family(catalogue: cat.Catalogue, key: str) -> cat.Family:
+    family_id, _, version = key.partition("@")
+    found = catalogue.get(family_id, int(version)) if version.isdigit() else None
+    if found is None:
+        raise ProposalError(f"a proposal names the family {key}, which the catalogue does not hold")
+    return found
 
 
 def _feature_case(
@@ -649,15 +932,13 @@ def _feature_case(
     folder,
     generator,
     report,
-    data,
-    authors,
-    contains_launch,
     keep=None,
     own=None,
+    contains_launch=False,
 ) -> dict | None:
     """
-    Writes the experimental case of one feature of an answer, with a new family added to the catalogue where it gives
-    one; None where a selection keeps no component of it.
+    The proposal of one feature of an answer (`merge` writes its case), with a new family added to the catalogue
+    where it gives one; None where a selection keeps no component of it.
     """
     if answer["family"] == "new":
         prompt_record = json.loads((folder / "record.json").read_text(encoding="utf-8"))
@@ -679,6 +960,8 @@ def _feature_case(
         )
     else:
         family = catalogue.get(answer["family"])
+    if keep is not None and not space.derive(report, {str(flow.episode)}, exp.package, keep, own)[0]:
+        return None
     values = {s["name"]: [v for v in s["values"] if v.strip()] for s in answer["slots"]}
     bindings = {"path_start": flow.start, "path_end": flow.end}
     for name, slot in _slots(family.data).items():
@@ -693,35 +976,40 @@ def _feature_case(
     }
     if flow.start == 0 and contains_launch:
         feature["contains"] = ["F-launch"]
-    author = _author(generator, {"api": api, "name": model}, family, folder.relative_to(root).as_posix())
-    named = _write_case(
-        root,
-        case_id,
-        feature,
-        family,
-        bindings,
-        report,
-        {str(flow.episode)},
-        exp.package,
-        data,
-        authors,
-        author,
-        keep,
-        own,
-    )
-    if named is None:
-        return None
-    entry = {"case": case_id, "family": family.key}
-    if named:
-        entry["requirements"] = named
-    return entry
+    answered = folder.relative_to(root).as_posix()
+    return {
+        "case": case_id,
+        "episode": flow.episode,
+        "episodes": [str(flow.episode)],
+        "family": family.key,
+        "feature": feature,
+        "bindings": bindings,
+        "author": _author(generator, {"api": api, "name": model}, family, answered),
+        "proposer": {"kind": "model", "name": model, "family": family.key, "case": case_id, "answer": answered},
+    }
 
 
 def _write_case(
-    root, case_id, feature, family, bindings, report, episodes, package, data, authors, author, keep=None, own=None
+    root,
+    case_id,
+    feature,
+    family,
+    bindings,
+    report,
+    episodes,
+    package,
+    data,
+    authors,
+    author,
+    keep=None,
+    own=None,
+    category=None,
+    proposers=(),
 ) -> list[str] | None:
     """Writes an experimental case and its oracles; returns the requirements that name a datum of its search space
-    (kept, reported), or None, writing nothing, where `keep` keeps no component of it."""
+    (kept, reported), or None, writing nothing, where `keep` keeps no component of it. An oracle template's
+    conditions of the application's store category (`category`) are added to its own (`catalogue.success`); the
+    family's control (or the category's) is the case's; the proposers are recorded."""
     components, alternatives = space.derive(report, episodes, package, keep, own)
     if keep is not None and not components:
         return None
@@ -742,7 +1030,7 @@ def _write_case(
                 "version": 1,
                 "purpose": pid,
                 "reach": [rid[r] for r in o["reach"]],
-                "success": cat.fill(o["success"], bindings),
+                "success": cat.fill(cat.success(o, category), bindings),
                 "invalid": cat.fill(o.get("invalid") or [], bindings),
                 "measurements": cat.fill(o.get("measurements") or [], bindings),
             }
@@ -763,18 +1051,31 @@ def _write_case(
         )
     case = {
         "id": case_id,
-        "family": {"id": family.id, "version": family.version, "sha256": family.sha256},
+        "family": {
+            "id": family.id,
+            "version": family.version,
+            "sha256": family.sha256,
+            **({"category": category} if category and _has_categories(family) else {}),
+        },
         "feature": feature,
         "purposes": purposes,
         "components": components,
         "search_space": {"alternatives": alternatives},
     }
+    if control := cat.control(family.data, category):
+        case["control"] = dict(control)
+    if proposers:
+        case["proposers"] = [dict(p) for p in proposers]
     path = root / "cases" / f"{case_id}.yaml"
     path.write_text(
         yaml.safe_dump(case, sort_keys=False, allow_unicode=True, width=120), encoding="utf-8", newline="\n"
     )
     authors[f"cases/{path.name}"] = author
     return named
+
+
+def _has_categories(family: cat.Family) -> bool:
+    return any((p.get("oracle") or {}).get("categories") for p in family.data["purposes"])
 
 
 def _titles(components: list[dict], data: Vocabulary) -> list[str]:

@@ -1,7 +1,8 @@
 """
 skuld [--profile <name>] <command> …: every command with a named configuration over config.json (profiles/).
 skuld config [--profiles]: the configuration in force (file, profile, digest, content), or the profiles.
-skuld propose <exploration> --pilot …: generate and fix a workspace's inputs from Loki's exploration and the catalogue.
+skuld propose <exploration> --pilot …: generate and fix a workspace's inputs from Loki's exploration and the catalogue
+    (--model <m>: one model's proposals, not fixed; --merge: the union of every model's, fixed).
 skuld corpus check | coverage <reports…>: the corpus's passages checked; the components no passage covers.
 skuld catalogue [--review <id>@<version> --by …]: the catalogue's families and their reviews; record a review.
 skuld freeze <workspace>: fix the named inputs before the runs they judge.
@@ -83,7 +84,25 @@ def build_parser() -> argparse.ArgumentParser:
     where.add_argument("--pilot", help="the pilot: the workspace is pilots/<pilot>/skuld/<package>@<version>")
     where.add_argument("--workspace", help="the workspace's folder")
     propose_.add_argument("--catalogue", default=str(CATALOGUE), help="the catalogue folder (default: Skuld's)")
-    propose_.add_argument("--model", default=None, help="(default: the configuration's)")
+    propose_.add_argument(
+        "--model",
+        default=None,
+        help="propose with this model into proposals/<model>/, without fixing the inputs (then --merge); without "
+        "--model and --merge, the configuration's model proposes and its cases are fixed at once",
+    )
+    propose_.add_argument(
+        "--merge",
+        action="store_true",
+        help="write the union of every model's proposals (identical cases merged, each naming its proposers) and fix "
+        "the inputs; with --model, after that model proposed",
+    )
+    propose_.add_argument(
+        "--listing",
+        type=Path,
+        help="the store listing the launch's category conditions read (a listing.json, a Sága collection, or D's "
+        "report on it; default: the D report the workspace's assessment.yaml names)",
+    )
+    propose_.add_argument("--category", help="the application's store category, instead of reading a listing")
     propose_.add_argument(
         "--api", default=None, help="API that serves the model (default: the configuration's client.api)"
     )
@@ -153,12 +172,22 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--qualify",
         action="store_true",
-        help="first one baseline replay; record the experimental cases it does not qualify",
+        help="first one baseline run (a replay, or a goal-directed run of --case); record the experimental cases it does not qualify",
     )
     run.add_argument(
         "--case",
-        help="replay only up to the end of this experimental case's path (the cold start for the launch); 'all' conditions are "
-        "then this case's",
+        help="the runs of this experimental case: goal-directed runs for a case with a path, replays of the cold start "
+        "for the launch; 'all' conditions are then this case's, with its control",
+    )
+    run.add_argument(
+        "--replay",
+        action="store_true",
+        help="with --case: replay the recording up to the end of the case's path instead of a goal-directed run",
+    )
+    run.add_argument(
+        "--max-duration",
+        type=float,
+        help="a goal-directed run's duration cap in seconds (default: config.json's experiments.goal_max_duration_s)",
     )
     run.add_argument(
         "--keep-going",
@@ -292,6 +321,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     select_.add_argument("--budget-seconds", type=int, help="the device budget (default: config.json's)")
     select_.add_argument(
+        "--assessment",
+        action="append",
+        default=[],
+        type=Path,
+        help="another model family's assessment workspace, whose selection's choices join inputs/chosen.yaml "
+        "(reason union) before the selection; repeatable",
+    )
+    select_.add_argument(
         "--list", action="store_true", help="print the candidates as JSON lines (device time, eligible, could change)"
     )
     select_.add_argument(
@@ -370,6 +407,10 @@ def _not_read(args) -> str | None:
             )
     if args.command == "select" and (args.list or args.groups) and args.budget_seconds is not None:
         return "select --list and --groups list every candidate's device time; the budget is select's alone"
+    if args.command == "select" and (args.list or args.groups) and args.assessment:
+        return "select --list and --groups write nothing; --assessment joins other selections into chosen.yaml"
+    if args.command == "run" and (args.replay or args.max_duration) and not args.case:
+        return "run --replay and --max-duration are of one case's runs: give --case"
     if args.command == "freeze" and args.prompt and not args.model:
         return "freeze --prompt is the prompt of an author that is a model: give --model too"
     return None
@@ -402,6 +443,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "propose":
             _environment()
+            lone = args.model is None and not args.merge
+            ask = args.model is not None or lone
             args.model = args.model or config.model()
             exploration = propose.read(args.exploration)
             root = (
@@ -411,30 +454,47 @@ def main(argv: list[str] | None = None) -> int:
             )
             settings = {
                 "exploration": str(args.exploration),
-                "model": args.model,
+                "model": args.model if ask else None,
+                "merge": args.merge or lone,
                 "api": args.api,
                 "offline": args.offline,
                 "selection": str(args.selection) if args.selection else None,
+                "listing": str(args.listing) if args.listing else None,
+                "category": args.category,
             }
+            # relative to the workspace, which Verðandi is run from
+            verdandi = component("verdandi", ASGARD / "Verdandi", relative_to=root)
+            category, source = args.category, ("--category" if args.category else None)
+            if category is None and args.listing:
+                category, source = propose.store_category(args.listing), str(args.listing)
             with manifest.metered("propose", settings, root) as run:
-                summary = propose.propose(
-                    args.exploration,
-                    root,
-                    args.catalogue,
-                    args.model,
-                    # relative to the workspace, which Verðandi is run from
-                    component("verdandi", ASGARD / "Verdandi", relative_to=root),
-                    args.api,
-                    args.offline,
-                    selection=json.loads(args.selection.read_text(encoding="utf-8")) if args.selection else None,
-                    registry=args.registry,
-                )
+                summary = None
+                if ask:
+                    summary = propose.propose_model(
+                        args.exploration,
+                        root,
+                        args.catalogue,
+                        args.model,
+                        verdandi,
+                        args.api,
+                        args.offline,
+                        selection=json.loads(args.selection.read_text(encoding="utf-8")) if args.selection else None,
+                        registry=args.registry,
+                        category=category,
+                        category_source=source,
+                    )
+                if args.merge or lone:
+                    summary = propose.merge(args.exploration, root, args.catalogue, verdandi, args.registry)
             for key, entry in summary["episodes"].items():
                 for case in entry["cases"]:
-                    print(f"{case['case']:>8}  {case['family']:<40} {entry['title']}")
+                    by = f"  ({', '.join(case['proposers'])})" if len(case.get("proposers") or ()) > 1 else ""
+                    print(f"{case['case']:>8}  {case['family']:<40} {entry['title']}{by}")
                 if entry.get("refused"):
                     print(f"{key:>8}  {'(refused)':<40} {'; '.join(entry['refused'])}")
-            print(f"{len(summary['fixed'])} inputs fixed in {root}")
+            if "fixed" in summary:
+                print(f"{len(summary['fixed'])} inputs fixed in {root}")
+            else:
+                print(f"proposals of {args.model} in {root / 'proposals' / propose.folder_name(args.model)}; not fixed")
             print(f"manifest {run.path}")
         elif args.command == "purposes":
             from skuld import purposemap
@@ -523,6 +583,7 @@ def main(argv: list[str] | None = None) -> int:
             elif conditions == ["all"]:
                 cases = [c for c in workspace.cases if c.id == args.case]
                 conditions = [execute.BASELINE, *sorted({a.condition for c in cases for a in c.alternatives})]
+                conditions += [inputs.CONTROL] if any(c.control for c in cases) else []
             entries = execute.run(
                 workspace,
                 Path(args.recorded),
@@ -535,6 +596,8 @@ def main(argv: list[str] | None = None) -> int:
                 qualify=args.qualify,
                 case=args.case,
                 keep_going=args.keep_going,
+                replay=args.replay,
+                max_duration=args.max_duration,
             )
             for e in entries:
                 if args.json:
@@ -546,7 +609,8 @@ def main(argv: list[str] | None = None) -> int:
                     }
                     print(json.dumps(record), flush=True)
                 else:
-                    print(f"{e['order']:3d} {e['condition']:<10} exit {e['exit']}  {e['dir']}")
+                    note = f"  (made again: {e['repeated']})" if e.get("repeated") else ""
+                    print(f"{e['order']:3d} {e['condition']:<10} exit {e['exit']}  {e['dir']}{note}")
             if entries and (drift := entries[0].get("version_drift")):
                 print(
                     f"version {drift['installed']} installed, the recording of {drift['recorded']}: "
@@ -791,6 +855,9 @@ def main(argv: list[str] | None = None) -> int:
             for c in select.listing(args.workspace):
                 print(json.dumps(c, ensure_ascii=False))
         elif args.command == "select":
+            if args.assessment:
+                joined = select.union(args.workspace, args.assessment)
+                print(f"{len(joined)} choice(s) of {len(args.assessment)} other assessment(s) -> {select.CHOSEN}")
             budget = args.budget_seconds if args.budget_seconds is not None else select.settings()["budget_seconds"]
             if not budget:
                 print(

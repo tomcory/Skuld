@@ -360,7 +360,7 @@ def test_the_generator_writes_and_fixes_a_case_per_feature(made):
     assert oracle.reach == ("R-e1-1.1", "R-e1-1.2")
     author = frozen["cases/e1.yaml"]["author"]
     assert author["kind"] == "model" and author["generated"]["family"]["id"] == "current-location-forecast"
-    assert author["generated"]["answer"] == "proposals/e1/a1"
+    assert author["generated"]["answer"] == "proposals/fake/e1/a1"  # each model's proposals in its folder
     launch = next(c for c in workspace.cases if c.id == "launch")
     assert workspace.oracles[launch.purposes[0].oracle].success == (
         {"first_screen": {"activity_suffix": f"{ws.PACKAGE}.Welcome"}},
@@ -396,7 +396,7 @@ def test_a_feature_refused_twice_is_left_out_and_the_others_kept(tmp_path):
     assert provider.calls == 2
     assert [c["case"] for c in summary["episodes"]["e1"]["cases"]] == ["e1"]
     assert summary["episodes"]["e1"]["refused"] == ["feature 2: slot picker is not filled"]
-    assert "Your previous answer was refused" in (root / "proposals" / "e1" / "a2" / "prompt.txt").read_text(
+    assert "Your previous answer was refused" in (root / "proposals" / "fake" / "e1" / "a2" / "prompt.txt").read_text(
         encoding="utf-8"
     )
 

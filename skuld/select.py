@@ -27,6 +27,18 @@ config.json's; the candidates no entry names follow in Skuld's order. Which cand
     chosen:
       - {id: P-22c276a76c, reason: investigate, rank: 1}
 
+Each model family's assessment selects, and the union is run once (21 Nov 2026): `skuld select <workspace>
+--assessment <other> …` (`union`) writes into the workspace's `inputs/chosen.yaml` the practices the other
+assessments' selections chose (practice ids are O's, the same in every family's assessment), each with the reason
+`union` and, per assessment, the reason its selection gave; they are chosen whatever the budget, as each was chosen
+within its own. The workspace's selection is then made as always, and `skuld propose --model <m>` for each family
+proposes cases for it (`propose.merge`).
+
+    chosen:
+      - id: P-22c276a76c
+        reason: union
+        from: [{assessment: ../qwen, selection: 2026-11-21T10:00:00+00:00, reason: "…; within the budget"}]
+
 `skuld select --list` writes nothing and prints the candidates as JSON lines, each with its estimated device time,
 whether it is eligible, and whether an experiment could change a case's qualified result. That is qualification's
 experiment step for the purpose (`qualify/nextsteps.py`), which qualifies the case under each outcome of the
@@ -52,6 +64,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import yaml
+
 from skuld import catalogue, combine, config, inputs, space, yamlio
 
 VERSION = (
@@ -66,9 +80,10 @@ REASONS = {
     "pursue": "pursued by the author",
     "calibrate": "in the calibration sample",
     "investigate": "in the Investigator's order",
+    "union": "chosen by the selection of another model family's assessment",
 }
 #: Reasons whose entries are chosen whatever the budget; an investigation's are taken within it, by rank
-UNBUDGETED = ("pursue", "calibrate")
+UNBUDGETED = ("pursue", "calibrate", "union")
 #: Qualified results an experiment cannot change: a minimisation concern adds nothing to a higher result
 CHOICE, REFUSAL = "experiment_choice", "experiment_refusal"
 #: The defaults of config.json's `experiments`
@@ -406,6 +421,49 @@ def select(
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(selection, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     return selection
+
+
+def union(root: str | Path, assessments: list[str | Path]) -> list[dict]:
+    """
+    Writes into the workspace's `inputs/chosen.yaml` the practices the selections of the other assessments chose,
+    each with the reason `union` and, per assessment, the reason its selection gave (`from`); an entry already there
+    keeps its reason, a union entry gains the assessments not yet named. Returns the entries written or extended.
+
+    Raises SelectionError for an assessment without a selection (`skuld select` on it first).
+    """
+    root = Path(root)
+    path = root / CHOSEN
+    data = (yamlio.load(path.read_text(encoding="utf-8")) or {}) if path.is_file() else {}
+    entries = list(data.get("chosen") or [])
+    by_id = {str(e["id"]): e for e in entries}
+    touched = []
+    for other in map(Path, assessments):
+        if other.resolve() == root.resolve():
+            continue
+        found = other / FILE
+        if not found.is_file():
+            raise SelectionError(f"{other}: no selection ({FILE}); run skuld select on it first")
+        selection = json.loads(found.read_text(encoding="utf-8"))
+        for e in chosen(selection):
+            source = {
+                "assessment": inputs.portable(other, root),
+                "selection": selection["created"],
+                "reason": e["reason"],
+            }
+            held = by_id.get(e["practice"])
+            if held is None:
+                held = by_id[e["practice"]] = {"id": e["practice"], "reason": "union", "from": []}
+                entries.append(held)
+            if held.get("reason") != "union":
+                continue  # the author's or the Investigator's own reason stands
+            if all(f.get("assessment") != source["assessment"] for f in held["from"]):
+                held["from"].append(source)
+                if held not in touched:
+                    touched.append(held)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = yaml.safe_dump({**data, "chosen": entries}, sort_keys=False, allow_unicode=True, width=120)
+    path.write_text(text, encoding="utf-8", newline="\n")
+    return touched
 
 
 def named(root: Path) -> list[dict]:
