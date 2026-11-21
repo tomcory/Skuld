@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.11.2.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.11.3.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -117,7 +117,7 @@ Options (from `--help`):
 | `judge` | `--model` (default: the assessment's, else config.json's), `--api` (default: config's `client.api`), `--seeds …`, `--question specificity\|compatibility\|minimisation …`, `--offline`, `--corpus` (default: the one `assessment.yaml` names), `--registry` |
 | `assess`, `check` | `--registry` |
 | `select` | `--replace` (replace a fixed selection, keeping it) or `--extend` (add to a fixed selection, keeping its choices; what an earlier budget refused is decided again), `--budget-seconds` (over config.json's), `--assessment <ws>` (repeatable: another model family's assessment whose selection's choices join `inputs/chosen.yaml`), `--list` (the candidates as JSON lines: device time, eligible, could change; writes nothing), `--groups` (the candidates' groups, data type × purpose, as JSON lines) |
-| `propose` | `--pilot <pilot>` or `--workspace <folder>`, `--catalogue`, `--model` (one model's proposals into `proposals/<model>/`, not fixed), `--merge` (the union, fixed), `--api` (default: config's `client.api`), `--offline`, `--selection <selection.json>`, `--listing <listing.json, Sága collection or D report>` or `--category <store category>` (default: the D report `assessment.yaml` names), `--registry` |
+| `propose` | `--pilot <pilot>` or `--workspace <folder>`, `--catalogue` (the base, read only; default: Skuld's), `--new-families <folder>` (the study's catalogue the model-made families are written into; default: `<workspace>/../catalogue`), `--model` (one model's proposals into `proposals/<model>/`, not fixed), `--merge` (the union, fixed), `--api` (default: config's `client.api`), `--offline`, `--selection <selection.json>`, `--listing <listing.json, Sága collection or D report>` or `--category <store category>` (default: the D report `assessment.yaml` names), `--registry` |
 | `freeze` | `--author` (required), `--model` (the author is a model), `--prompt` |
 | `change` | `--reason` (required) |
 | `run` | `--recorded <Loki run>`, `--config <Loki configuration>`, `--device <adb serial>` (all required), `--conditions …` (default `all`: baseline and every alternative of the workspace's experimental cases), `--repeat` (3), `--loki` (the sibling Loki), `--qualify` (one baseline run first), `--case` (the runs of this experimental case: goal-directed for a case with a path, the cold start for the launch; `all` conditions are its own and its control), `--replay` (with `--case`: replay up to the end of its path instead), `--max-duration` (a goal-directed run's cap, s), `--keep-going` (Loki goes on after an action it could not replay), `--json` (one JSON line per run) |
@@ -199,7 +199,10 @@ skuld analyse ws/gemma
   where every judged control run tried a blocked host (a connection Heimdall dropped by the host rule, or a connection
   or message to a blocked domain: `tried_hosts`); otherwise it is "control not exercised" (`exercised: false`: the
   feature may be local). Sensitivity failures are listed by family in `report.md` and `assessment.md`.
-- **The catalogue** (`catalogue/families/`, local until deployed) refuses a slot with keys other than `kind` and
+- **The catalogue** is layered. Skuld's committed catalogue (`catalogue/families/`) is the base and is read only. The
+  families models propose are written into a study's catalogue beside the workspaces (`<workspace>/../catalogue`, or
+  `--new-families`), which `propose`, `select` and the qualification read with the base; a family in both is refused
+  (0.11.3; before, they were written into Skuld's own folder). The catalogue refuses a slot with keys other than `kind` and
   `description` (a comma in a YAML flow mapping cuts a description and leaves a stray key). The three files written
   before with one (current-location-forecast@1 and @2, questionnaire-onboarding@1) are still read, for the cases that
   name them, and refused for new use; `skuld catalogue` names them. A family superseded by another
@@ -231,7 +234,8 @@ skuld analyse ws/gemma
 | `prompts.<id>` | the current version | an earlier version of a prompt (`skuld/templates.py`; kept as `skuld/prompts/versions/<id>-<version>.md`), so that samples asked with it are found again |
 | `purpose_map` | none | invented purpose nodes mapped to the vocabulary's: a path (relative to the repository), or `{path, sha256}`, refused if the file's digest differs |
 | `experiments.budget_seconds` | 0 | device time for experiments; 0 is off |
-| `experiments.repeats`, `.run_seconds` | 3, 240 | runs per condition and a run's expected length, for the budget (`skuld run --repeat` sets the runs made) |
+| `experiments.repeats`, `.run_seconds` | 3, 360 | runs per condition and a run's expected length, for the budget (`skuld run --repeat` sets the runs made); 360 s since 0.11.3, from the goal runs of 21 Nov (5–6 min), 240 s before |
+| `experiments.control_run_seconds` | 900 (`goal_max_duration_s`) | a control run's length for the budget: a control that does not reach its goal runs to its cap; counted with every baseline |
 | `experiments.goal_max_duration_s` | 900 | a goal-directed run's duration cap (`loki crawl --max-duration`): Loki's three attempts at the goal at a 27–31B model's pace; Loki adds its logout after the cap |
 | `calibration.per_stratum`, `.seed` | 10, 1 | units drawn per stratum; the draw's seed |
 | `judge.attempts.<question>` | 2 | how often a question is asked, the refusal given back; the last answer, refused or not, is read as far as it holds (no sample only where every attempt was cut off) |
@@ -318,7 +322,7 @@ compatible_versions:
 Beside the workspaces: `corpus/` (passages of documentation and, in `corpus/norms/`, the norms; each passage tagged with
 what it is `about` and verified against its source by a person, `verified: {by, date}`), `corpora/<digest>/` (earlier
 corpora that workspaces still name), `profiles/`, `purpose-maps/`, `catalogue/families/<id>@<version>.yaml` (the
-generator's feature families; local until deployed), and a calibration sample's folder
+generator's feature families, committed, with their reviews in `catalogue/reviews/`), and a calibration sample's folder
 (`pilots/<pilot>/calibration/<id>/`; the fixtures' in `calibration/`, ignored by Git). The blind review tool is
 [`tools/calibration-review/`](tools/calibration-review/README.md); it also serves the review of aggregated concerns
 (`skuld review`).
