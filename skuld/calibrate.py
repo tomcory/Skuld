@@ -36,6 +36,7 @@ from pathlib import Path
 import skuld
 from skuld import assessment, config, inputs, judge
 from skuld.assess import REPORT
+from skuld.expectation import retrieved_for
 from skuld.parties import load_registry
 
 VERSION = "1"
@@ -190,7 +191,9 @@ def units(root: Path, report: dict, registry=None) -> list[dict]:
 
 def stage_one(root: Path) -> dict[str, dict]:
     """Per practice, what the expectation stage read with it: the screens and corpus passages of every stage-1 context
-    that held the practice, each once, in the order first read."""
+    that held the practice, each once, in the order first read. A passage labelled with the practices it was retrieved
+    for (prompt version 8 or later) is shown only with those, without its label; an unlabelled passage of an earlier
+    context, which names no practice, with every practice of its batch, as before."""
     out: dict[str, dict] = {}
     for path in sorted(root.glob("expectation/*/s*/context.json")):
         parts = json.loads(path.read_text(encoding="utf-8"))["parts"]
@@ -198,9 +201,14 @@ def stage_one(root: Path) -> dict[str, dict]:
         for practice in (p["id"] for p in parts if p["kind"] == "practice"):
             entry = out.setdefault(practice, {"screens": [], "passages": []})
             for part in shown:
+                text = part["text"]
+                if part["kind"] == "passage":
+                    named, text = retrieved_for(text)
+                    if named is not None and practice not in named:
+                        continue
                 texts = entry["screens" if part["kind"] == "screen" else "passages"]
-                if part["text"] not in texts:
-                    texts.append(part["text"])
+                if text not in texts:
+                    texts.append(text)
     return out
 
 

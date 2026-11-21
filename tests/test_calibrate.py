@@ -234,3 +234,47 @@ def test_kappa():
     f, h = "fails", "holds"
     assert calibrate.kappa([(f, f), (h, h), (f, h), (h, h)]) == pytest.approx(0.5)
     assert calibrate.kappa([(f, f), (f, f)]) is None and calibrate.kappa([]) is None
+
+
+def test_stage_one_shows_a_labelled_passage_only_with_the_practices_it_was_retrieved_for(tmp_path):
+    # Skuld 0.11.4: a stage-1 passage names the practices it was retrieved for; the expert's view follows the label
+    from skuld.calibrate import stage_one
+
+    def context(name, parts):
+        folder = tmp_path / "expectation" / name / "s1"
+        folder.mkdir(parents=True)
+        (folder / "context.json").write_text(json.dumps({"parts": parts}), encoding="utf-8")
+
+    context(
+        "b1",
+        [
+            {"id": "P-a", "kind": "practice", "text": "a"},
+            {"id": "P-b", "kind": "practice", "text": "b"},
+            {"id": "S1", "kind": "screen", "text": "a screen"},
+            {"id": "D1", "kind": "passage", "text": "(retrieved for P-a) Title (source): about a"},
+            {"id": "D2", "kind": "passage", "text": "(retrieved for P-a, P-b) Title (source): about both"},
+        ],
+    )
+    context(
+        "b0",
+        [  # an earlier, unlabelled context: its passage stays with every practice of the batch
+            {"id": "P-c", "kind": "practice", "text": "c"},
+            {"id": "P-d", "kind": "practice", "text": "d"},
+            {"id": "D1", "kind": "passage", "text": "Title (source): unlabelled"},
+        ],
+    )
+    read = stage_one(tmp_path)
+    assert read["P-a"]["passages"] == ["Title (source): about a", "Title (source): about both"]
+    assert read["P-b"]["passages"] == ["Title (source): about both"]
+    assert read["P-a"]["screens"] == read["P-b"]["screens"] == ["a screen"]
+    assert read["P-c"]["passages"] == read["P-d"]["passages"] == ["Title (source): unlabelled"]
+
+
+def test_the_passage_label_reads_back_as_it_is_written():
+    from skuld.expectation import retrieved_for, retrieved_label
+
+    assert retrieved_for(retrieved_label(["P-a", "P-b"], "Title (source): text")) == (
+        ["P-a", "P-b"],
+        "Title (source): text",
+    )
+    assert retrieved_for("Title (source): text") == (None, "Title (source): text")

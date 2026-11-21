@@ -169,6 +169,23 @@ def keyed(prompt_version: str) -> bool:
     return str(prompt_version).isdigit() and int(prompt_version) >= KEYED_SINCE
 
 
+#: The label before a passage of a labelled stage-1 context; `retrieved_for` reads it back (calibrate.stage_one)
+RETRIEVED_FOR = re.compile(r"^\(retrieved for ([^)]*)\) ")
+
+
+def retrieved_label(practices: list[str], text: str) -> str:
+    """A passage's text with the practices it was retrieved for named before it."""
+    return f"(retrieved for {', '.join(practices)}) {text}"
+
+
+def retrieved_for(text: str) -> tuple[list[str] | None, str]:
+    """The practices a labelled passage names and its text without the label; (None, text) for an unlabelled one."""
+    found = RETRIEVED_FOR.match(text)
+    if not found:
+        return None, text
+    return [x.strip() for x in found.group(1).split(",")], text[found.end() :]
+
+
 def labeled(prompt_version: str) -> bool:
     """Whether a stage-1 context for a prompt version names, at each passage, the practices it was retrieved for."""
     return str(prompt_version).isdigit() and int(prompt_version) >= LABELED_SINCE
@@ -409,7 +426,7 @@ def assemble(
     for n, (p, retrieved_for) in enumerate(passages.values(), 1):
         text = f"{p.title} ({p.source}): {p.text}"
         if labeled(version):
-            text = f"(retrieved for {', '.join(retrieved_for)}) {text}"
+            text = retrieved_label(retrieved_for, text)
         parts.append(_part(f"D{n}", "passage", text, ("corpus", p.path.name)))
     context = Context(tuple(parts))
     check(context, notices)
