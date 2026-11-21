@@ -1,6 +1,8 @@
 family: document-import-to-pdf@2
 sha256: 7443f5c91f967b7b6cf0fef6da97451db0358a886cd14c8b78db3c80be55c9ff
-by: Claude (claude-opus-5-5), pending the author's once-over
+by: Thomas Cory
 time: '2026-11-21T13:04:05+00:00'
-note: reviewed 21 Nov 2026 against reviews/notes-2026-11-21.md (findings and the changes answering them); remarks left there
-  for the author's once-over
+note: 'once-over of 21 Nov 2026 on Claude''s review (reviews/notes-2026-11-21.md; recorded 2026-11-21T13:04:05+00:00 as "Claude
+  (claude-opus-5-5), pending the author''s once-over"), its remarks settled and the live check of 21 Nov. Claude''s note:
+  reviewed 21 Nov 2026 against reviews/notes-2026-11-21.md (findings and the changes answering them); remarks left there for
+  the author''s once-over'

@@ -1,6 +1,8 @@
 family: location-search-forecast@3
 sha256: 5384eca5de6a43f631b2c8521b562571de1736d3725f58f35273cecd31ed07cb
-by: Claude (claude-opus-5-5), pending the author's once-over
+by: Thomas Cory
 time: '2026-11-21T13:04:06+00:00'
-note: reviewed 21 Nov 2026 against reviews/notes-2026-11-21.md (findings and the changes answering them); remarks left there
-  for the author's once-over
+note: 'once-over of 21 Nov 2026 on Claude''s review (reviews/notes-2026-11-21.md; recorded 2026-11-21T13:04:06+00:00 as "Claude
+  (claude-opus-5-5), pending the author''s once-over"), its remarks settled and the live check of 21 Nov. Claude''s note:
+  reviewed 21 Nov 2026 against reviews/notes-2026-11-21.md (findings and the changes answering them); remarks left there for
+  the author''s once-over'

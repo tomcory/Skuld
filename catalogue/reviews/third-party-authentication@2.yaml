@@ -1,6 +1,8 @@
 family: third-party-authentication@2
 sha256: a17d4956c2ea5120fe6a2b3e042d58520b1e3474e81ec680398aef8b3e28bc45
-by: Claude (claude-opus-5-5), pending the author's once-over
+by: Thomas Cory
 time: '2026-11-21T13:04:08+00:00'
-note: reviewed 21 Nov 2026 against reviews/notes-2026-11-21.md (findings and the changes answering them); remarks left there
-  for the author's once-over
+note: 'once-over of 21 Nov 2026 on Claude''s review (reviews/notes-2026-11-21.md; recorded 2026-11-21T13:04:08+00:00 as "Claude
+  (claude-opus-5-5), pending the author''s once-over"), its remarks settled and the live check of 21 Nov. Claude''s note:
+  reviewed 21 Nov 2026 against reviews/notes-2026-11-21.md (findings and the changes answering them); remarks left there for
+  the author''s once-over'

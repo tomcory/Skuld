@@ -1,6 +1,8 @@
 family: ai-document-summarization@2
 sha256: 5ddad434580dcbd99ce22c2f89e732b0e2974c319ddc7aefcf648730248b17b0
-by: Claude (claude-opus-5-5), pending the author's once-over
+by: Thomas Cory
 time: '2026-11-21T13:04:05+00:00'
-note: reviewed 21 Nov 2026 against reviews/notes-2026-11-21.md (findings and the changes answering them); remarks left there
-  for the author's once-over
+note: 'once-over of 21 Nov 2026 on Claude''s review (reviews/notes-2026-11-21.md; recorded 2026-11-21T13:04:05+00:00 as "Claude
+  (claude-opus-5-5), pending the author''s once-over"), its remarks settled and the live check of 21 Nov. Claude''s note:
+  reviewed 21 Nov 2026 against reviews/notes-2026-11-21.md (findings and the changes answering them); remarks left there for
+  the author''s once-over'

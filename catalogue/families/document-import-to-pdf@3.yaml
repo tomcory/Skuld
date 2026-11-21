@@ -1,0 +1,55 @@
+id: document-import-to-pdf
+version: 3
+name: import image to PDF
+entry: the app's main scanning or home screen
+path: select an image from the device gallery and save it as a PDF document
+outcome: the imported image is converted and displayed as a PDF file in the app's library
+purposes:
+- id: P1
+  action: convert
+  object: an image from the device's gallery to a PDF document
+  beneficiary: user
+  context: digitization
+  outcome: PDF file
+  node: RequestedServiceProvision
+  fit: broader
+  specificity: sufficient
+  role: functional
+  requirements:
+  - id: R1
+    statement: access the device's image gallery
+  - id: R2
+    statement: convert image data to PDF format
+  oracle:
+    reach:
+    - R1
+    - R2
+    success:
+    - screen_reached:
+        exact_key: '{library_screen}'
+        after_action: '{path_start}'
+        until_action: '{path_end}'
+    - text_shown:
+        any: '{document_name}'
+        after_action: '{path_end}'
+        until_action: '{path_end}'
+    invalid:
+    - hold_above_ms: 1000
+    measurements: []
+    slots:
+      library_screen:
+        kind: screen
+        description: the screen showing the list of saved PDF documents
+      document_name:
+        kind: text
+        description: the name of the imported document as the list of saved PDF documents shows it at the end of the path
+author:
+  kind: model
+  name: claude-opus-5-5
+  prompt: 'written in the assessor''s session, at the author''s direction (21 Nov 2026, the catalogue''s once-over): version
+    2 with a second condition: the imported document''s name is shown on the library screen at the end of the path. The library
+    screen can be reached without any import, so the screen alone did not show that the conversion happened'
+created: '2026-11-21'
+derived_from:
+  family: document-import-to-pdf
+  version: 2

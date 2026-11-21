@@ -1,0 +1,6 @@
+family: document-import-to-pdf@3
+sha256: 34c65419f0660986357b63c8d6858f8accb2960f90490d47742bc2e4d4fa83c3
+by: Thomas Cory
+time: '2026-11-21T16:11:14+00:00'
+note: 'once-over of 21 Nov 2026: version 2 with the imported document''s name shown at the end of the path, decided in the
+  once-over (the library screen alone could be reached without an import)'

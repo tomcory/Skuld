@@ -1,6 +1,8 @@
 family: ai-document-chat@3
 sha256: a5c77a69d15731ce6035cac9afd893640f5dd7e4728f0e71d5b9e2a1a18b7b2d
-by: Claude (claude-opus-5-5), pending the author's once-over
+by: Thomas Cory
 time: '2026-11-21T13:04:04+00:00'
-note: reviewed 21 Nov 2026 against reviews/notes-2026-11-21.md (findings and the changes answering them); remarks left there
-  for the author's once-over
+note: 'once-over of 21 Nov 2026 on Claude''s review (reviews/notes-2026-11-21.md; recorded 2026-11-21T13:04:04+00:00 as "Claude
+  (claude-opus-5-5), pending the author''s once-over"), its remarks settled and the live check of 21 Nov. Claude''s note:
+  reviewed 21 Nov 2026 against reviews/notes-2026-11-21.md (findings and the changes answering them); remarks left there for
+  the author''s once-over'

@@ -1,6 +1,8 @@
 family: launch@5
 sha256: b025fa5347b307c0175d887b205af5aaf9e78b82ab1d1815915bfa52370bee77
-by: Claude (claude-opus-5-5), pending the author's once-over
+by: Thomas Cory
 time: '2026-11-21T13:59:45+00:00'
-note: 'reviewed 21 Nov 2026: launch@4 without the category table and R3, after the live check (a weather app''s cold start
-  shows its welcome screen)'
+note: 'once-over of 21 Nov 2026 on Claude''s review (reviews/notes-2026-11-21.md; recorded 2026-11-21T13:59:45+00:00 as "Claude
+  (claude-opus-5-5), pending the author''s once-over"), its remarks settled and the live check of 21 Nov. Claude''s note:
+  reviewed 21 Nov 2026: launch@4 without the category table and R3, after the live check (a weather app''s cold start shows
+  its welcome screen)'
