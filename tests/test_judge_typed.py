@@ -183,9 +183,16 @@ def test_a_give_from_own_knowledge_is_a_fact_the_corpus_lacks():
 
 
 def test_gates_b_and_c_read_a_fact_by_its_passage():
-    about_other = passage(nodes=[ANDROID])
-    [c] = read(entry(), found=about_other)
+    # a passage about another datum documents nothing of the component, nor does a fact of it about no replacement
+    about_other = passage(nodes=[ANDROID], facts=[Fact(ANDROID, "scope", "app", "shared by the apps")])
+    [c] = read(entry(gives=[{**GIVES[0], "cites": ["F1"]}]), found=about_other)
     assert c["status"] == "not_established" and c["reason"] == judge.GATES["gate_b"]
+    [c] = read(entry(gives=[{**GIVES[0], "cites": ["D1"]}]), found=passage(nodes=[ANDROID]))
+    assert c["reason"] == judge.GATES["gate_b"]
+    # a fact about a candidate replacement of the component's datum (the App Set ID for the advertising ID) is about
+    # the component, whatever its passage is tagged with: it documents the component's alternative
+    [c] = read(entry(), found=passage(nodes=[ANDROID]))
+    assert c["status"] == "supported" and c["gives"][0]["grounded"]
     [c] = read(entry(), found=passage(verified=False))
     assert c["reason"] == judge.GATES["gate_c"]
     # an unchecked passage's facts decide nothing by rule either
@@ -293,3 +300,37 @@ def _json(x) -> str:
     import json
 
     return json.dumps(x)
+
+
+def test_a_fact_reads_by_its_kind_persists_until_the_event_that_ends_it():
+    data = judge.vocabulary(judge.DATA)
+    assert judge.fact_text(FACTS[1], data).endswith(": persists until reinstall")
+    assert judge.fact_text(FACTS[0], data).endswith(": scope developer")
+    assert judge.fact_text(Fact("location.approximate-location", "precision_m", 3000, "q"), data).endswith(
+        ": precision 3000 m"
+    )
+    prompt = (Path(judge.__file__).parent / "prompts" / "minimisation.md").read_text(encoding="utf-8")
+    assert '"persists until reset"' in prompt
+
+
+def test_the_context_gives_the_facts_of_the_candidate_replacements_of_a_datum():
+    data = judge.vocabulary(judge.DATA)
+    assert {SETID, IDS + "installation-id"} <= judge.replacements(ADID, data)
+    assert ADID not in judge.replacements(ADID, data) and data.root not in judge.replacements(ADID, data)
+    assert SETID not in judge.replacements(IDS + "installation-id", data)
+    setid = passage(nodes=[SETID])
+    unchecked = Passage(**{**setid.__dict__, "id": "u", "path": Path("passages") / "u.yaml", "verified": None})
+    other = Passage(
+        **{
+            **setid.__dict__,
+            "id": "o",
+            "path": Path("passages") / "o.yaml",
+            "facts": (Fact(ANDROID, "scope", "app", "q"),),
+        }
+    )
+    corpus = Corpus((setid, unchecked, other), "0" * 64)
+    parts = judge.replacement_facts(corpus, [], [ADID], data, 2)
+    assert [p["id"] for p in parts] == ["F3", "F4"]  # numbered on, of the checked passage, about the replacement only
+    assert parts[0]["provenance"] == [{"origin": "corpus", "record": FILE, "fact": 0}]
+    assert "persists until reinstall" in parts[1]["text"] and "as t (https://example.org) states it" in parts[1]["text"]
+    assert judge.replacement_facts(corpus, [setid], [ADID], data, 0) == []  # given after its passage already, once

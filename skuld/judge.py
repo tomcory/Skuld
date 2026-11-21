@@ -43,7 +43,12 @@ be read from the application.
 
 From minimisation prompt version 5 (TYPED_SINCE, P10 (b)) the question asks for typed arguments, and the context gives
 each fact of a documentation passage (corpus.py, `facts`) as a part F<n> right after its passage, with the passage file
-as its provenance. Each alternative states:
+as its provenance, worded by its kind ("scope developer", "persists until reinstall": the value is the event that ends
+the identifier, "precision 50 m"; `fact_text`). For a data component it also gives, as further F parts after the
+documentation, the facts of the corpus's checked passages about each candidate replacement of the datum (`replacements`:
+every node configuration.coarser admits, other than the datum and the root), each once, with its own passage as
+provenance, so that an alternative can ground what a replacement gives although no passage retrieved for the component
+states it (an Android ID's context shows the App Set ID's and the installation ID's facts). Each alternative states:
 
     change       {kind: REMOVE | REPLACE | ON_DEVICE | NARROWER_RECIPIENT, node?}, node a data node for REPLACE
     alternative  free text, for the reader
@@ -59,7 +64,9 @@ and reading 5 reads an entry that carries `change` by the typed rule (`typed`), 
     needs        grounded where each cites screens or purposes only; a cite of the practice or of a declaration is
                  dropped (that the application does something is never a reason it needs to), own knowledge grounds none
     gives        grounded where each cites documentation or facts, a passage among them about the component and
-                 checked (gates b, c); one that cites neither is a fact the fact base lacks (gap reason fact_missing,
+                 checked (gates b, c); a fact about a candidate replacement of the component's datum counts as about
+                 the component for gate (b), since it documents the component's alternative, and its passage is the
+                 one gate (c) reads; one that cites neither is a fact the fact base lacks (gap reason fact_missing,
                  next step extend_corpus, keyed by the node and the property)
     covers       by rule where the change is a REPLACE, every need has a kind and a value, and the corpus's checked
                  facts give the replacement node a property of each kind (scope: the alternative's reaches the need's;
@@ -615,15 +622,54 @@ def readable_facts(p, data: Vocabulary | None) -> list[tuple[int, object]]:
     return [(k, f) for k, f in enumerate(p.facts) if k not in wrong]
 
 
-def _facts(p, data: Vocabulary, before: int, folder: str = "") -> list[dict]:
+def fact_text(f, data: Vocabulary) -> str:
+    """A fact in words, by its kind: "scope developer", "persists until reinstall" (the value is the event that ends
+    the identifier, not one it survives), "precision 50 m"."""
+    title = data[f.about].title if f.about in data else f.about
+    said = {
+        "scope": f"scope {f.value}",
+        "persists": f"persists until {f.value}",
+        "precision_m": f"precision {f.value} m",
+    }
+    return f"{title} ({f.about}): {said.get(f.kind, f'{f.kind} {f.value}')}"
+
+
+def _facts(p, data: Vocabulary, before: int, folder: str = "", where: str = "the passage before") -> list[dict]:
     """A passage's readable facts as parts F<n>, numbered on from `before`: what the passage states of a datum, its
     kind, value and quote. Their provenance is the passage's file, with the fact's position (`fact`)."""
+    return _fact_parts(p, readable_facts(p, data), data, before, folder, where)
+
+
+def _fact_parts(p, facts, data: Vocabulary, before: int, folder: str = "", where: str = "the passage before") -> list:
     out = []
-    for k, f in readable_facts(p, data):
-        title = data[f.about].title if f.about in data else f.about
-        text = f'{title} ({f.about}): {f.kind} {f.value}, as the passage before states it: "{f.quote}"'
+    for k, f in facts:
+        text = f'{fact_text(f, data)}, as {where} states it: "{f.quote}"'
         pointer = {"origin": "corpus", "record": f"{folder}{p.path.name}", "fact": k}
         out.append({"id": f"F{before + len(out) + 1}", "kind": "passage", "text": text, "provenance": [pointer]})
+    return out
+
+
+def replacements(value: str | None, data: Vocabulary) -> set[str]:
+    """The candidate replacements of a datum: every node configuration.coarser admits for it, other than the datum
+    and the vocabulary's root (an advertising ID's: the App Set ID and the installation ID, and the nodes above it)."""
+    from skuld.configuration import coarser
+
+    if not value or value not in data:
+        return set()
+    return {n.id for n in data if n.id not in (value, data.root) and coarser(n.id, value, data)}
+
+
+def replacement_facts(corpus: Corpus, documentation: list, values: list[str], data: Vocabulary, before: int) -> list:
+    """The facts of the corpus's checked passages about the candidate replacements of the data `values`, as parts
+    F<n> numbered on from `before`, each once and none a passage of `documentation` gives already after it; each
+    with its own passage as provenance (gates b and c read it by that passage)."""
+    nodes = set().union(*(replacements(v, data) for v in values)) if values else set()
+    out = []
+    for p in corpus.passages:
+        if p in documentation or not p.checked:
+            continue
+        mine = [(k, f) for k, f in readable_facts(p, data) if f.about in nodes]
+        out += _fact_parts(p, mine, data, before + len(out), where=f"{p.title} ({p.source})")
     return out
 
 
@@ -715,6 +761,10 @@ def questions(
                     documentation.append(passage)
         typed = int(templates.version(MINIMISATION)) >= TYPED_SINCE
         parts += _passages(documentation, "D", data=data if typed else None)
+        if typed:
+            values = [v for kind, v in expectation.components(p).values() if kind == "D"]
+            shown_facts = sum(1 for x in parts if x["id"].startswith("F"))
+            parts += replacement_facts(corpus, documentation, values, data, shown_facts)
         parts += _passages(norms.on(REQUIREMENT[MINIMISATION]), "N", "norms/")
         out.append(
             Question(
@@ -1512,17 +1562,28 @@ def typed(
 
 
 def gate(citations: set[str], context: Context, kind: str, value, categories, corpus: Corpus | None, data, types):
-    """Gates (b) and (c) for a documented alternative of a component: None if passed, else the gate that failed."""
+    """Gates (b) and (c) for a documented alternative of a component: None if passed, else the gate that failed. A
+    fact (an F part) about a candidate replacement of the component's datum (`replacements`) is about the component:
+    it documents the component's alternative."""
     files = {
         p["id"]: Path(p["provenance"][0]["record"]).name
         for p in context.parts
         if p["kind"] == "passage" and not p["provenance"][0]["record"].startswith("norms/")
     }
+    fact_at = {p["id"]: p["provenance"][0]["fact"] for p in context.parts if "fact" in p["provenance"][0]}
     by_file = {p.path.name: p for p in corpus.passages} if corpus is not None else {}
+    candidates = replacements(value, data) if kind == "D" and data is not None else set()
+
+    def replaced(c: str, passage) -> bool:
+        k = fact_at.get(c)
+        return k is not None and k < len(passage.facts) and passage.facts[k].about in candidates
+
     about = [
         by_file[files[c]]
         for c in citations
-        if c in files and files[c] in by_file and by_file[files[c]].concerns(kind, value, categories, data, types)
+        if c in files
+        and files[c] in by_file
+        and (by_file[files[c]].concerns(kind, value, categories, data, types) or replaced(c, by_file[files[c]]))
     ]
     if not about:
         return "gate_b"

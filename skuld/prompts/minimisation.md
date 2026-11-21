@@ -4,7 +4,8 @@ components (the practice's id followed by ".data", and for a transmission ".reci
 start with H) are those the practice was found to serve, inferred from the observation, not declared; the screens
 (ids starting with S) are texts the application showed in the episodes where the practice occurred; the passages are
 documentation (ids starting with D) and norms (ids starting with N); the facts (ids starting with F) each state one
-property of a datum, quoted from the documentation passage they follow.
+property of a datum, quoted from the documentation passage they follow or from the passage they name; those after the
+documentation are of the data that could replace the practice's datum.
 
 For each purpose and component, state the less invasive alternatives that would still achieve the purpose. For each,
 give:
@@ -37,9 +38,10 @@ A need and a property may each have a "kind" and a "value", by which they can be
   purpose needs; for a property, the identifier's scope.
 - persists: the event that ends an identifier's value, one of session (the app's session ends), reinstall (the app is
   uninstalled or its data cleared), reset (the user resets it in the system's settings) and factory-reset (only the
-  device's factory reset). Each survives the ones before it: session, reinstall, reset, factory-reset. For a need, the
-  earliest event the purpose can let the value end at (a purpose that must recognise a device across reinstalls needs
-  reset, since reinstall would end it); for a property, the event that ends it.
+  device's factory reset). Each survives the ones before it: session, reinstall, reset, factory-reset. A fact that
+  reads "persists until reset" states that the value lasts until the user resets it, so it survives a reinstall. For a
+  need, the earliest event the purpose can let the value end at (a purpose that must recognise a device across
+  reinstalls needs reset, since reinstall would end it); for a property, the event that ends it.
 - precision_m: a location's precision in metres, a number: how far from the user it may place them. For a need, the
   coarsest precision the purpose can work with; for a property, the location's precision.
 - none: the need or property is of none of these kinds.

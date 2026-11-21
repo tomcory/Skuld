@@ -598,7 +598,7 @@ def test_typed_alternatives_from_facts_end_to_end(tmp_path, capsys):
     passages = [p for p in q.context.parts if p["kind"] == "passage"]
     assert [p["id"] for p in passages][:2] == ["D1", "F1"] and "F2" not in q.context.ids
     assert passages[1]["provenance"] == [{"origin": "corpus", "record": "a.yaml", "fact": 0}]
-    assert 'persists reset, as the passage before states it: "the  advertising ID"' in judge.render(q.context)
+    assert 'persists until reset, as the passage before states it: "the  advertising ID"' in judge.render(q.context)
     assert judge.refusals(q, json.dumps({"alternatives": []}), []) == []
 
     judge.judge(a, built, found, norms, hypotheses, FACTORS, seeds=[1, 2], provider=TypedJudge())
