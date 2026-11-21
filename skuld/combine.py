@@ -50,11 +50,27 @@ DECISIVE = ("supported", "refuted")
 #: which names the substitutes (21 Nov 2026); 6: a combined purpose says where it is achieved only where its members
 #: agree (21 Nov 2026); 7: alternatives are combined per change as well (`change_key`, from the reasoning tier's reading
 #: 5), so that gate (d) counts the samples that propose the same change (P10 fix 2, 21 Nov 2026); claims of an earlier
-#: reading name no change and are combined per component as before
+#: reading name no change and are combined per component as before; an Alternative claim of the typed form (P10 (b))
+#: carries its change, needs, gives and covers, its needs named after the combined claim
 VERSION = "7"
 COMPONENT = {"role": "method", "id": "skuld.combine", "version": VERSION}
-#: What a combined claim carries over from the claim that decides it
-CARRIED = ("stage", "tier", "case", "scope", "component", "relationship", "alternative", "change_key", "level")
+#: What a combined claim carries over from the claim that decides it; an Alternative claim of the typed minimisation
+#: form (judge.typed) its change, needs, gives and covers too, its needs renamed after the combined claim (<id>:N<k>)
+CARRIED = (
+    "stage",
+    "tier",
+    "case",
+    "scope",
+    "component",
+    "relationship",
+    "alternative",
+    "change_key",
+    "change",
+    "needs",
+    "gives",
+    "covers",
+    "level",
+)
 
 
 def decide(members: list[dict]) -> tuple[str, dict | None]:
@@ -237,6 +253,8 @@ def alternatives(claims: list[dict], number: Numbers, asked: dict[str, set[str]]
             }
             if samples and 2 * len(supporting & samples) <= len(samples):
                 claim = _without_majority(claim, members, len(supporting & samples), len(samples))
+        if "needs" in claim:  # stable ids of the combined claim's needs, which a case's requirement may name (P10)
+            claim["needs"] = [{**x, "id": f"{claim['id']}:N{k}"} for k, x in enumerate(claim["needs"], 1)]
         out.append(claim)
     return out
 

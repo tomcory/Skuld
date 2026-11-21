@@ -604,6 +604,8 @@ def _reasoning_tier(
         cited = c.pop("parts", [])
         if c["status"] == "supported":
             c["supporting"] = items(c["channels"][0].removeprefix("reasoning:"), cited)
+        elif c["status"] == "refuted":  # a typed alternative that does not cover what the purpose needs (judge.typed)
+            c["challenging"] = items(c["channels"][0].removeprefix("reasoning:"), cited)
     said = judge.statements(a, built) if a.declaration else []
     # from reading 2, a declared purpose judged not specific specifies nothing (E 0.9, def:concern)
     # from reading 4, only where purpose_specific applies (concerns.not_specific states no concern otherwise)
@@ -756,8 +758,13 @@ def _gaps(
         gaps.check(g, frame, by_id)
         out.append(g)
 
+    facts: dict[str, dict] = {}  # fact_missing gaps by the fact they name, each bearing on every claim that lacks it
+
     def of_claim(c: dict, requirements: list[str], reason: str | None = None) -> None:
         reason = reason or c["sufficiency"].get("reason") or "not_admitted"
+        if reason == "fact_missing":
+            of_missing_facts(c, requirements)
+            return
         what = c.get("relationship") or c.get("alternative") or c["purpose"].get("node")
         said = f"{c['type']} of {c['subject']}" + (f" ({c['component']})" if c.get("component") else "") + f": {what}"
         gap(
@@ -774,6 +781,32 @@ def _gaps(
             ),
             of=c["id"],
         )
+
+    def of_missing_facts(c: dict, requirements: list[str]) -> None:
+        """A typed Alternative claim whose gives rest on no documentation (judge.typed): one gap per fact the fact base
+        lacks (`fact: <property> of <node>`), keyed by the node and the property, bearing on every claim that lacks it."""
+        said = f"{c['type']} of {c['subject']} ({c.get('component')}): {c.get('alternative')}"
+        for missing in c["sufficiency"].get("missing", []):
+            if not missing.startswith("fact: "):
+                continue
+            prop, _, node = missing.removeprefix("fact: ").rpartition(" of ")
+            bear = gaps.bearing(f"claim:{c['id']}", said)
+            if missing in facts:
+                if bear not in facts[missing]["bears_on"]:
+                    facts[missing]["bears_on"].append(bear)
+                continue
+            what = f"the {prop} of {node}"
+            gap(
+                c["subject"],
+                "fact_missing",
+                f"{what}, which an alternative gives",
+                f"a fact in a corpus passage: {what} (facts: about {node})",
+                [bear, *(requirement(r) for r in requirements)],
+                gaps.reason_step("fact_missing", what),
+                of=c["id"],
+                fact={"node": node, "property": prop},
+            )
+            facts[missing] = out[-1]
 
     for c in stated:
         for cid in c.condition:
@@ -809,6 +842,10 @@ def _gaps(
                 gaps.reason_step("not_admitted", said, requirement=c.requirement),
                 of=c.id,
             )
+    for c in claims:  # every fact the fact base lacks is counted, also where the concern stands on another premise
+        if c["type"] == "alternative" and c["sufficiency"].get("reason") == "fact_missing" and c["id"] not in seen:
+            seen.add(c["id"])
+            of_missing_facts(c, ["data_minimised"])
     for x in tested:
         if x["status"] not in combine.DECISIVE and x["id"] not in seen:
             seen.add(x["id"])

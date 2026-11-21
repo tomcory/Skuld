@@ -40,6 +40,37 @@ concerns:
 From minimisation prompt version 4 (SCREENS_SINCE) a minimisation context also holds the screens of the episodes the
 practice occurred in, as stage 1's batches give them, notices left out (`screens_of`), so that what a purpose needs may
 be read from the application.
+
+From minimisation prompt version 5 (TYPED_SINCE, P10 (b)) the question asks for typed arguments, and the context gives
+each fact of a documentation passage (corpus.py, `facts`) as a part F<n> right after its passage, with the passage file
+as its provenance. Each alternative states:
+
+    change       {kind: REMOVE | REPLACE | ON_DEVICE | NARROWER_RECIPIENT, node?}, node a data node for REPLACE
+    alternative  free text, for the reader
+    needs        [{id, requirement, kind?, value?, cites}]: what the purpose needs, cited to screens (S) or purposes (H)
+    gives        [{property, kind?, value?, cites}]: what the alternative gives, cited to documentation (D) or facts (F)
+    covers       {verdict: COVERS | PARTLY | DOES_NOT | UNKNOWN, steps}: whether the gives meet the needs
+
+and reading 5 reads an entry that carries `change` by the typed rule (`typed`), one without it as before:
+
+    gate (a)     from `change`: REMOVE always; REPLACE where its node is coarser than the component's datum
+                 (configuration.coarser); ON_DEVICE and NARROWER_RECIPIENT for a recipient, and for a datum only where
+                 every gives is grounded. The change key is remove, replace:<node>, on_device or narrower_recipient.
+    needs        grounded where each cites screens or purposes only; a cite of the practice or of a declaration is
+                 dropped (that the application does something is never a reason it needs to), own knowledge grounds none
+    gives        grounded where each cites documentation or facts, a passage among them about the component and
+                 checked (gates b, c); one that cites neither is a fact the fact base lacks (gap reason fact_missing,
+                 next step extend_corpus, keyed by the node and the property)
+    covers       by rule where the change is a REPLACE, every need has a kind and a value, and the corpus's checked
+                 facts give the replacement node a property of each kind (scope: the alternative's reaches the need's;
+                 persists: the alternative's lasts at least as long; precision_m: the alternative's is at most the
+                 need's): the rule's verdict overrides the model's. Otherwise by the model, with steps that cite the
+                 context; the claim's uncertainty is then raised by `covers_by_model`.
+    status       supported where gate (a) passes, needs and gives are grounded and covers is COVERS; refuted (a
+                 challenging member, no concern) where it is DOES_NOT on grounded needs and gives (and grounded steps
+                 or the rule); PARTLY is quality-dependent, which an Alternative claim has no value for: not
+                 established, "partly covers"; UNKNOWN not established. The level is technically_supported where
+                 supported, else plausible, as before.
 """
 
 import json
@@ -57,8 +88,9 @@ from skuld.assessment import Practice, Subjects
 from skuld.common import DATA, OWN, PURPOSES, RECIPIENT_TYPES, cited, ref, vocabulary
 from skuld.context import Context, ContextError
 from skuld.context import part as _part
-from skuld.corpus import Corpus
+from skuld.corpus import FACT_KINDS, ORDERS, Corpus, fact_problems, valid_value
 from skuld.inputs import Assessment
+from skuld.uncertainty import raised
 
 SPECIFICITY, COMPATIBILITY, MINIMISATION = "specificity", "compatibility", "minimisation"
 QUESTIONS = (SPECIFICITY, COMPATIBILITY, MINIMISATION)
@@ -79,7 +111,9 @@ QUESTIONS = (SPECIFICITY, COMPATIBILITY, MINIMISATION)
 #: 5 (21 Nov 2026, P10 fix 2): each Alternative claim names the change its text makes of the component (`change_key`:
 #: "remove", "replace:<node>[,<node>…]" or "other", by `recognised`), and the combination groups alternatives by it as
 #: well as by practice, purpose and component, so that gate (d) counts the samples that propose the same change
-#: (combine.alternatives).
+#: (combine.alternatives). From minimisation prompt 5 (P10 (b), 21 Nov 2026), an entry in the typed form (it carries
+#: `change`) is read by `typed`: gate (a) from the change, needs and gives grounded, covers by rule or by the model.
+#: Entries of the old form read as before, so that samples of prompts 4 and before are read alike under reading 5.
 READING = "5"
 READINGS = ("1", "2", "3", "4", "5")
 
@@ -108,6 +142,9 @@ GATES = {
     "(removing the datum or the recipient, or a datum the vocabulary states to be coarser)",
     "gate_b": "gate (b): no cited passage is about the component (its datum's node or one above it, or its recipient)",
     "gate_c": "gate (c): the cited passage about the component is not checked against its source",
+    "gate_a_typed": "gate (a): the change is not less invasive by the configuration's orders (REMOVE; REPLACE by a "
+    "data node the vocabulary states to be coarser; ON_DEVICE or NARROWER_RECIPIENT of a recipient, or of a datum only "
+    "with every property it gives documented)",
 }
 #: An alternative that names none: the prompt asks to "give none" for a component without an alternative, which the
 #: models wrote as "none", "No less invasive alternative identified." and the like (study 2026-11: gemma 2,411, qwen
@@ -145,7 +182,7 @@ REQUIREMENT = {
     MINIMISATION: "data_minimised",
 }
 #: The kinds of part a stage-2 context may hold, each with the origins its provenance may have; D's report only as a
-#: declaration
+#: declaration. A fact of the corpus (F<n>) is a part of kind passage, from its passage's file
 KINDS = {
     "application": ("input",),
     "practice": ("o_report",),
@@ -158,6 +195,9 @@ KINDS = {
 #: 2026): what a purpose needs may be read from them. Contexts for an earlier version (a profile's `prompts`) hold none,
 #: so that the samples asked with it are found again
 SCREENS_SINCE = 4
+#: The first minimisation prompt version that asks for typed arguments (`SCHEMAS`, `typed`) and whose context gives the
+#: corpus's facts as parts F<n> after their passages (P10 (b), 21 Nov 2026)
+TYPED_SINCE = 5
 #: Statements per specificity batch, characters of the sentence a statement is quoted with
 BATCH, SENTENCE = 20, 400
 ATTEMPTS = 2
@@ -176,6 +216,19 @@ JUDGED = {"COMPATIBLE": "compatible", "NOT_COMPATIBLE": "not_compatible", "UNDEC
 FROM_DOC = expectation.FROM_DOC
 
 _CITES = {"type": "array", "items": {"type": "string"}}
+#: The typed form's change kinds, as the answer names them and as a claim states them (P10 (b))
+CHANGES = {
+    "REMOVE": "remove",
+    "REPLACE": "replace",
+    "ON_DEVICE": "on_device",
+    "NARROWER_RECIPIENT": "narrower_recipient",
+}
+#: Whether an alternative's gives meet its purpose's needs, as the answer names it
+VERDICTS = ("COVERS", "PARTLY", "DOES_NOT", "UNKNOWN")
+#: The kinds of a need or of what an alternative gives: the fact kinds (corpus.FACT_KINDS), by which a rule compares
+#: them, and none
+REQUIREMENT_KINDS = (*FACT_KINDS, "none")
+_KIND = {"kind": {"enum": list(REQUIREMENT_KINDS)}, "value": {"type": ["string", "number"]}}
 _STEPS = {
     "type": "array",
     "items": {
@@ -241,19 +294,77 @@ SCHEMAS = {
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "required": ["purpose", "component", "alternative", "level", "steps"],
+                    "required": ["purpose", "component", "change", "alternative", "needs", "gives", "covers"],
                     "properties": {
                         "purpose": {"type": "string"},
                         "component": {"type": "string"},
+                        "change": {
+                            "type": "object",
+                            "required": ["kind"],
+                            "properties": {"kind": {"enum": list(CHANGES)}, "node": {"type": "string"}},
+                        },
                         "alternative": {"type": "string"},
-                        "level": {"enum": ["PLAUSIBLE", "TECHNICALLY_SUPPORTED"]},
-                        "steps": _STEPS,
+                        "needs": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "requirement", "cites"],
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "requirement": {"type": "string"},
+                                    **_KIND,
+                                    "cites": _CITES,
+                                },
+                            },
+                        },
+                        "gives": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["property", "cites"],
+                                "properties": {"property": {"type": "string"}, **_KIND, "cites": _CITES},
+                            },
+                        },
+                        "covers": {
+                            "type": "object",
+                            "required": ["verdict", "steps"],
+                            "properties": {"verdict": {"enum": list(VERDICTS)}, "steps": _STEPS},
+                        },
                     },
                 },
             }
         },
     },
 }
+#: The minimisation answer's form up to prompt version 4: free text, an evidence level and free steps
+SCHEMA_MINIMISATION_4 = {
+    "type": "object",
+    "required": ["alternatives"],
+    "properties": {
+        "alternatives": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["purpose", "component", "alternative", "level", "steps"],
+                "properties": {
+                    "purpose": {"type": "string"},
+                    "component": {"type": "string"},
+                    "alternative": {"type": "string"},
+                    "level": {"enum": ["PLAUSIBLE", "TECHNICALLY_SUPPORTED"]},
+                    "steps": _STEPS,
+                },
+            },
+        }
+    },
+}
+
+
+def schema(question: str) -> dict:
+    """The answer's form for a question in the prompt version in force: the typed minimisation form from TYPED_SINCE,
+    the earlier one before it."""
+    if question == MINIMISATION and int(templates.version(MINIMISATION)) < TYPED_SINCE:
+        return SCHEMA_MINIMISATION_4
+    return SCHEMAS[question]
 
 
 @dataclass
@@ -484,11 +595,36 @@ def _screens(screens: list[tuple]) -> list[dict]:
     ]
 
 
-def _passages(passages, prefix: str, folder: str = "") -> list[dict]:
-    return [
-        _part(f"{prefix}{n}", "passage", f"{p.title} ({p.source}): {p.text}", ("corpus", f"{folder}{p.path.name}"))
-        for n, p in enumerate(passages, 1)
-    ]
+def _passages(passages, prefix: str, folder: str = "", data: Vocabulary | None = None) -> list[dict]:
+    """The passages as parts <prefix><n>; with `data`, each followed by its facts as parts F<n> (`_facts`)."""
+    out, facts = [], 0
+    for n, p in enumerate(passages, 1):
+        out.append(
+            _part(f"{prefix}{n}", "passage", f"{p.title} ({p.source}): {p.text}", ("corpus", f"{folder}{p.path.name}"))
+        )
+        if data is not None:
+            for part in _facts(p, data, facts, folder):
+                facts += 1
+                out.append(part)
+    return out
+
+
+def readable_facts(p, data: Vocabulary | None) -> list[tuple[int, object]]:
+    """A passage's facts that corpus.problems finds nothing wrong with, with their positions (facts[k])."""
+    wrong = {int(x.split("facts[", 1)[1].split("]", 1)[0]) for x in fact_problems(p, data)}
+    return [(k, f) for k, f in enumerate(p.facts) if k not in wrong]
+
+
+def _facts(p, data: Vocabulary, before: int, folder: str = "") -> list[dict]:
+    """A passage's readable facts as parts F<n>, numbered on from `before`: what the passage states of a datum, its
+    kind, value and quote. Their provenance is the passage's file, with the fact's position (`fact`)."""
+    out = []
+    for k, f in readable_facts(p, data):
+        title = data[f.about].title if f.about in data else f.about
+        text = f'{title} ({f.about}): {f.kind} {f.value}, as the passage before states it: "{f.quote}"'
+        pointer = {"origin": "corpus", "record": f"{folder}{p.path.name}", "fact": k}
+        out.append({"id": f"F{before + len(out) + 1}", "kind": "passage", "text": text, "provenance": [pointer]})
+    return out
 
 
 def questions(
@@ -577,7 +713,9 @@ def questions(
             for passage in corpus.about(value, None, data) if kind == "D" else corpus.about(None, value, data):
                 if passage not in documentation:
                     documentation.append(passage)
-        parts += _passages(documentation, "D") + _passages(norms.on(REQUIREMENT[MINIMISATION]), "N", "norms/")
+        typed = int(templates.version(MINIMISATION)) >= TYPED_SINCE
+        parts += _passages(documentation, "D", data=data if typed else None)
+        parts += _passages(norms.on(REQUIREMENT[MINIMISATION]), "N", "norms/")
         out.append(
             Question(
                 MINIMISATION,
@@ -640,12 +778,19 @@ def _objects(value) -> list[dict]:
 
 
 def _cites(item: dict) -> list[str]:
-    return list(item.get("cites") or ()) + [c for s in _objects(item.get("steps")) for c in s.get("cites") or ()]
+    """The cites of an answer's item: its own and its steps', and in the typed minimisation form its needs', gives'
+    and covers' steps'."""
+    out = list(item.get("cites") or ()) + [c for s in _objects(item.get("steps")) for c in s.get("cites") or ()]
+    for key in ("needs", "gives"):
+        out += [c for x in _objects(item.get(key)) for c in x.get("cites") or ()]
+    covers = item.get("covers") if isinstance(item.get("covers"), dict) else {}
+    return out + [c for s in _objects(covers.get("steps")) for c in s.get("cites") or ()]
 
 
 def refusals(question: Question, text: str | None, factors: list[str]) -> list[str]:
     """What refuses an answer: not JSON, a statement or specified purpose not answered, an unknown purpose, component
-    or factor, a citation of an id the context does not hold."""
+    or factor, a citation of an id the context does not hold; in the typed minimisation form (an entry with `change`)
+    an unknown change kind, or a REPLACE without a node of the data vocabulary."""
     try:
         answer = json.loads(text or "")
     except ValueError:
@@ -680,7 +825,21 @@ def refusals(question: Question, text: str | None, factors: list[str]) -> list[s
                 out.append(
                     f"alternatives: {ref(i.get('component')) or '(none)'} is not a component of {question.record['practice']}"
                 )
+            if "change" in i:
+                out += _change_refusals(i.get("change"))
     return sorted(set(out))
+
+
+def _change_refusals(change) -> list[str]:
+    """What refuses a typed entry's change: no change kind of CHANGES, a REPLACE without a node of the data vocabulary."""
+    if not isinstance(change, dict) or str(change.get("kind") or "").upper() not in CHANGES:
+        kind = change.get("kind") if isinstance(change, dict) else change
+        return [f"alternatives: {kind!r} is not a change ({', '.join(CHANGES)})"]
+    if str(change["kind"]).upper() == "REPLACE":
+        data, node = vocabulary(DATA), ref(change.get("node"))
+        if not node or node not in data or node == data.root:
+            return [f"alternatives: REPLACE names {node or 'no node'}, not a node of the data vocabulary"]
+    return []
 
 
 def judge(
@@ -778,7 +937,7 @@ def _samples(a, qs, factors, seeds, think, model, api, offline, provider, corpus
                 sample, refused, _ = ask.ask_with_feedback(
                     lambda attempt: sample_folder(a.root, q, seed, attempt),
                     text,
-                    SCHEMAS[q.question],
+                    schema(q.question),
                     lambda asked: {**record, "prompt": {**record["prompt"], "sha256": ask.sha256(asked)}},
                     ("question", "subject", "procedure", "prompt", "corpus", "norms", "context"),
                     lambda answer: refusals(q, answer, factors),
@@ -1079,13 +1238,277 @@ def less_invasive(change, value: str, data) -> bool:
     return all(n != value and coarser(n, value, data) for n in nodes)
 
 
+def _unidentified(kind: str | None, value, data) -> bool:
+    """Whether a component is not identified (gate a): a datum of no node, the root or an unknown one; a recipient
+    known only by its domain."""
+    if kind is None or not value or (kind == "D" and (data is None or value == data.root or value not in data)):
+        return True
+    return kind == "R" and str(value).startswith("domain:")
+
+
 def gate_a(text, kind: str | None, value, data, reading: str = READING) -> str | None:
     """Gate (a) for a documented alternative: None if passed, else why it failed."""
-    if kind is None or not value or (kind == "D" and (data is None or value == data.root or value not in data)):
-        return "gate_a_component"
-    if kind == "R" and str(value).startswith("domain:"):
+    if _unidentified(kind, value, data):
         return "gate_a_component"
     return None if less_invasive(recognised(text, kind, value, data, reading), value, data) else "gate_a_change"
+
+
+def typed_change(item: dict) -> dict | None:
+    """A typed entry's change as a claim states it ({kind, node?}, kind in lower case), None for a change of no known
+    kind."""
+    c = item.get("change")
+    if not isinstance(c, dict) or str(c.get("kind") or "").upper() not in CHANGES:
+        return None
+    out = {"kind": CHANGES[str(c["kind"]).upper()]}
+    if ref(c.get("node")):
+        out["node"] = ref(c.get("node"))
+    return out
+
+
+def typed_change_key(change: dict | None) -> str:
+    """The change key of a typed change: remove, replace:<node>, on_device or narrower_recipient; OTHER_CHANGE for a
+    change of no known kind, or a REPLACE that names no node."""
+    if change is None or (change["kind"] == "replace" and not change.get("node")):
+        return OTHER_CHANGE
+    return f"replace:{change['node']}" if change["kind"] == "replace" else change["kind"]
+
+
+def typed_gate_a(change: dict | None, kind: str | None, value, data, gives_grounded: bool) -> str | None:
+    """Gate (a) from a typed change: None if passed, else why it failed. REMOVE is always less invasive; REPLACE where
+    its node is coarser than the component's datum (configuration.coarser) and not the datum itself, a recipient never
+    replaced; ON_DEVICE and NARROWER_RECIPIENT for a recipient, and for a datum only where what it gives is grounded
+    in documentation."""
+    from skuld.configuration import coarser
+
+    if _unidentified(kind, value, data):
+        return "gate_a_component"
+    if change is None:
+        return "gate_a_typed"
+    how, node = change["kind"], change.get("node")
+    if how == "remove":
+        return None
+    if how == "replace":
+        ok = kind == "D" and node in data and node not in (value, data.root) and coarser(node, value, data)
+        return None if ok else "gate_a_typed"
+    return None if kind == "R" or gives_grounded else "gate_a_typed"
+
+
+def _rank(kind: str, value) -> float:
+    return ORDERS[kind].index(value) if kind in ORDERS else -float(value)
+
+
+def _number(kind, value):
+    """A need's or property's value as the rule compares it: a precision in metres as a number (also where the model
+    wrote it as text), anything else as it is."""
+    if kind == "precision_m" and isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _typed_kind(x: dict) -> dict:
+    """A need's or property's kind and value as a claim states them: the kind where it is one of REQUIREMENT_KINDS,
+    the value where it is one of the kind's (corpus.valid_value)."""
+    kind = str(x.get("kind") or "").lower()
+    if kind not in REQUIREMENT_KINDS:
+        return {}
+    value = _number(kind, x.get("value"))
+    return {"kind": kind, **({"value": value} if kind in FACT_KINDS and valid_value(kind, value) else {})}
+
+
+def facts_of(node: str | None, corpus: Corpus | None, context: Context, data) -> dict[str, list[tuple]]:
+    """The facts of the corpus's checked passages about a data node, by kind, each as (value, passage id, position,
+    the F part of the context that gives it or None)."""
+    if not node or corpus is None:
+        return {}
+    shown = {}
+    for p in context.parts:
+        pointer = p["provenance"][0]
+        if p["kind"] == "passage" and "fact" in pointer:
+            shown[(Path(pointer["record"]).name, pointer["fact"])] = p["id"]
+    out: dict[str, list[tuple]] = {}
+    for passage in corpus.passages:
+        if not passage.checked:
+            continue
+        for k, f in readable_facts(passage, data):
+            if f.about == node:
+                out.setdefault(f.kind, []).append((f.value, passage.id, k, shown.get((passage.path.name, k))))
+    return out
+
+
+def covers_by_rule(change: dict | None, needs: list[dict], facts: dict[str, list[tuple]]) -> tuple[str, list] | None:
+    """The rule's verdict on whether a replacement covers what the purpose needs, with its steps, where it decides:
+    the change is a REPLACE, every need has a kind of FACT_KINDS and a value, and the facts give the replacement node a
+    property of each kind. A need is met where every fact of its kind meets it: scope, the alternative's reaches the
+    need's (SCOPES by containment); persists, the alternative's lasts at least as long (PERSISTS); precision_m, the
+    alternative's is at most the need's. COVERS where every need is met, else DOES_NOT; None where the rule does not
+    decide."""
+    if change is None or change["kind"] != "replace" or not needs:
+        return None
+    if not all(n.get("kind") in FACT_KINDS and "value" in n and facts.get(n["kind"]) for n in needs):
+        return None
+    steps, met_all = [], True
+    for n in needs:
+        found = facts[n["kind"]]
+        met = all(_rank(n["kind"], v) >= _rank(n["kind"], n["value"]) for v, *_ in found)
+        met_all = met_all and met
+        said = "; ".join(f"{v} ({pid}, facts[{k}])" for v, pid, k, _ in found)
+        steps.append(
+            {
+                "text": f"{n['id']} needs {n['kind']} {n['value']}; {change['node']} has {n['kind']} {said}: "
+                + ("met" if met else "not met"),
+                "cites": sorted({part for *_, part in found if part}),
+            }
+        )
+    return ("covers" if met_all else "does_not"), steps
+
+
+def typed(
+    item: dict,
+    cid: str,
+    q: Question,
+    component: str,
+    practice: Practice | None,
+    corpus: Corpus | None,
+    data,
+    types,
+) -> dict:
+    """The fields and status of a typed entry's Alternative claim (reading 5, minimisation prompt 5; the rule in the
+    module's docstring): change, change_key, needs, gives, covers, status, the gap reason and the claim's reason,
+    strength, uncertainty and the parts it cites. `cid` is the claim's id, which its needs' ids extend."""
+    ids, documentation = q.context.ids, _documentation(q.context)
+    practices, declarations = q.context.of_kind("practice"), q.context.of_kind("declaration")
+    need_grounds = q.context.of_kind("screen") | q.context.of_kind("hypothesis")
+    kind, value = (
+        expectation.components(practice).get(component, (None, None)) if practice is not None else (None, None)
+    )
+    categories = practice.recipient_categories if practice is not None else ()
+    change = typed_change(item)
+    about = change.get("node") if change and change["kind"] == "replace" else value
+    cites: set[str] = set()
+    dropped = []
+
+    needs = []
+    for k, x in enumerate(_objects(item.get("needs")), 1):
+        given = [ref(c) for c in x.get("cites") or ()]
+        kept = [c for c in given if c not in practices and c not in declarations]
+        if len(kept) < len(given):
+            dropped.append(
+                {"step": f"N{k}", "reason": "cites the practice or a declaration as a reason that it is needed"}
+            )
+        grounded = bool(kept) and set(kept) <= need_grounds
+        cites |= set(kept)
+        needs.append(
+            {
+                "id": f"{cid}:N{k}",
+                "requirement": str(x.get("requirement") or ""),
+                **_typed_kind(x),
+                "cites": kept,
+                "grounded": grounded,
+            }
+        )
+    needs_grounded = bool(needs) and all(n["grounded"] for n in needs)
+
+    gives, missing, failed_bc = [], [], None
+    for x in _objects(item.get("gives")):
+        given = [ref(c) for c in x.get("cites") or ()]
+        documented = cited(given, ids) and bool(set(given) & documentation)
+        failed = (
+            gate(set(given) & documentation, q.context, kind, value, categories, corpus, data, types)
+            if documented
+            else None
+        )
+        failed_bc = failed_bc or failed
+        typed_ = _typed_kind(x)
+        if not documented:
+            prop = typed_.get("kind") if typed_.get("kind") in FACT_KINDS else str(x.get("property") or "").strip()
+            missing.append(f"fact: {prop or 'a property'} of {about or component}")
+        cites |= set(given) & ids
+        gives.append(
+            {
+                "property": str(x.get("property") or ""),
+                **typed_,
+                "cites": given,
+                "grounded": documented and failed is None,
+            }
+        )
+    gives_grounded = bool(gives) and all(g["grounded"] for g in gives)
+
+    answered = item.get("covers") if isinstance(item.get("covers"), dict) else {}
+    said = str(answered.get("verdict") or "").upper()
+    said = said if said in VERDICTS else "UNKNOWN"
+    steps, step_cites = [], []
+    for i, x in enumerate(_objects(answered.get("steps"))):
+        given = [ref(c) for c in x.get("cites") or ()]
+        if set(given) & declarations:
+            dropped.append(
+                {"step": f"covers.{i}", "reason": "cites a declaration as a reason that processing is needed"}
+            )
+            continue
+        steps.append({"text": str(x.get("text") or ""), "cites": given})
+        step_cites.append(given)
+    ruled = covers_by_rule(change, needs, facts_of(about, corpus, q.context, data))
+    if ruled is not None:
+        verdict, steps = ruled
+        covers = {"verdict": verdict, "by": "rule", "steps": steps, "model_verdict": said.lower()}
+        argued = True
+    else:
+        verdict = said.lower()
+        covers = {"verdict": verdict, "by": "model", "steps": steps}
+        argued = _grounded(step_cites, ids)
+        cites |= {c for s in step_cites for c in s} & ids
+    cites |= {c for s in covers["steps"] for c in s["cites"]} & ids
+
+    failed_a = typed_gate_a(change, kind, value, data, gives_grounded)
+    strong = needs_grounded and gives_grounded and argued
+    why = None
+    if verdict == "does_not" and strong:
+        status, reason = "refuted", "the alternative does not cover what the purpose needs"
+    elif failed_a:
+        status, why, reason = "not_established", "not_admitted", GATES[failed_a]
+    elif missing:
+        status, why = "not_established", "fact_missing"
+        reason = "a property the alternative gives rests on no documentation: the fact base lacks it"
+    elif failed_bc:
+        status, why, reason = "not_established", "not_admitted", GATES[failed_bc]
+    elif not gives:
+        status, why, reason = "not_established", "own_knowledge", "the alternative states nothing it gives"
+    elif not needs_grounded:
+        status, why = "not_established", "own_knowledge"
+        reason = "no need is stated" if not needs else "a need does not rest on the screens or the purposes alone"
+    elif verdict == "covers" and argued:
+        status, reason = "supported", None
+    elif verdict == "covers":
+        status, why, reason = "not_established", "own_knowledge", "covers: a step does not cite the context"
+    elif verdict == "partly":
+        status, reason = "not_established", "partly covers: the alternative meets what the purpose needs only in part"
+    elif verdict == "does_not":
+        status, why = "not_established", "own_knowledge"
+        reason = "does not cover what the purpose needs, by an argument that does not rest on the context"
+    else:
+        status, reason = "not_established", "whether the alternative covers what the purpose needs is unknown"
+    uncertainty = FROM_DOC if strong else expectation.FROM_OWN
+    if covers["by"] == "model":
+        uncertainty = raised(uncertainty, "covers_by_model")
+    return {
+        "fields": {
+            **({"change": change} if change else {}),
+            "change_key": typed_change_key(change),
+            "needs": needs,
+            "gives": gives,
+            "covers": covers,
+        },
+        "status": status,
+        "why": why,
+        "reason": reason,
+        "missing": missing,
+        "strength": "doc" if strong else "own",
+        "uncertainty": uncertainty,
+        "parts": cites & ids,
+        "dropped": dropped,
+    }
 
 
 def gate(citations: set[str], context: Context, kind: str, value, categories, corpus: Corpus | None, data, types):
@@ -1118,7 +1541,9 @@ def minimisation(
     corpus: Corpus | None = None,
 ) -> list[dict]:
     """The Alternative claims of a minimisation sample, of the assessment stage and the reasoning tier; `reading`
-    is the version to read with, and READING 2's gates read the practice's components and the corpus's passages."""
+    is the version to read with, and READING 2's gates read the practice's components and the corpus's passages. From
+    reading 5 an entry in the typed form (it carries `change`; minimisation prompt 5) is read by `typed`, the corpus's
+    facts deciding covers by rule where they can."""
     reading_component(reading)
     gates, keyed = gated(reading), int(reading) >= 5
     parts_of = expectation.components(practice) if practice is not None else {}
@@ -1136,6 +1561,9 @@ def minimisation(
         if basis is None or component not in q.record["components"]:
             continue
         if not names_alternative(item.get("alternative"), reading):  # "none": no alternative (READING 1, 4)
+            continue
+        if keyed and "change" in item:  # the typed form (minimisation prompt 5)
+            out.append(_typed_claim(item, f"{name}:a{n}", channel, q, basis, component, practice, corpus, data, types))
             continue
         steps, dropped = [], []
         for i, s in enumerate(item.get("steps") or ()):
@@ -1203,6 +1631,42 @@ def minimisation(
             }
         )
     return out
+
+
+def _typed_claim(item, cid, channel, q, basis, component, practice, corpus, data, types) -> dict:
+    """A typed entry's Alternative claim (`typed`)."""
+    if data is None:
+        data, types = vocabulary(DATA), vocabulary(RECIPIENT_TYPES)
+    t = typed(item, cid, q, component, practice, corpus, data, types)
+    status, why, reason = t["status"], t["why"], t["reason"]
+    if basis["purpose"]["specificity"] == "vague":
+        status, why, reason = "not_assessable", "purpose_vague", "the purpose is too vague"
+    sufficiency = {"sufficient": status == "supported", **({"reason": why} if why else {})}
+    if why == "fact_missing":
+        sufficiency["missing"] = t["missing"]
+    return {
+        "id": cid,
+        "type": "alternative",
+        "stage": "assessment",
+        "tier": "reasoning",
+        "channels": [channel],
+        "subject": q.record["practice"],
+        "component": component,
+        "alternative": item.get("alternative", ""),
+        **t["fields"],
+        "level": "technically_supported" if status == "supported" else "plausible",
+        "purpose": basis["purpose"],
+        "basis": [basis["id"]],
+        "status": status,
+        "parts": sorted(t["parts"]),
+        "supporting": [],
+        "challenging": [],
+        "strength": t["strength"],
+        "uncertainty": t["uncertainty"],
+        "sufficiency": sufficiency,
+        **({"dropped_steps": t["dropped"]} if t["dropped"] else {}),
+        **({"reason": reason} if reason else {}),
+    }
 
 
 def stage1(a: Assessment, subjects: Subjects, corpus: Corpus, registry=None) -> list[dict]:

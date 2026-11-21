@@ -24,6 +24,9 @@ audit request (`check`, which refuses it).
     own_knowledge                  extend_corpus; with gaps.own_knowledge_exhausted (config.json, default off: D4,
                                    measured first), an audit_request (organisation: the purposes pursued, Arts.
                                    13(1)(c), 30) where the corpus holds the recipient's or actor's documentation
+    fact_missing                   extend_corpus: a fact (corpus.py, `facts`) on the property of the node a typed
+                                   alternative gives without documentation, then the minimisation question asked again;
+                                   never an audit request (Ratatoskr 0.41.0)
     not_admitted                   experiment for a minimisation concern or a Dependency or Alternative claim (repeat
                                    the comparison), else re-analyse (the reasoning tier asked again)
     purpose_vague                  review
@@ -55,8 +58,9 @@ from ratatoskr.frames import Frame
 from ratatoskr.observability import COMPLETE, NONE, ORGANISATION, PARTIAL, RECORD, declare
 from ratatoskr.observability import check as check_level
 
-#: 1 (21 Nov 2026): gaps bear on propositions and have a structured next step (Ratatoskr 0.39.0)
-VERSION = "1"
+#: 1 (21 Nov 2026): gaps bear on propositions and have a structured next step (Ratatoskr 0.39.0); 2 (21 Nov 2026, P10):
+#: the gap reason fact_missing (Ratatoskr 0.41.0), one gap per fact the corpus lacks, whose step extends the corpus
+VERSION = "2"
 COMPONENT = {"role": "method", "id": "skuld.gaps", "version": VERSION}
 
 ACQUIRE, EXPLORE, EXPERIMENT, REANALYSE, EXTEND, REVIEW, INSTRUMENT, AUDIT = (
@@ -276,6 +280,8 @@ def reason_step(
                 ORGANISATION,
             )
         return step(EXTEND, f"documentation for {what} in the corpus, and the stage asked again")
+    if reason == "fact_missing":
+        return step(EXTEND, f"a fact in the corpus on {what}, and the minimisation question asked again")
     if reason == "not_admitted":
         if claim_type in ("dependency", "alternative") or requirement == "data_minimised":
             return step(EXPERIMENT, f"repeat the comparison, or an experiment that decides {what}")

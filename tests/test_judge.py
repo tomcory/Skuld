@@ -56,6 +56,11 @@ def norm(folder, pid, requirements, text):
 
 @pytest.fixture
 def workspace(tmp_path):
+    return make_workspace(tmp_path)
+
+
+def make_workspace(tmp_path, facts: str = ""):
+    """The fixtures' workspace; `facts` is added to the documentation passage a.yaml (YAML, its `facts:` key)."""
     run = run_folder(tmp_path)
     report = tmp_path / "o.json"
     report.write_text(json.dumps(o_report(run.name)))
@@ -74,6 +79,7 @@ def workspace(tmp_path):
             "about: {entities: [adco], nodes: [device-or-other-ids.advertising-id]}\n"
             "verified: {by: assessor, date: 2026-11-18}",
         )
+        + facts
     )
     (docs / "norms").mkdir()
     norm(docs / "norms", "specific", ["purpose_specific"], "A purpose must say what processing it includes.")
@@ -438,7 +444,7 @@ def test_a_minimisation_context_holds_the_screens_of_the_practices_episodes_with
             q.subject: q for q in judge.questions(a, built, found, norms, hypotheses) if q.question == "minimisation"
         }
 
-    assert templates.version("minimisation") == "4"
+    assert int(templates.version("minimisation")) >= judge.SCREENS_SINCE
     questions = minimisation()
     launch = questions[by_data["device-or-other-ids.advertising-id"]].context
     screens = [p for p in launch.parts if p["kind"] == "screen"]
@@ -535,3 +541,82 @@ def test_check_rebuilds_a_report_under_the_readings_it_names(workspace, capsys):
     out = capsys.readouterr().out
     assert code == 0, out
     assert "rebuilt from the same inputs" not in out and "earlier components" not in out
+
+
+class TypedJudge(FakeJudge):
+    """FakeJudge, answering the minimisation question in the typed form (prompt 5): per practice, a removal whose one
+    property rests on own knowledge, and for a context with facts processing on the device, whose property cites the
+    first fact."""
+
+    async def complete(self, model, prompt, response_format="text", params=None, model_options=None, on_text=None):
+        text = prompt.messages[0]["content"]
+        if '"gives"' not in text:
+            return await super().complete(model, prompt, response_format, params, model_options, on_text)
+        self.prompts.append(text)
+        ids = re.findall(r"^\[([^\]]+)\]", text, re.M)
+        practice = next(i for i in ids if i.startswith("P-"))
+        facts = [i for i in ids if re.fullmatch(r"F\d+", i)]
+
+        def alternative(gives, change="REMOVE"):
+            return {
+                "purpose": "H1",
+                "component": f"{practice}.data",
+                "change": {"kind": change},
+                "alternative": "match installs without the identifier",
+                "needs": [{"id": "N1", "requirement": "attribute the install", "cites": ["H1"]}],
+                "gives": gives,
+                "covers": {"verdict": "COVERS", "steps": [{"text": "met", "cites": ["H1", *facts[:1]]}]},
+            }
+
+        answer = [alternative([{"property": "attribution by campaign", "cites": ["own knowledge"]}])]
+        if facts:
+            answer.append(
+                alternative([{"property": "reset by the user", "kind": "persists", "cites": facts[:1]}], "ON_DEVICE")
+            )
+        return LLMResponse(text=json.dumps({"alternatives": answer}))
+
+
+def test_typed_alternatives_from_facts_end_to_end(tmp_path, capsys):
+    """Minimisation prompt 5: the context gives a passage's readable facts as F parts after it (a fact whose quote the
+    text lacks is left out), the typed answers read into claims with change, needs, gives and covers that the schema
+    takes, a give from own knowledge is a fact_missing gap that extends the corpus, and `skuld check` rebuilds it."""
+    from skuld import cli
+
+    a, built = make_workspace(
+        tmp_path,
+        "facts:\n"
+        "  - {about: device-or-other-ids.advertising-id, kind: persists, value: reset, quote: the  advertising ID}\n"
+        "  - {about: device-or-other-ids.advertising-id, kind: scope, value: cross-app, quote: not in the text}\n",
+    )
+    assert [x.split(": ", 1)[1] for x in corpus.problems(corpus.load(a.corpus)) if "facts" in x] == [
+        "facts[1]: its quote is not in the passage's text"
+    ]
+    found, norms, hypotheses = tools(a, built)
+    identifier = next(p.id for p in built.practices if p.data.endswith("advertising-id"))
+    interactions = next(p.id for p in built.practices if p.data == "app-activity.app-interactions")
+    (q,) = [x for x in judge.questions(a, built, found, norms, hypotheses) if x.subject == identifier]
+    passages = [p for p in q.context.parts if p["kind"] == "passage"]
+    assert [p["id"] for p in passages][:2] == ["D1", "F1"] and "F2" not in q.context.ids
+    assert passages[1]["provenance"] == [{"origin": "corpus", "record": "a.yaml", "fact": 0}]
+    assert 'persists reset, as the passage before states it: "the  advertising ID"' in judge.render(q.context)
+    assert judge.refusals(q, json.dumps({"alternatives": []}), []) == []
+
+    judge.judge(a, built, found, norms, hypotheses, FACTORS, seeds=[1, 2], provider=TypedJudge())
+    report = assess(a.root)  # validated against expectation_assessment
+    typed = {(c["subject"], c["change_key"]): c for c in report["claims"] if c["type"] == "alternative"}
+    assert {(identifier, "remove"), (identifier, "on_device"), (interactions, "remove")} <= set(typed)
+    assert typed[(identifier, "on_device")]["status"] == "supported"
+    assert typed[(identifier, "on_device")]["change"] == {"kind": "on_device"}
+    assert typed[(identifier, "remove")]["sufficiency"]["reason"] == "fact_missing"
+    typed = list(typed.values())
+    for c in typed:
+        assert [n["id"] for n in c["needs"]] == [f"{c['id']}:N1"]
+    missing = [g for g in report["gaps"] if g["reason"] == "fact_missing"]
+    assert missing and all(g["next"]["kind"] == "extend_corpus" for g in missing)
+    assert {(g["fact"]["node"], g["fact"]["property"]) for g in missing} >= {
+        ("device-or-other-ids.advertising-id", "attribution by campaign")
+    }
+    capsys.readouterr()
+    code = cli.main(["check", str(a.root)])
+    out = capsys.readouterr().out
+    assert code == 0, out

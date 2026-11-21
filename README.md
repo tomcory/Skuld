@@ -33,7 +33,13 @@ retrieved for, which alone it documents (prompts expectation 8). Since 0.11.7 a 
 passages (`PER_NODE`; its recipient up to three, `PER_ENTITY`), a requirement's norms are given by authority (the
 GDPR, then the EDPB, then WP29: each norm passage states its `authority`), and `skuld describe` refuses O's report of
 a run under an intervention: the subjects come from the exploration and baseline runs only (Q9, confirmed with Q1 and
-Q8 by the author on 21 Nov 2026). Checked against the code on 2026-11-21.
+Q8 by the author on 21 Nov 2026). From 0.12.0 (P10, not yet released) the minimisation question asks for typed
+arguments (prompt 5): each alternative names its change (REMOVE, REPLACE by a data node, ON_DEVICE,
+NARROWER_RECIPIENT), what the purpose needs (cited to screens or purposes), what the alternative gives (cited to
+documentation or to the corpus's facts, F parts) and whether that covers the needs; covers is decided by rule where the
+corpus's facts give the replacement a property of each kind needed (scope, persists, precision_m), otherwise by the
+model (`covers_by_model`), and a property given from own knowledge is a `fact_missing` gap (`skuld/judge.py`,
+`typed`). Checked against the code on 2026-11-21.
 
 ## Role in Asgard
 
@@ -107,7 +113,7 @@ skuld check workspaces/app@1.0       # every digest and pointer resolves, the as
 | `skuld calibrate score <dir>` | error rates from the expert's decisions | `<dir>/reviews.json` | `<dir>/scores.json` | no |
 | `skuld calibrate check <dir> <ws>…` | whether a calibration holds for other assessments | their components | – (exit status) | no |
 | `skuld calibrate agree <dir> <a> <b>` | two reviewers' agreement (Cohen's kappa) and their disagreements | two reviews files | `<dir>/agreement.json`; `<dir>/reviews.json` seeded with the agreed decisions if absent | no |
-| `skuld corpus check` | passages without source or date, about nothing, with an id other than their file's, or without a person's check (`verified: {by, date}`) | `corpus/` | – | no |
+| `skuld corpus check` | passages without source or date, about nothing, with an id other than their file's, or without a person's check (`verified: {by, date}`); facts whose quote is not in the passage's text, whose kind or value is unknown, or which are about no data node | `corpus/` | – | no |
 | `skuld corpus coverage <reports>` | recipients and data of O's reports no passage covers | O's reports | – | no |
 | `skuld corpus keep` | before `corpus/` changes: copies it, with its norms, to `corpora/<first 8 of its digest>/`, checked to have the same digest | `corpus/` | `corpora/<digest>/` | no |
 | `skuld corpus repoint <ws…>` | after the change: every workspace whose `corpus.path` is `corpus/` but whose digest is a kept one gets its path rewritten to the kept copy, and nothing else; a workspace whose corpus was not kept is listed and fails the command | `assessment.yaml`, `corpora/` | `assessment.yaml`, `corpora/<digest>-repointed.tsv` | no |
@@ -149,6 +155,7 @@ next step is the external step that could still change it, otherwise an audit re
 
 | Gap reason | Next step |
 |---|---|
+| `fact_missing` | `extend_corpus`: a fact on the node and property a typed alternative gives without documentation (one gap per fact, bearing on every claim that lacks it) |
 | `own_knowledge` | `extend_corpus` (with `gaps.own_knowledge_exhausted`: `audit_request`, organisation, where the corpus documents the recipient or actor) |
 | `not_admitted` | `experiment` for a minimisation concern or a Dependency or Alternative claim, else `re-analyse` |
 | `purpose_vague`, `substitute_more_invasive` | `review` |
@@ -327,7 +334,8 @@ compatible_versions:
 
 Beside the workspaces: `corpus/` (passages of documentation and, in `corpus/norms/`, the norms; each passage tagged with
 what it is `about` and verified against its source by a person, `verified: {by, date}`; a norm states its `authority`,
-`gdpr`, and a guideline `edpb` or `wp29`, the order in which a requirement's passages are given), `corpora/<digest>/` (earlier
+`gdpr`, and a guideline `edpb` or `wp29`, the order in which a requirement's passages are given; a passage may state
+`facts: [{about, kind, value, quote}]`, the format in `skuld/corpus.py`), `corpora/<digest>/` (earlier
 corpora that workspaces still name), `profiles/`, `purpose-maps/`, `catalogue/families/<id>@<version>.yaml` (the
 generator's feature families, committed, with their reviews in `catalogue/reviews/`), and a calibration sample's folder
 (`pilots/<pilot>/calibration/<id>/`; the fixtures' in `calibration/`, ignored by Git). The blind review tool is
