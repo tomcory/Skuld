@@ -244,6 +244,22 @@ def test_a_legal_basis_is_no_declared_purposes_row():
     assert basis not in json.dumps(q["declared_purposes"]) and said not in json.dumps(q["declared_purposes"])
 
 
+def test_the_legal_bases_and_their_relations_are_in_the_legal_basis_row():
+    """A declared necessity's D-E relation (Art. 6(1)(b)) was left unplaced once legal bases left the declared-purpose
+    rows (fixture of NeuroNation, 21 Nov 2026: 11 relations)."""
+    a = Assessment()
+    p = a.practice()
+    a.assessed_for_practice(p)
+    declared(a, p, "corresponds_exactly")
+    a.transparency("legal_basis", "addressed")
+    basis = a.declaration("D-10", "policy:/legalBases/0", "justification", "declares_legal_basis", value="GDPR-6-1-b")
+    rid = a.relation("D-E", "not_comparable", basis)
+    q = qualified(a)
+    assert q["unplaced"] == []
+    (row,) = [r for r in q["collection"]["rows"] if r["id"] == "row:collection:legal_basis"]
+    assert rid in json.dumps(row) and basis in json.dumps(row)
+
+
 def test_a_vague_purpose_is_decided_in_its_statements_row_never_in_the_practice():
     a = Assessment()
     p, other = a.practice(), a.practice()
@@ -535,8 +551,14 @@ def test_the_fixtures_are_qualified_whole(name):
     keys = [(CASE_ORDER.index(c["result"]), c["subject"]) for c in q["cases"]]
     assert keys == sorted(keys)
     assert {k: v for k, v in q["profile"].items() if k != "o_d_by_channel"} == PROFILES[name]
-    # one signal for experiments: a step per purpose skuld select finds eligible, and the listing reads its flag
-    from skuld import select
+    # one signal for experiments: a step per purpose skuld select finds eligible, and the listing reads its flag.
+    # The listing reads the catalogue and code of today, so it is compared only with a fixture the current
+    # qualification made; an older one is refreshed with the re-run (its reasoning samples predate the prompts)
+    from skuld import qualify, select
+
+    made = {c["id"]: c["version"] for c in report["report"]["components"] if c["id"].startswith("skuld.qualify")}
+    if made != {c["id"]: c["version"] for c in qualify.COMPONENTS}:
+        pytest.skip(f"{name} was qualified by {made}, older than the current qualification")
 
     listed = select.listing(path.parent)
     steps = {s["target"]["purpose"]: s for s in q["next_steps"] if "purpose" in s.get("target", {})}

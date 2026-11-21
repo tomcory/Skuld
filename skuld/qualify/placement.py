@@ -24,7 +24,9 @@ A case holds its declared purposes and their concerns as references; the require
 
 from dataclasses import dataclass, field
 
-VERSION = "3"  # 3: legal bases are no declared-purpose rows
+VERSION = (
+    "4"  # 4: the legal basis's collection row holds the declared legal bases; 3: they are no declared-purpose rows
+)
 COMPONENT = {"role": "method", "id": "skuld.qualify.placement", "version": VERSION}
 
 
@@ -172,8 +174,22 @@ def place(index: Index) -> tuple[list[Holding], list[Holding], list[Holding]]:
             for c in index.report["concerns"]
             if c["subject"] == "collection" and c["requirement"] == s["requirement"]
         ]
+        if s["requirement"] == LEGAL_BASIS:
+            # the declared legal bases, with their D-E relations (a declared necessity, Art. 6(1)(b), refuted or not
+            # comparable): no declared purpose's row holds them since legal bases are not purposes (20 Nov 2026), so
+            # the legal basis's row does; before, their relations were left unplaced
+            _fill(index, h, [d for d in sorted(index.declarations, key=_order) if _legal_basis(index, d)])
         collection.append(h)
     return cases, purposes, collection
+
+
+#: The collection's requirement of the legal basis (Art. 13(1)(c)), whose row holds the declared legal bases
+LEGAL_BASIS = "legal_basis"
+
+
+def _legal_basis(index: Index, did: str) -> bool:
+    d = index.declarations[did]
+    return d.get("kind") == "justification" and d.get("type") == "declares_legal_basis"
 
 
 def _order(did: str) -> tuple:
