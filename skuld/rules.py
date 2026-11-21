@@ -29,11 +29,12 @@ from skuld.comparison import Comparison
 from skuld.configuration import coarser
 from skuld.inputs import Alternative, Case, Component, Purpose
 
-#: The status rule as a named method of the report: 3 since an alternative survived by a more invasive substitute has
+#: The status rule as a named method of the report: 4 since a purpose without an observable oracle says where it is
+#: achieved, where the case states it (21 Nov 2026); 3 since an alternative survived by a more invasive substitute has
 #: the gap reason substitute_more_invasive (Ratatoskr 0.38.0, 21 Nov 2026); 2 since a removal the application survived by a substitute is
 #: substitutable, and an alternative survived by a substitute more invasive than its datum is not demonstrated
 #: (21 Nov 2026); 1 was recorded as Skuld's version
-VERSION = "3"
+VERSION = "4"
 COMPONENT = {"role": "method", "id": "skuld.rules", "version": VERSION}
 
 
@@ -62,7 +63,9 @@ def precondition(purpose: Purpose, present: bool) -> tuple[str, str, str] | None
     if purpose.specificity == "vague":
         return "not_assessable", "the purpose is too vague", "purpose_vague"
     if purpose.oracle is None:
-        return "not_assessable", "the purpose has no observable oracle", "oracle_not_observable"
+        where = {"device": " (it is achieved on the device)", "server": " (it is achieved on servers)"}
+        reason = "the purpose has no observable oracle" + where.get(getattr(purpose, "achieved_on", None) or "", "")
+        return "not_assessable", reason, "oracle_not_observable"
     return None
 
 

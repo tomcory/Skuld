@@ -46,8 +46,9 @@ DECISIVE = ("supported", "refuted")
 #: 3 since an alternative demoted by gate (d) takes the uncertainty of the members that agree with it, not of those
 #: that support it (20 Nov 2026); 4: one level with its reasons (Ratatoskr 0.34.0): either over the agreeing members,
 #: needs over all where none agrees, aligned_above for C1; 5: a substitutable dependency that decides keeps its reason,
-#: which names the substitutes (21 Nov 2026)
-VERSION = "5"
+#: which names the substitutes (21 Nov 2026); 6: a combined purpose says where it is achieved only where its members
+#: agree (21 Nov 2026)
+VERSION = "6"
 COMPONENT = {"role": "method", "id": "skuld.combine", "version": VERSION}
 #: What a combined claim carries over from the claim that decides it
 CARRIED = ("stage", "tier", "case", "scope", "component", "relationship", "alternative", "level")
@@ -70,6 +71,18 @@ def decide(members: list[dict]) -> tuple[str, dict | None]:
     return "conflicted", None
 
 
+def _placed(purpose, members: list[dict]):
+    """The deciding claim's purpose, saying where it is achieved (`achieved_on`) only where every member that says so
+    agrees (the samples of stage 1 from prompt version 7, a case's purpose)."""
+    if not isinstance(purpose, dict):
+        return purpose
+    said = {m["purpose"]["achieved_on"] for m in members if (m.get("purpose") or {}).get("achieved_on")}
+    out = {k: v for k, v in purpose.items() if k != "achieved_on"}
+    if len(said) == 1:
+        out["achieved_on"] = said.pop()
+    return out
+
+
 def combined(cid: str, members: list[dict], **fields) -> dict:
     """The combined claim of related claims: its status by `decide`, the evidence and uncertainty of the claims that
     agree with it, and what the deciding claim carries."""
@@ -82,7 +95,7 @@ def combined(cid: str, members: list[dict], **fields) -> dict:
         "channels": sorted({ch for m in members for ch in m["channels"]}),
         "of": [m["id"] for m in members],
         "subject": first["subject"],
-        "purpose": first["purpose"],
+        "purpose": _placed(first["purpose"], members),
         "status": status,
         "supporting": sorted({i for m in members if m["status"] == "supported" for i in m["supporting"]})
         if status in ("supported", "conflicted")

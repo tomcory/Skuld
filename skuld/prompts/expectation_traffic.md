@@ -15,7 +15,9 @@ For each practice listed in the context (its id starts with P):
    (FUNCTIONAL if it serves something the user does on the screens, ANCILLARY otherwise). For the outcome, what the
    processing is for, give the ids of the screens and passages that show it. The practice itself shows only that the
    processing happens, not what it is for, so do not cite it for the outcome. Set "specific" to false if a purpose
-   cannot be stated specifically.
+   cannot be stated specifically. Say where the purpose is achieved ("achieved_on"): DEVICE if what it achieves happens
+   on the device and the user could see it there (a screen shows the result, the application works offline with it),
+   SERVER if it is achieved on a server the data is sent to (analytics, advertising, fraud detection, a backup).
 
 2. For each purpose and each component of the practice (its data, and for a transmission its recipient; their ids
    are the practice's id followed by ".data" or ".recipient"), state the functional dependency of the purpose on the

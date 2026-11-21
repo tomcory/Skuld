@@ -61,7 +61,8 @@ class Feature:
 
 @dataclass(frozen=True)
 class Purpose:
-    """The framework's purpose with its functional requirements and its oracle (None: not observable)."""
+    """The framework's purpose with its functional requirements and its oracle (None: not observable), and where it is
+    achieved (`achieved_on`: device or server, where the case states it; it wins over stage 1's inference)."""
 
     id: str
     parts: dict
@@ -72,6 +73,7 @@ class Purpose:
     role: str
     requirements: tuple[dict, ...]
     oracle: str | None
+    achieved_on: str | None = None
 
 
 @dataclass(frozen=True)
@@ -377,6 +379,7 @@ def _case(path: Path) -> Case:
                 role=p["role"],
                 requirements=tuple(p.get("requirements") or ()),
                 oracle=p.get("oracle"),
+                achieved_on=_achieved_on(p.get("achieved_on"), f"{path}: purpose {p['id']}"),
             )
         )
     components = []
@@ -413,6 +416,18 @@ def _case(path: Path) -> Case:
         alternatives=tuple(alternatives),
         path=path,
     )
+
+
+#: Where a purpose is achieved: on the device, so that an oracle on the device can observe it, or on servers
+ACHIEVED_ON = ("device", "server")
+
+
+def _achieved_on(value, where: str) -> str | None:
+    if value is None:
+        return None
+    if str(value).lower() not in ACHIEVED_ON:
+        raise InputError(f"{where}: achieved_on is one of {', '.join(ACHIEVED_ON)}, not {value!r}")
+    return str(value).lower()
 
 
 def _oracle(path: Path) -> Oracle:

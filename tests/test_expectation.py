@@ -287,6 +287,29 @@ def test_readings_apply_the_status_rules_and_the_citation_rule(workspace):
     ]
 
 
+def test_a_purpose_says_where_it_is_achieved_from_prompt_version_7(workspace):
+    a, built = workspace
+    expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=FakeModel())
+    (name, context, answer), *_ = [
+        k for k in expectation.kept(a, built, load_corpus(a.corpus)) if k[0].startswith("launch")
+    ]
+    practices = {p.id: p for p in built.practices}
+    shown = answer["purposes"][0]
+    for said, read in (("SERVER", "server"), ("DEVICE", "device")):
+        (c,) = expectation.read({"purposes": [{**shown, "achieved_on": said}]}, name, context, practices)
+        assert c["purpose"]["achieved_on"] == read
+    (c,) = expectation.read(
+        {"purposes": [{k: v for k, v in shown.items() if k != "achieved_on"}]}, name, context, practices
+    )
+    assert "achieved_on" not in c["purpose"]  # an earlier prompt's answer does not say
+    # the keyed schema of version 7 requires it; version 6's does not know it
+    pid = shown["practice"]
+    seven = expectation.answer_schema([pid], "7")["properties"]["purposes"]["properties"][pid]["items"]
+    six = expectation.answer_schema([pid], "6")["properties"]["purposes"]["properties"][pid]["items"]
+    assert "achieved_on" in seven["required"] and seven["properties"]["achieved_on"]["enum"] == ["DEVICE", "SERVER"]
+    assert "achieved_on" not in six["properties"] and expectation.answer_schema([pid], "5") == expectation.ANSWER_SCHEMA
+
+
 def test_the_assessment_reads_kept_samples_and_gate_3_holds(workspace):
     from skuld.assess import build
 
@@ -532,10 +555,14 @@ def test_the_stage_1_prompt_tells_the_keyed_shape_and_earlier_versions_are_kept(
     from skuld import templates
 
     for prompt in ("expectation", "expectation_traffic"):
-        assert templates.CURRENT[prompt] == "6"
-        assert "under the practice's id" in templates.text(prompt, "6")
+        assert templates.CURRENT[prompt] == "7"
+        for keyed in ("6", "7"):
+            assert "under the practice's id" in templates.text(prompt, keyed)
         for earlier in ("4", "5"):
             assert "under the practice's id" not in templates.text(prompt, earlier)
+        # version 7 asks where each purpose is achieved; the earlier ones do not
+        assert '"achieved_on"' in templates.text(prompt, "7")
+        assert all('"achieved_on"' not in templates.text(prompt, v) for v in ("4", "5", "6"))
 
 
 def test_a_model_given_the_keyed_schema_answers_every_practice_and_needs_no_topup(workspace, monkeypatch):

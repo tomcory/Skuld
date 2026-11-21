@@ -5,7 +5,7 @@ runs to the case report (Ratatoskr's `expectation_report`), which the assessment
 For each case: the runs of its feature made after its inputs were fixed; the baseline configuration
 from O's reports of the baseline runs; the verification of every run under an alternative; the
 oracles' decisions; the comparisons; and the experimental channel's claims, with their evidence,
-uncertainty, sufficiency and observability, the channel's silence, open conditions and gaps.
+uncertainty and sufficiency, the channel's silence, open conditions and gaps.
 """
 
 import json
@@ -798,6 +798,8 @@ def premises(cases: Workspace | None, root: Path, practices: list, item) -> list
                         "role": purpose.role,
                         "specificity": purpose.specificity,
                         "provenance": "case",
+                        # where the case states it, it wins over stage 1's inference (gaps.oracle_step)
+                        **({"achieved_on": purpose.achieved_on} if purpose.achieved_on else {}),
                     },
                     "component": varied,
                     "status": c.status,

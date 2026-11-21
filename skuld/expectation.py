@@ -7,7 +7,9 @@ of no known episode form the batch `launch`. From prompt version 6 (KEYED_SINCE,
 dependencies are objects keyed by the batch's practice ids, every id required and given at least one purpose
 (`answer_schema`), so that constrained decoding (vLLM's guided JSON, Ollama's `format`) makes the model answer every
 practice (qwen3.8 answered only the first in 27 of the study's 72 batches); `listed` reads a keyed answer back into the
-list shape of earlier prompts' answers, which are still read as they are. The batch's screens are those of the episode in the first run that has
+list shape of earlier prompts' answers, which are still read as they are. From prompt version 7 (ACHIEVED_SINCE) each purpose says
+where it is achieved (`achieved_on`: on the device or on a server), which decides the next step of a purpose without
+an observable oracle (gaps.oracle_step); a case's purpose may state it, and its statement wins. The batch's screens are those of the episode in the first run that has
 them, with what the notice classifier (Ratatoskr's `notices`, R-7) takes for a notice left out and recorded as left
 out: a consent dialog's whole screen, a privacy notice's texts that speak of data, the rest of whose screen is kept.
 What D collects as declarations, the same texts, never reaches this stage (gate 1). The
@@ -58,8 +60,9 @@ PROMPT = "expectation"
 PROCEDURE = {"id": "skuld.expectation", "version": VERSION}
 #: How the samples' answers are read, apart from VERSION (which identifies the kept samples): 2 since a purpose at no
 #: node of the vocabulary has the gap reason purpose_not_in_vocabulary, not purpose_vague (20 Nov 2026); 3: an answer
-#: keyed by practice id (prompt version 6) is read as the list it stands for (`listed`, 21 Nov 2026)
-READING = "3"
+#: keyed by practice id (prompt version 6) is read as the list it stands for (`listed`, 21 Nov 2026); 4: a purpose says
+#: where it is achieved (`achieved_on`, prompt version 7; 21 Nov 2026)
+READING = "4"
 READING_COMPONENT = {"role": "method", "id": "skuld.expectation.reading", "version": READING}
 #: The kinds of part a stage-1 context may hold, each with the origins its provenance may have; never D's report
 KINDS = {
@@ -141,6 +144,11 @@ ANSWER_SCHEMA = {
 #: The first version of the stage-1 prompts whose answer is keyed by practice id (`answer_schema`); a sample asked with an
 #: earlier one (a profile's `prompts`) is asked again with the list shape it was asked with (ANSWER_SCHEMA)
 KEYED_SINCE = 6
+#: The first version of the stage-1 prompts that asks where each purpose is achieved (`achieved_on`: DEVICE or SERVER,
+#: required in its answer schema; 21 Nov 2026); an earlier version's purposes do not say, and a case's purpose may
+ACHIEVED_SINCE = 7
+#: Where a purpose is achieved, as the answer names it
+ACHIEVED_ON = {"DEVICE": "device", "SERVER": "server"}
 
 
 def _without_practice(item: dict) -> dict:
@@ -162,12 +170,20 @@ def answer_schema(practices: list[str], prompt_version: str | None = None) -> di
     whose properties are the batch's practice ids, all required and no other, each a list of the list shape's items
     without `practice` (a practice's purposes at least one); for an earlier version, ANSWER_SCHEMA. Constrained decoders
     enforce required properties, where they often ignore `contains`/`minContains`."""
-    if not keyed(prompt_version if prompt_version is not None else templates.version(prompt_id())):
+    version = prompt_version if prompt_version is not None else templates.version(prompt_id())
+    if not keyed(version):
         return ANSWER_SCHEMA
     ids = list(dict.fromkeys(practices))
+    placed = str(version).isdigit() and int(version) >= ACHIEVED_SINCE
 
     def by_practice(section: str, at_least: int) -> dict:
         item = _without_practice(ANSWER_SCHEMA["properties"][section]["items"])
+        if section == "purposes" and placed:
+            item = {
+                **item,
+                "required": [*item["required"], "achieved_on"],
+                "properties": {**item["properties"], "achieved_on": {"enum": list(ACHIEVED_ON)}},
+            }
         each = {"type": "array", **({"minItems": at_least} if at_least else {}), "items": item}
         return {
             "type": "object",
@@ -844,6 +860,8 @@ def read(answer: dict, sample: str, context: Context, practices: dict[str, Pract
             "specificity": "sufficient" if specific else "vague",
             "provenance": "inferred",
         }
+        if ACHIEVED_ON.get(str(p.get("achieved_on")).upper()):  # prompt version 7 on: where it is achieved
+            purpose["achieved_on"] = ACHIEVED_ON[str(p["achieved_on"]).upper()]
         if purpose["node"] not in vocabulary(PURPOSES) and purpose["node"] != "?":
             # a node the model made up (e.g. "Profiling"): the nearest vocabulary node, where config.json's
             # purpose_map names one (by semantic similarity, study 11 Nov 2026)
