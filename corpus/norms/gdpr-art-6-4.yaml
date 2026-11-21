@@ -4,6 +4,7 @@ source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
 retrieved: 2026-10-24
 verified: {by: Thomas Cory, date: 2026-10-24}
 kind: norm
+authority: gdpr
 about:
   requirements: [purpose_compatible]
 text: >-

@@ -4,6 +4,7 @@ source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
 retrieved: 2026-11-21
 verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
 kind: norm
+authority: gdpr
 about:
   requirements: [purpose_specific]
 # Drafted 21 Nov 2026: the first sentence of Art. 12(1), from the EUR-Lex HTML of the OJ text (L 119, 4.5.2016),

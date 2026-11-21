@@ -11,6 +11,7 @@ title: Best practices for unique identifiers
 source: https://developer.android.com/identity/user-data-ids
 retrieved: 2026-10-21
 kind: platform            # or component; norm or guideline in norms/
+# authority: edpb         # norms/ only: gdpr (a norm), edpb or wp29 (a guideline); orders a requirement's passages
 about:
   nodes: [device-or-other-ids.advertising-id]   # data nodes it concerns (and their descendants)
   entities: []                                  # register entities it concerns
@@ -32,9 +33,10 @@ A passage stands in for its source, so each is checked against it by a person be
 no passage is about.
 
 Passages are retrieved per processing component, or per requirement, by what they are about; nothing is searched at
-analysis time. A component's are capped (PER_ENTITY about its recipient, PER_NODE about its datum). The norms are a
-corpus of their own (`load(directory / NORMS)`), so that the expectation stage's corpus and its digest do not change
-with them: that stage reads no norm.
+analysis time. A component's are capped (PER_ENTITY about its recipient, PER_NODE about its datum); a requirement's
+are all given, by authority (`AUTHORITIES`: the Regulation, then the EDPB, then WP29), each in file order. The norms
+are a corpus of their own (`load(directory / NORMS)`), so that the expectation stage's corpus and its digest do not
+change with them: that stage reads no norm.
 """
 
 import hashlib
@@ -57,6 +59,12 @@ PER_ENTITY = 3
 #: Passages about a practice's datum (its data node, or a node above or below it) given at most: four since 21 Nov
 #: 2026, when the Advertising ID had four (three before, as about the entity)
 PER_NODE = 4
+#: The authorities of the norms and guidelines (`authority` of a passage in norms/), in the order a requirement's
+#: passages are given (`Corpus.on`): the Regulation, then the EDPB's guidelines, then those of the Article 29 Working
+#: Party (WP29), which the EDPB endorsed (WP260 rev.01) or did not adopt (WP203)
+AUTHORITIES = ("gdpr", "edpb", "wp29")
+#: The authority each kind of norms/ passage may have
+AUTHORITY_OF_KIND = {"norm": ("gdpr",), "guideline": ("edpb", "wp29")}
 #: The folder of the norms and guidelines, inside the corpus folder
 NORMS = "norms"
 
@@ -75,6 +83,7 @@ class Passage:
     verified: dict | None = None
     requirements: tuple[str, ...] = ()
     recipient_types: tuple[str, ...] = ()
+    authority: str | None = None
 
     @property
     def checked(self) -> bool:
@@ -124,8 +133,12 @@ class Corpus:
         return [p for p in found if id(p) in kept]
 
     def on(self, requirement: str) -> list[Passage]:
-        """The passages about a requirement of the frame, in the corpus's order."""
-        return [p for p in self.passages if requirement in p.requirements]
+        """The passages about a requirement of the frame, by authority (21 Nov 2026): the Regulation's (`gdpr`) first,
+        then the EDPB's guidelines (`edpb`), then WP29's (`wp29`), then any other; within each, in the corpus's
+        order (by file name). Before, all were in file order, which put the EDPB's guidelines before the GDPR."""
+        found = [p for p in self.passages if requirement in p.requirements]
+        rank = {a: i for i, a in enumerate(AUTHORITIES)}
+        return sorted(found, key=lambda p: rank.get(p.authority or "", len(AUTHORITIES)))  # stable: file order kept
 
 
 def load(directory: str | Path) -> Corpus:
@@ -157,6 +170,7 @@ def load(directory: str | Path) -> Corpus:
                 verified=data.get("verified") or None,
                 requirements=tuple(about.get("requirements") or ()),
                 recipient_types=tuple(about.get("recipient_types") or ()),
+                authority=str(data["authority"]) if data.get("authority") else None,
             )
         )
         digest.update(path.name.encode() + b"\0" + path.read_bytes() + b"\0")
@@ -165,7 +179,8 @@ def load(directory: str | Path) -> Corpus:
 
 def problems(corpus: Corpus) -> list[str]:
     """What keeps passages from being relied on: no source, no date retrieved, nothing they are about, an id not
-    their file's name, or no record that a person checked them against their source."""
+    their file's name, no record that a person checked them against their source, or a norm or guideline without its
+    authority (`gdpr` for a norm, `edpb` or `wp29` for a guideline; another passage states none)."""
     out = []
     for p in corpus.passages:
         if p.path.stem != p.id:
@@ -180,6 +195,13 @@ def problems(corpus: Corpus) -> list[str]:
             out.append(f"{p.id}: verified is not a mapping (verified: {{by, date}})")
         elif not p.checked:
             out.append(f"{p.id}: not verified against its source (verified: {{by, date}})")
+        allowed = AUTHORITY_OF_KIND.get(p.kind)
+        if allowed and p.authority not in allowed:
+            out.append(
+                f"{p.id}: a {p.kind} whose authority is {p.authority or 'not stated'} (authority: {' or '.join(allowed)})"
+            )
+        elif not allowed and p.authority is not None:
+            out.append(f"{p.id}: a {p.kind} passage states an authority ({p.authority}); only norms and guidelines do")
     return out
 
 

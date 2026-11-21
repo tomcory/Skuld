@@ -1,7 +1,11 @@
+from pathlib import Path
+
 import pytest
 from ratatoskr.vocabularies import Vocabulary
 
 from skuld import corpus
+
+ROOT = Path(__file__).resolve().parents[1]
 
 PASSAGE = """id: {id}
 title: Identifiers
@@ -76,6 +80,67 @@ def test_passages_about_the_datum_never_push_out_those_about_its_recipient(tmp_p
         (tmp_path / f"{name}.yaml").unlink()
     found = corpus.load(tmp_path).about("device-or-other-ids.advertising-id", "adco", data)
     assert [p.id for p in found] == ["a0", "a1", "z0", "z1"]
+
+
+def test_norms_are_given_by_authority_the_regulation_then_the_edpb_then_wp29(tmp_path):
+    for id_, kind, authority in [
+        ("edpb-x", "guideline", "edpb"),
+        ("gdpr-b", "norm", "gdpr"),
+        ("gdpr-a", "norm", "gdpr"),
+        ("other", "guideline", None),
+        ("wp203-x", "guideline", "wp29"),
+        ("aa-wp260", "guideline", "wp29"),
+    ]:
+        _passage(tmp_path, id_, "{requirements: [r]}", kind, f"authority: {authority}\n" if authority else "")
+    found = corpus.load(tmp_path)
+    assert [p.id for p in found.on("r")] == ["gdpr-a", "gdpr-b", "edpb-x", "aa-wp260", "wp203-x", "other"]
+    assert [p for p in corpus.problems(found) if "authority" in p] == [
+        "other: a guideline whose authority is not stated (authority: edpb or wp29)"
+    ]
+
+
+def test_a_norm_needs_the_regulation_as_its_authority_and_a_documentation_passage_states_none(tmp_path):
+    _passage(tmp_path, "n", "{requirements: [r]}", "norm", "authority: edpb\n")
+    _passage(tmp_path, "d", "{entities: [adco]}", "component", "authority: gdpr\n")
+    problems = [p for p in corpus.problems(corpus.load(tmp_path)) if "authority" in p]
+    assert problems == [
+        "d: a component passage states an authority (gdpr); only norms and guidelines do",
+        "n: a norm whose authority is edpb (authority: gdpr)",
+    ]
+
+
+@pytest.mark.parametrize(
+    "requirement, order",
+    [
+        (
+            "purpose_specific",
+            [
+                "gdpr-art-12-1",
+                "gdpr-art-13-1-c",
+                "gdpr-art-5-1-b",
+                "gdpr-recital-39-transparency",
+                "edpb-4-2019-purpose-limitation",
+                "wp203-specific",
+                "wp260-purposes",
+            ],
+        ),
+        (
+            "purpose_compatible",
+            [
+                "gdpr-art-5-1-b",
+                "gdpr-art-6-4",
+                "gdpr-recital-50",
+                "edpb-4-2019-purpose-limitation",
+                "wp203-compatibility",
+            ],
+        ),
+        ("data_minimised", ["gdpr-art-25-2", "gdpr-art-5-1-c", "gdpr-recital-39", "edpb-4-2019-minimisation"]),
+    ],
+)
+def test_skulds_norms_by_requirement_in_the_order_of_authority(requirement, order):
+    norms = corpus.load(ROOT / "corpus" / corpus.NORMS)
+    assert [p.id for p in norms.on(requirement)] == order
+    assert corpus.problems(norms) == []
 
 
 def test_the_root_datum_finds_no_passage_by_node_only_by_entity(tmp_path):

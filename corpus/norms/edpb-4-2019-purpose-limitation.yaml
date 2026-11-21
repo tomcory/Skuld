@@ -4,6 +4,7 @@ source: https://www.edpb.europa.eu/sites/default/files/files/file1/edpb_guidelin
 retrieved: 2026-11-21
 verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
 kind: guideline
+authority: edpb
 about:
   requirements: [purpose_specific, purpose_compatible]
 # Drafted 21 Nov 2026: verbatim from the PDF; three of the eight elements of para. 72, and footnote 34 (on p. 19,
