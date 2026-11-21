@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.11.6.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.11.7.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -29,13 +29,17 @@ is a break ("broken: goal not reached"), a control blocks the registrable domain
 a sensitivity failure only where the app tried a blocked host, and the catalogue refuses a slot with stray keys and
 offers no superseded family (`launch@5` and the review's new versions). Since 0.11.4 a datum at the data vocabulary's
 root retrieves no documentation by its node, and each passage of a stage-1 context names the practices it was
-retrieved for, which alone it documents (prompts expectation 8). Checked against the code on 2026-11-21.
+retrieved for, which alone it documents (prompts expectation 8). Since 0.11.7 a practice's datum is given up to four
+passages (`PER_NODE`; its recipient up to three, `PER_ENTITY`), a requirement's norms are given by authority (the
+GDPR, then the EDPB, then WP29: each norm passage states its `authority`), and `skuld describe` refuses O's report of
+a run under an intervention: the subjects come from the exploration and baseline runs only (Q9, confirmed with Q1 and
+Q8 by the author on 21 Nov 2026). Checked against the code on 2026-11-21.
 
 ## Role in Asgard
 
 | | Record | Schema (Ratatoskr) | From / for |
 |---|---|---|---|
-| reads | O's reports of the version: the exploration, baseline runs | `observation_report` | Verðandi |
+| reads | O's reports of the version: the exploration, baseline runs (never a run under an intervention, Q9) | `observation_report` | Verðandi |
 | reads | D's report of the version: derived documents, findings, open conditions | `declaration_report` (schema 4) | Urda |
 | reads | the exploration's records (screens), Loki's run folders of replays and goal-directed runs | `run.json`, `events.jsonl`, `episodes.json`, `run_scope.json`, `captured_http_message`, … | Loki, Heimdall |
 | reads | the application's store category, for the launch's oracle | `store_listing` (via D's report or a Sága collection) | Sága, Urda |
@@ -83,7 +87,7 @@ skuld check workspaces/app@1.0       # every digest and pointer resolves, the as
 |---|---|---|---|---|
 | `skuld config` | the configuration in force: its file, profile, digest and content; `--profiles` lists the profiles | `config.json`, `profiles/` | – | no |
 | `skuld compat add <ws>` | states that D of one version speaks for O's (`--o`, `--d`, `--reason`, `--author`) | `assessment.yaml` | `assessment.yaml` | no |
-| `skuld describe <ws>` | describes an assessment workspace | O's and D's reports, the exploration, the frame, the corpus | `assessment.yaml` | no |
+| `skuld describe <ws>` | describes an assessment workspace; refuses O's report of a run under an intervention (Q9) | O's and D's reports, the exploration, the frame, the corpus | `assessment.yaml` | no |
 | `skuld expect <ws>` | the expectation stage's samples, without D | O's practices, the exploration's screens, the corpus | `expectation/`, `manifests/expect_<time>.json` | yes |
 | `skuld judge <ws>` | the reasoning tier's samples: specificity first (a declared purpose judged not specific specifies nothing), then compatibility and minimisation; `--question compatibility` alone reads the kept specificity samples, so ask specificity first | stage-1 samples, D's declarations, the norms | `assessment/`, `manifests/judge_<time>.json` | yes |
 | `skuld assess <ws>` | the assessment, ending with its qualification; prints the gaps by the kind of their next step | everything above, kept samples, the case report | `subjects.json`, `assessment.json`, `assessment.md` (with the gaps by next step, what the run's scope settled and the frame's coverage statement) | no |
@@ -322,7 +326,8 @@ compatible_versions:
 ```
 
 Beside the workspaces: `corpus/` (passages of documentation and, in `corpus/norms/`, the norms; each passage tagged with
-what it is `about` and verified against its source by a person, `verified: {by, date}`), `corpora/<digest>/` (earlier
+what it is `about` and verified against its source by a person, `verified: {by, date}`; a norm states its `authority`,
+`gdpr`, and a guideline `edpb` or `wp29`, the order in which a requirement's passages are given), `corpora/<digest>/` (earlier
 corpora that workspaces still name), `profiles/`, `purpose-maps/`, `catalogue/families/<id>@<version>.yaml` (the
 generator's feature families, committed, with their reviews in `catalogue/reviews/`), and a calibration sample's folder
 (`pilots/<pilot>/calibration/<id>/`; the fixtures' in `calibration/`, ignored by Git). The blind review tool is
@@ -332,7 +337,7 @@ generator's feature families, committed, with their reviews in `catalogue/review
 ## Tests
 
 ```bash
-uv run pytest                     # 553 tests on 2026-11-21
+uv run pytest                     # 574 tests on 2026-11-21
 ruff format . && ruff check .
 ```
 
