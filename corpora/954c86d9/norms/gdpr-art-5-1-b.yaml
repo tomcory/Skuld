@@ -1,0 +1,11 @@
+id: gdpr-art-5-1-b
+title: GDPR Article 5(1)(b), purpose limitation
+source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
+retrieved: 2026-10-24
+verified: {by: Thomas Cory, date: 2026-10-24}
+kind: norm
+about:
+  requirements: [purpose_specific, purpose_specified, purpose_compatible]
+text: >-
+  Personal data shall be collected for specified, explicit and legitimate purposes and not further processed in a manner 
+  that is incompatible with those purposes; [...] (‘purpose limitation’).

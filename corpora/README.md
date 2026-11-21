@@ -7,6 +7,7 @@ eight characters of its digest, so that the workspaces that name it still load a
 | Folder | Digest | Used by | Replaced on |
 |---|---|---|---|
 | `cd73311d/` | `cd73311d21b7f8da0844c901cf06b8274d362a3d76a0bd2eac36be57894d1393` | the Expectation paper's study (`expectation-paper/study-2026-11/`), Skuld's fixtures (`cases/`, now `workspaces/`) and their archives: 285 workspaces | 2026-11-18 |
+| `954c86d9/` | `954c86d9249e…` (documentation; norms `34cad858…`) | no workspace (the study and the fixtures name `cd73311d`) | 2026-11-21 |
 
 `cd73311d/` holds the four platform and component passages as committed before 2026-11-18 (from git) and a copy of
 `norms/`, unchanged; its digest was checked equal to the one the workspaces name. The 285 workspaces had their
@@ -74,3 +75,10 @@ datum's passages fill the three places first. Passages about the component's rec
 about its datum for the same three places. Resolved the same day: where a practice finds more than three passages,
 `Corpus.about` gives up to three about the recipient's entity and up to three about the datum's node
 (`skuld/corpus.py`).
+
+# The passages adopted on 2026-11-21
+
+Nineteen passages (ten norms, nine of documentation) drafted, re-verified and reviewed independently three times on
+21 Nov, then adopted by the author: the record, with what each passage answers, what was left out, the checks, the
+known limits of tagging and retrieval, and the decisions still open, is `adoption-2026-11-21.md`. The corpus's digests
+are now `8b67a0e3…` (documentation) and `abac275a…` (norms).

@@ -1,11 +1,15 @@
 id: gdpr-art-5-1-b
 title: GDPR Article 5(1)(b), purpose limitation
 source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
-retrieved: 2026-10-24
-verified: {by: Thomas Cory, date: 2026-10-24}
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
 kind: norm
 about:
   requirements: [purpose_specific, purpose_specified, purpose_compatible]
+# Drafted 21 Nov 2026, to replace the passage of 24 Oct, which joined the chapeau to the point without its colon and
+# letter ("Personal data shall be collected ...") and ended with a full stop where the point ends with a semicolon.
+# The omission after "those purposes;" is the clause on archiving, research and statistics (Art. 89(1)).
+# Checked against the OJ text from the Publications Office (Cellar) by a reviewer on 21 Nov, and gdpr-info.eu.
 text: >-
-  Personal data shall be collected for specified, explicit and legitimate purposes and not further processed in a manner 
-  that is incompatible with those purposes; [...] (‘purpose limitation’).
+  Personal data shall be: […] (b) collected for specified, explicit and legitimate purposes and not further processed
+  in a manner that is incompatible with those purposes; […] (‘purpose limitation’);

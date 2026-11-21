@@ -1,11 +1,14 @@
 id: gdpr-art-5-1-c
 title: GDPR Article 5(1)(c), data minimisation
 source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
-retrieved: 2026-10-24
-verified: {by: Thomas Cory, date: 2026-10-24}
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
 kind: norm
 about:
   requirements: [data_minimised]
+# Drafted 21 Nov 2026, to replace the passage of 24 Oct: chapeau and point as in the Regulation (the earlier passage
+# joined them without colon and letter and ended with a full stop).
+# Checked against the OJ text from the Publications Office (Cellar) by a reviewer on 21 Nov, and gdpr-info.eu.
 text: >-
-  Personal data shall be adequate, relevant and limited to what is necessary in relation to the purposes for which they 
-  are processed (‘data minimisation’).
+  Personal data shall be: […] (c) adequate, relevant and limited to what is necessary in relation to the purposes for
+  which they are processed (‘data minimisation’);

@@ -1,13 +1,39 @@
 id: wp260-purposes
-title: Guidelines on transparency under Regulation 2016/679 (WP260 rev.01), on the language of purposes
+title: Guidelines on transparency under Regulation 2016/679 (WP260 rev.01, endorsed by the EDPB), the language of purposes (paras. 12–13, pp. 8–9)
 source: https://www.edpb.europa.eu/system/files/documents/2023-09/wp260rev01_en.pdf
-retrieved: 2026-10-24
-verified: {by: Thomas Cory, date: 2026-10-24}
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
 kind: guideline
 about:
   requirements: [purpose_specific]
+# Drafted 21 Nov 2026, to replace the passage of 24 Oct. Verbatim from the PDF (rev.01, adopted 29 November
+# 2017, revised 11 April 2018): para. 12 from "The requirement for clear and plain language means", its boxes of
+# poor and good practice examples, and the first two sentences of para. 13. Two corrections of the earlier
+# passage: (1) it ended at "should also be avoided" and left out the next sentence, which allows indefinite
+# language where the controller demonstrates why it could not be avoided: the passage was stricter than its
+# source; (2) it left out the examples, of which the paper (Sect. 2) quotes the first. The second poor practice
+# example lacks its closing quotation mark in the source; footnote marker 14 after "Good Practice Examples"
+# removed. Including the good practice examples is the author's decision: they show what WP29 considers specific
+# enough; their effect on the share judged not specific is uncertain in direction.
 text: >-
-  The information should be concrete and definitive; it should not be phrased in abstract or ambivalent terms or leave 
-  room for different interpretations. In particular the purposes of, and legal basis for, processing the personal data 
-  should be clear. [...] Language qualifiers such as “may”, “might”, “some”, “often” and “possible” should also be 
-  avoided.
+  The requirement for clear and plain language means that information should be provided in as simple a manner as
+  possible, avoiding complex sentence and language structures. The information should be concrete and definitive; it
+  should not be phrased in abstract or ambivalent terms or leave room for different interpretations. In particular the
+  purposes of, and legal basis for, processing the personal data should be clear. Poor Practice Examples The following
+  phrases are not sufficiently clear as to the purposes of processing: “We may use your personal data to develop new
+  services” (as it is unclear what the “services” are or how the data will help develop them); “We may use your
+  personal data for research purposes (as it is unclear what kind of “research” this refers to); and “We may use your
+  personal data to offer personalised services” (as it is unclear what the “personalisation” entails). Good Practice
+  Examples “We will retain your shopping history and use details of the products you have previously purchased to make
+  suggestions to you for other products which we believe you will also be interested in ” (it is clear that what types
+  of data will be processed, that the data subject will be subject to targeted advertisements for products and that
+  their data will be used to enable this); “We will retain and evaluate information on your recent visits to our
+  website and how you move around different sections of our website for analytics purposes to understand how people
+  use our website so that we can make it more intuitive” (it is clear what type of data will be processed and the type
+  of analysis which the controller is going to undertake); and “We will keep a record of the articles on our website
+  that you have clicked on and use that information to target advertising on this website to you that is relevant to
+  your interests, which we have identified based on articles you have read” (it is clear what the personalisation
+  entails and how the interests attributed to the data subject have been identified). Language qualifiers such as
+  “may”, “might”, “some”, “often” and “possible” should also be avoided. Where data controllers opt to use indefinite
+  language, they should be able, in accordance with the principle of accountability, to demonstrate why the use of
+  such language could not be avoided and how it does not undermine the fairness of processing.

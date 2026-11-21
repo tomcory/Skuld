@@ -2,22 +2,34 @@ id: android-identifiers-ads
 title: Best practices for unique identifiers, ads use cases (Android Developers)
 source: https://developer.android.com/identity/user-data-ids
 retrieved: 2026-11-18
-verified: {by: Thomas Cory, date: 2026-11-18}
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+# Drafted 21 Nov 2026: the use cases' headings as the page gives them, without the full stops the passage of 18 Nov
+# added; the hedge of the Targeting case restored ("might require an ID", which the passage of 18 Nov left out) and
+# the Play policy's opt-out sentences added (reviews of 21 Nov).
 kind: platform
 about:
   nodes: [device-or-other-ids.advertising-id]
   entities: []
 # Verbatim from the use cases under the page's heading "Ads" (Targeting, Measurement, Conversions, Remarketing) and
-# "Ad fraud", which the page lists under "Security"; omissions marked […]. Measurement and Conversions also name the
-# Play install referrer APIs, an alternative to an identifier for attribution. This is what keeps an app-scoped identifier from being proposed for advertising.
+# "Ad fraud", which the page lists under "Security", preceded, as on the page, by the Play policy on the
+# personalisation opt-out that the section "Work with advertising IDs" quotes; omissions marked […]. Measurement and Conversions also name the Play
+# install referrer APIs, an alternative to an identifier for attribution; the opt-out sentence names what remains
+# allowed without profiling (contextual advertising, frequency capping, conversion tracking, reporting, fraud
+# detection). "Mandatory" is the Play policy's requirement for an identifier used for ads, not a technical necessity.
 text: >-
-  Targeting. In this case, your app builds a profile of a user's interests, to show them more relevant ads.
-  Recommended identifier to use: If your app uses an ID for ads and uploads or publishes to Google Play, that ID must
-  be the Advertising ID. […] Use of the Advertising ID is mandatory for advertising use cases, per the Google Play
-  Developer Content Policy, because the user can reset it. […] Measurement. In this case, your app creates a profile
-  of a user based on their behavior across your organization's apps on the same device. Recommended identifier to
-  use: Advertising ID or Play install referrer APIs […] Conversions. In this case, you're tracking conversions to
-  detect if your marketing strategy is successful. Recommended identifier to use: Advertising ID or Play install
-  referrer APIs […] Remarketing. In this case, your app shows ads based on a user's previous interests. Recommended
-  identifier to use: Advertising ID […] Ad fraud. In this case, your app checks that a user's impressions and actions
-  in your app are genuine and verifiable. Recommended identifier to use: Advertising ID
+  The Google Play Developer Content Policy states the following: "...you must abide by a user's 'Opt out of
+  interest-based advertising' or 'Opt out of Ads Personalization' setting. If a user has enabled this setting, you may
+  not use the advertising identifier for creating user profiles for advertising purposes or for targeting users with
+  personalized advertising. Allowed activities include contextual advertising, frequency capping, conversion tracking,
+  reporting and security and fraud detection." […] Targeting In this case, your app builds a profile of a user's
+  interests, to show them more relevant ads. Recommended identifier to use: If your app uses an ID for ads and uploads
+  or publishes to Google Play, that ID must be the Advertising ID. Why this recommendation? This is an ads-related use
+  case which might require an ID that is available across your organization's different apps, so using an Advertising
+  ID is the most appropriate solution. Use of the Advertising ID is mandatory for advertising use cases, per the
+  Google Play Developer Content Policy, because the user can reset it. […] Measurement In this case, your app creates
+  a profile of a user based on their behavior across your organization's apps on the same device. Recommended
+  identifier to use: Advertising ID or Play install referrer APIs […] Conversions In this case, you're tracking
+  conversions to detect if your marketing strategy is successful. Recommended identifier to use: Advertising ID or
+  Play install referrer APIs […] Remarketing In this case, your app shows ads based on a user's previous interests.
+  Recommended identifier to use: Advertising ID […] Ad fraud In this case, your app checks that a user's impressions
+  and actions in your app are genuine and verifiable. Recommended identifier to use: Advertising ID

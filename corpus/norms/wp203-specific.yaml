@@ -1,16 +1,30 @@
 id: wp203-specific
-title: Opinion 03/2013 on purpose limitation (WP 203), on specific purposes
+title: Opinion 03/2013 on purpose limitation (WP 203), on specific purposes (pp. 15–16; WP29 under Directive 95/46/EC; not adopted by the EDPB, which notes that it may still be relevant as the wording of the principle is the same under the GDPR (Guidelines 4/2019, fn. 34))
 source: https://ec.europa.eu/justice/article-29/documentation/opinion-recommendation/files/2013/wp203_en.pdf
-retrieved: 2026-10-24
-verified: {by: Thomas Cory, date: 2026-10-24}
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
 kind: guideline
 about:
   requirements: [purpose_specific, purpose_specified]
+# Drafted 21 Nov 2026, to replace the passage of 24 Oct. Verbatim from the PDF (adopted 2 April 2013), section
+# III.1.1: the earlier passage's text (its "[...]" marked only a page break and footnote 32) and, after it, the
+# sentences that qualify it: in clear cases simple language is enough; precision does not mean length; an overall
+# purpose may cover related operations but must not justify remotely related ones. Footnote markers 33, 34, 35
+# and 39 removed. The title states the opinion's status, which the paper states in Sect. 2 and the model did not
+# see.
 text: >-
-  The purpose of the collection must be clearly and specifically identified: it must be detailed enough to determine 
-  what kind of processing is and is not included within the specified purpose, and to allow that compliance with the law 
-  can be assessed and data protection safeguards applied. [...] For these reasons, a purpose that is vague or general, 
-  such as for instance 'improving users' experience', 'marketing purposes', 'IT-security purposes' or 'future research' 
-  will - without more detail - usually not meet the criteria of being ‘specific’. That said, the degree of detail in 
-  which a purpose should be specified depends on the particular context in which the data are collected and the personal 
-  data involved.
+  The purpose of the collection must be clearly and specifically identified: it must be detailed enough to determine
+  what kind of processing is and is not included within the specified purpose, and to allow that compliance with the
+  law can be assessed and data protection safeguards applied. For these reasons, a purpose that is vague or general,
+  such as for instance 'improving users' experience', 'marketing purposes', 'IT-security purposes' or 'future
+  research' will - without more detail - usually not meet the criteria of being ‘specific’. That said, the degree of
+  detail in which a purpose should be specified depends on the particular context in which the data are collected and
+  the personal data involved. In some clear cases, simple language will be sufficient to provide appropriate
+  specification, while in other cases more detail may be required. The fact that the information must be precise does
+  not mean that longer, more detailed specifications are always necessary or helpful. Indeed, a detailed description
+  may at times even be counter-productive. This may particularly be the case if the written, detailed specifications
+  of purpose are overly legalistic and provide disclaimers rather than helpful information to data subjects and other
+  stakeholders. […] For ‘related’ processing operations, the concept of an overall purpose, under whose umbrella a
+  number of separate processing operations take place, can be useful. That said, controllers should avoid identifying
+  only one broad purpose in order to justify various further processing activities which are in fact only remotely
+  related to the actual initial purpose.

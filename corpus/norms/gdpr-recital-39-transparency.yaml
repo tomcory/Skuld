@@ -1,0 +1,21 @@
+id: gdpr-recital-39-transparency
+title: GDPR Recital 39, transparency and specific purposes
+source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+kind: norm
+about:
+  requirements: [purpose_specific]
+# Drafted 21 Nov 2026, new: sentences 3, 4 and 6 of Recital 39, which the passage gdpr-recital-39 (tagged only
+# data_minimised) leaves out: clear and plain language, information on the purposes, specific purposes determined
+# at collection. The frame cites Recital 39 (declaration_corresponds); WP260 quotes sentence 4 in fn. 34 to para. 36
+# (with "of natural persons" for the OJ's "of the natural persons"), and Recital 39 also in para. 6.
+# Checked against the OJ text from the Publications Office (Cellar) by a reviewer on 21 Nov, and gdpr-info.eu.
+text: >-
+  […] The principle of transparency requires that any information and communication relating to the processing of
+  those personal data be easily accessible and easy to understand, and that clear and plain language be used. That
+  principle concerns, in particular, information to the data subjects on the identity of the controller and the
+  purposes of the processing and further information to ensure fair and transparent processing in respect of the
+  natural persons concerned and their right to obtain confirmation and communication of personal data concerning them
+  which are being processed. […] In particular, the specific purposes for which personal data are processed should be
+  explicit and legitimate and determined at the time of the collection of the personal data. […]

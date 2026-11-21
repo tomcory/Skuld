@@ -1,0 +1,11 @@
+id: gdpr-art-5-1-c
+title: GDPR Article 5(1)(c), data minimisation
+source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
+retrieved: 2026-10-24
+verified: {by: Thomas Cory, date: 2026-10-24}
+kind: norm
+about:
+  requirements: [data_minimised]
+text: >-
+  Personal data shall be adequate, relevant and limited to what is necessary in relation to the purposes for which they 
+  are processed (‘data minimisation’).

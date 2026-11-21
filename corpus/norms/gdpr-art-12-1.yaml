@@ -1,0 +1,16 @@
+id: gdpr-art-12-1
+title: GDPR Article 12(1), the form of the information (concise, intelligible, clear and plain)
+source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+kind: norm
+about:
+  requirements: [purpose_specific]
+# Drafted 21 Nov 2026: the first sentence of Art. 12(1), from the EUR-Lex HTML of the OJ text (L 119, 4.5.2016),
+# read by a fetcher in segments; EUR-Lex refused a direct download. Check against the OJ before `verified`.
+# The paper (Table 1) and the frame (purpose_specific.provisions) ground the specificity question in Art. 12(1).
+text: >-
+  The controller shall take appropriate measures to provide any information referred to in Articles 13 and 14 and any
+  communication under Articles 15 to 22 and 34 relating to processing to the data subject in a concise, transparent,
+  intelligible and easily accessible form, using clear and plain language, in particular for any information addressed
+  specifically to a child. […]

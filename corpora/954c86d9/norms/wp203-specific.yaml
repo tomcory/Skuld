@@ -1,0 +1,16 @@
+id: wp203-specific
+title: Opinion 03/2013 on purpose limitation (WP 203), on specific purposes
+source: https://ec.europa.eu/justice/article-29/documentation/opinion-recommendation/files/2013/wp203_en.pdf
+retrieved: 2026-10-24
+verified: {by: Thomas Cory, date: 2026-10-24}
+kind: guideline
+about:
+  requirements: [purpose_specific, purpose_specified]
+text: >-
+  The purpose of the collection must be clearly and specifically identified: it must be detailed enough to determine 
+  what kind of processing is and is not included within the specified purpose, and to allow that compliance with the law 
+  can be assessed and data protection safeguards applied. [...] For these reasons, a purpose that is vague or general, 
+  such as for instance 'improving users' experience', 'marketing purposes', 'IT-security purposes' or 'future research' 
+  will - without more detail - usually not meet the criteria of being ‘specific’. That said, the degree of detail in 
+  which a purpose should be specified depends on the particular context in which the data are collected and the personal 
+  data involved.

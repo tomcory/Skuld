@@ -1,0 +1,14 @@
+id: gdpr-art-25-2
+title: GDPR Article 25(2), data protection by default
+source: https://eur-lex.europa.eu/eli/reg/2016/679/oj
+retrieved: 2026-10-24
+verified: {by: Thomas Cory, date: 2026-10-24}
+kind: norm
+about:
+  requirements: [data_minimised]
+text: >-
+  The controller shall implement appropriate technical and organisational measures for ensuring that, by default, only 
+  personal data which are necessary for each specific purpose of the processing are processed. That obligation applies 
+  to the amount of personal data collected, the extent of their processing, the period of their storage and their 
+  accessibility. In particular, such measures shall ensure that by default personal data are not made accessible without 
+  the individual’s intervention to an indefinite number of natural persons.
