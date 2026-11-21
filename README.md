@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.10.1.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.11.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -20,7 +20,11 @@ belongs to a proposition, never to a concern or a gap: a gap names the propositi
 structured next step (`next`: its kind, and for an audit request what the controller holds, `held`), and a proposition
 the observer's evidence settles completely never ends in an audit request (`skuld/gaps.py`); the run's scope settles a
 denial limited to a jurisdiction, a user group, a product or the user's consent where it can (`skuld/scope.py`); and
-stage 1 says where each purpose is achieved (`achieved_on`, device or server). Checked against the code on 2026-11-21.
+stage 1 says where each purpose is achieved (`achieved_on`, device or server). Since 0.11.0 (Ratatoskr 0.40.0) a
+deeper experimental case is run goal-directed (Loki's goal regime) and judged in its goal episode, a launcher-first
+launch is an invalid run made once more, a family may declare a control whose failure to break is a sensitivity
+failure of its oracle, the launch checks content by the application's store category (`launch@3`), and every model
+family proposes cases whose union is run once. Checked against the code on 2026-11-21.
 
 ## Role in Asgard
 
@@ -28,11 +32,12 @@ stage 1 says where each purpose is achieved (`achieved_on`, device or server). C
 |---|---|---|---|
 | reads | O's reports of the version: the exploration, baseline runs | `observation_report` | Verðandi |
 | reads | D's report of the version: derived documents, findings, open conditions | `declaration_report` (schema 4) | Urda |
-| reads | the exploration's records (screens), Loki's run folders of replays | `run.json`, `events.jsonl`, `captured_http_message`, … | Loki, Heimdall |
+| reads | the exploration's records (screens), Loki's run folders of replays and goal-directed runs | `run.json`, `events.jsonl`, `episodes.json`, `run_scope.json`, `captured_http_message`, … | Loki, Heimdall |
+| reads | the application's store category, for the launch's oracle | `store_listing` (via D's report or a Sága collection) | Sága, Urda |
 | reads | the normative frame, the corpus of norms and documentation | `normative_frame` (`gdpr-art5`); `corpus/` | Ratatoskr; Skuld |
 | writes | the assessment, E's report to the Investigator | `expectation_assessment` | Odin, the Investigator |
 | writes | the case report of the experiments: runs, verifications, comparisons | `expectation_report` | the assessment |
-| asks | replays of an exploration under interventions | Loki's configuration | Loki |
+| asks | replays of an exploration (the launch) and goal-directed runs (deeper cases) under interventions | Loki's configuration | Loki |
 
 Only Heimdall and Loki touch the device: Skuld asks Loki for runs through Loki's command line and reads the folders
 Loki writes. The expectation stage reads nothing of D. An assessment is fixed by digest and rebuilds identically from
@@ -83,11 +88,11 @@ skuld check workspaces/app@1.0       # every digest and pointer resolves, the as
 | `skuld review exclude <sample> <new folder> <workspaces…>` | a drawn sample without the units of applications withdrawn after the draw (`--application`, `--reason`) | a drawn sample | a new sample folder | no |
 | `skuld review expect-draw\|expect-score\|expect-agree <folder> …` | the reviewers' check of a sample of the expectation stage's predictions, blind to the model run: per practice its purposes (plausible, DPV node, beneficiary, role, citations) and stated dependencies (relationship, steps), judged against the stage's own context; agreement per question, purposes missed, two reviewers' κ | `assessment.json`, `expectation/`, the reviews | `sample.json`, `key.json`, `scores.json`, `agreement.json` | no |
 | `skuld check <ws>` | the provenance check and the rebuild, with the reading (`skuld.judge.reading`) and the notice definition (`ratatoskr.notices`; 1.1.0 if the report names none) the report names; a report made under earlier method versions is noted, not refused | the workspace | – (exit status) | no |
-| `skuld select <ws>` | chooses experiments, within the budget, in the order `inputs/chosen.yaml` gives; or lists the candidates or their groups | `assessment.json`, `inputs/chosen.yaml` | `inputs/selection.json`; with `--list` or `--groups` JSON lines on stdout | no |
-| `skuld propose <exploration>` | generates experimental cases from Loki's exploration and the catalogue | the exploration, `catalogue/` | a case workspace's inputs, `proposals/`, `manifests/propose_<time>.json` | yes |
+| `skuld select <ws>` | chooses experiments, within the budget, in the order `inputs/chosen.yaml` gives; with `--assessment <ws> …` the other assessments' choices join `inputs/chosen.yaml` first (reason `union`); or lists the candidates or their groups | `assessment.json`, `inputs/chosen.yaml`, the other assessments' `inputs/selection.json` | `inputs/selection.json`, `inputs/chosen.yaml`; with `--list` or `--groups` JSON lines on stdout | no |
+| `skuld propose <exploration>` | generates experimental cases from Loki's exploration and the catalogue: `--model <m>` one model's proposals, not fixed; `--merge` the union of every model's, identical cases merged with their proposers, fixed once; neither: the configuration's model, fixed at once | the exploration, `catalogue/`, the store listing | `proposals/<model>/`; with `--merge` a case workspace's inputs, `proposals/summary.json`; `manifests/propose_<time>.json` | yes (not `--merge` alone) |
 | `skuld freeze <ws>` | fixes inputs written by hand, by digest | `cases/` (the experimental cases), `oracles/` | `frozen.json` | no |
 | `skuld change <ws> <input>` | records a change of a fixed input | the input | `frozen.json` | no |
-| `skuld run <ws>` | the replays of each condition, through Loki, in rotated order; first the installed version (adb), which must be the recording's and the workspace's or stated compatible with them | the experimental cases, Loki's base configuration | `configs/`, `runs.jsonl`, Loki's run folders | no |
+| `skuld run <ws>` | the runs of each condition, through Loki, in rotated order: replays of the recording, or for `--case` with a path goal-directed runs (`loki crawl --goal`), its control among the conditions; a run whose launch decides invalid is made once more; first the installed version (adb), which must be the recording's and the workspace's or stated compatible with them | the experimental cases, Loki's base configuration | `configs/`, `runs.jsonl`, Loki's run folders | no |
 | `skuld analyse <ws>` | the case report of the experiments | the runs, Verðandi's reports, the oracles | `observation/`, `report.json`, `report.md` | no |
 | `skuld calibrate draw <dir> <ws>…` | draws a calibration sample for an expert's blind review; several workspaces of one application (one per model family) are merged across families | assessments | `<dir>/`: `sample.json`, `key.json`, `documents/`, `manifest.json` | no |
 | `skuld calibrate score <dir>` | error rates from the expert's decisions | `<dir>/reviews.json` | `<dir>/scores.json` | no |
@@ -108,11 +113,11 @@ Options (from `--help`):
 | `expect` | `--model` (default: the assessment's, else config.json's), `--api` (default: config's `client.api`), `--seeds …`, `--offline` (only the samples kept), `--corpus` (default: the one `assessment.yaml` names), `--registry` |
 | `judge` | `--model` (default: the assessment's, else config.json's), `--api` (default: config's `client.api`), `--seeds …`, `--question specificity\|compatibility\|minimisation …`, `--offline`, `--corpus` (default: the one `assessment.yaml` names), `--registry` |
 | `assess`, `check` | `--registry` |
-| `select` | `--replace` (replace a fixed selection, keeping it) or `--extend` (add to a fixed selection, keeping its choices; what an earlier budget refused is decided again), `--budget-seconds` (over config.json's), `--list` (the candidates as JSON lines: device time, eligible, could change; writes nothing), `--groups` (the candidates' groups, data type × purpose, as JSON lines) |
-| `propose` | `--pilot <pilot>` or `--workspace <folder>`, `--catalogue`, `--model`, `--api` (default: config's `client.api`), `--offline`, `--selection <selection.json>`, `--registry` |
+| `select` | `--replace` (replace a fixed selection, keeping it) or `--extend` (add to a fixed selection, keeping its choices; what an earlier budget refused is decided again), `--budget-seconds` (over config.json's), `--assessment <ws>` (repeatable: another model family's assessment whose selection's choices join `inputs/chosen.yaml`), `--list` (the candidates as JSON lines: device time, eligible, could change; writes nothing), `--groups` (the candidates' groups, data type × purpose, as JSON lines) |
+| `propose` | `--pilot <pilot>` or `--workspace <folder>`, `--catalogue`, `--model` (one model's proposals into `proposals/<model>/`, not fixed), `--merge` (the union, fixed), `--api` (default: config's `client.api`), `--offline`, `--selection <selection.json>`, `--listing <listing.json, Sága collection or D report>` or `--category <store category>` (default: the D report `assessment.yaml` names), `--registry` |
 | `freeze` | `--author` (required), `--model` (the author is a model), `--prompt` |
 | `change` | `--reason` (required) |
-| `run` | `--recorded <Loki run>`, `--config <Loki configuration>`, `--device <adb serial>` (all required), `--conditions …` (default `all`: baseline and every alternative of the workspace's experimental cases), `--repeat` (3), `--loki` (the sibling Loki), `--qualify` (one baseline replay first), `--case` (replay only up to the end of this experimental case's path), `--keep-going` (Loki goes on after an action it could not replay), `--json` (one JSON line per run) |
+| `run` | `--recorded <Loki run>`, `--config <Loki configuration>`, `--device <adb serial>` (all required), `--conditions …` (default `all`: baseline and every alternative of the workspace's experimental cases), `--repeat` (3), `--loki` (the sibling Loki), `--qualify` (one baseline run first), `--case` (the runs of this experimental case: goal-directed for a case with a path, the cold start for the launch; `all` conditions are its own and its control), `--replay` (with `--case`: replay up to the end of its path instead), `--max-duration` (a goal-directed run's cap, s), `--keep-going` (Loki goes on after an action it could not replay), `--json` (one JSON line per run) |
 | `analyse` | `--offline` (existing observation reports only) |
 | `calibrate` | `--per-stratum`, `--seed` (default: config.json's; draw only), `--registry` |
 | `review` | `--per-stratum`, `--per-run`, `--anchor`, `--seed`, `--step` (draw); `--prefix`, `--per-app` (expect-draw); `--reviewer` (export); `--application`, `--reason` (exclude) |
@@ -153,6 +158,38 @@ Verðandi 3.7.0 carries them into O's scope) settles a denial's own scope first:
 denial whose scope fails relates to no practice. Qualification reads "a gap whose next step is an audit request" for
 the result "not externally assessable" and the trigger `beyond_external_observability`.
 
+## Experiments
+
+Experiments are chosen by the assessments, proposed by every model family and run once (21 Nov 2026):
+
+```bash
+skuld select ws/gemma && skuld select ws/qwen                         # each family's own choice, within its budget
+skuld select ws/gemma --assessment ws/qwen --replace                  # the union: qwen's choices join (reason union)
+skuld propose <exploration> --workspace ws/gemma --model gemma4:31b --selection ws/gemma/inputs/selection.json
+skuld propose <exploration> --workspace ws/gemma --model qwen3.8:27b --selection ws/gemma/inputs/selection.json
+skuld propose <exploration> --workspace ws/gemma --merge              # one case per identical proposal, fixed once
+skuld run ws/gemma --recorded <exploration> --config <loki.yaml> --device <serial> --case launch --qualify
+skuld run ws/gemma --recorded <exploration> --config <loki.yaml> --device <serial> --case e4 --qualify
+skuld analyse ws/gemma
+```
+
+- **The launch** is a replay of the cold start. Its oracle (`launch@3`) wants the first screen of the app ready for
+  input and, by the application's store category, content: a temperature for a weather app, a search or a route for a
+  map app, documents or a scan for a scanner or productivity app (DE and EN texts); another category keeps
+  `launch@2`'s oracle. A launch that brought up the launcher or another app first is an invalid run
+  (`launcher_first`), dropped from both sides and made once more.
+- **A deeper case** (its feature has a path) is run goal-directed: `loki crawl <package> --goal "<feature>: <outcome>"
+  --goal-id <case> --max-duration 900`. Its oracles judge the goal episode, from its start to where Loki's agent said
+  it reached the feature; a window the oracle gives in the recording's actions is read against the case's path. The
+  agent's statement alone qualifies nothing: a run qualifies where the goal was reached and the oracle is met. A run
+  that did not reach the goal is no run of the feature; what it leaves uncompared is `requirements_not_reached`
+  (next step: explore), never a break. `--replay` replays the path as before.
+- **A control** (a family's `control: {intervention: network, expected: breaks}`: the forecast families, save-location,
+  the AI document families, `launch@3` for weather apps) is the condition `control` of `--case`, rotated with the
+  alternatives, and blocks every host the case's baseline runs contacted. Its outcome is in the case report's
+  `controls`, never a comparison or a claim; a control expected to break that preserves is a sensitivity failure of
+  the family's oracle, listed by family in `report.md` and `assessment.md`.
+
 ## Configuration
 
 `config.json`, laid over Ratatoskr's defaults (`ratatoskr/config.json`):
@@ -180,6 +217,7 @@ the result "not externally assessable" and the trigger `beyond_external_observab
 | `purpose_map` | none | invented purpose nodes mapped to the vocabulary's: a path (relative to the repository), or `{path, sha256}`, refused if the file's digest differs |
 | `experiments.budget_seconds` | 0 | device time for experiments; 0 is off |
 | `experiments.repeats`, `.run_seconds` | 3, 240 | runs per condition and a run's expected length, for the budget (`skuld run --repeat` sets the runs made) |
+| `experiments.goal_max_duration_s` | 900 | a goal-directed run's duration cap (`loki crawl --max-duration`): Loki's three attempts at the goal at a 27–31B model's pace; Loki adds its logout after the cap |
 | `calibration.per_stratum`, `.seed` | 10, 1 | units drawn per stratum; the draw's seed |
 | `judge.attempts.<question>` | 2 | how often a question is asked, the refusal given back; the last answer, refused or not, is read as far as it holds (no sample only where every attempt was cut off) |
 | `review.per_run`, `.floor`, `.anchor`, `.seed` | 70, 3, 0, 1 | the review of aggregated concerns: units per run, the least per stratum, units shown blind first, the draw's seed |
@@ -231,15 +269,19 @@ is the unit of qualification, and an experiment's case is an experimental case):
   assessment.json, assessment.md   the assessment (expectation_assessment)
   aggregate.json, aggregate.md     its concerns as aggregated concerns (expectation_aggregate; skuld/aggregate.py says how)
   inputs/selection.json            the choice of experiments, each choice and refusal with its reason
-  inputs/chosen.yaml               concerns or practices chosen first: pursued by the author, or in the calibration sample
+  inputs/chosen.yaml               concerns or practices chosen first: pursued by the author, in the calibration sample,
+                                   or chosen by another model family's assessment (union, with each selection's reason)
   workspace.yaml                   for experiments: the application, where its runs are, how Verðandi is called
                                    (verdandi) and with which annotators (verdandi_options, e.g. --model, --student)
-  cases/<case>.yaml                an experimental case: feature, purposes with requirements and oracle, components, search space
+  cases/<case>.yaml                an experimental case: feature, purposes with requirements and oracle, components, search
+                                   space; its family (with the store category it was filled for), control and proposers
   oracles/<id>@<v>.yaml            success and invalid conditions, measurements with direction and tolerance
   frozen.json                      every input's digest, when it was fixed, its author and its changes
-  proposals/                       the generator's prompts and answers per episode
-  configs/, runs.jsonl             Loki's configuration per condition; the runs, in order
-  qualification.json               the experimental cases the qualifying replay did not qualify, with why (not the assessment's
+  proposals/<model>/               a model's prompts and answers per episode, and its proposed cases (summary.json)
+  proposals/summary.json           the merged cases with their proposers, and the inputs fixed
+  configs/, runs.jsonl             Loki's configuration per condition; the runs, in order (a goal-directed run with its
+                                   regime and goal_id, a control run with control_of)
+  qualification.json               the experimental cases the qualifying run did not qualify, with why (not the assessment's
                                    qualification, which is in assessment.json)
   observation/<run>/               Verðandi's report of each run
   report.json, report.md           the case report (expectation_report)
@@ -269,7 +311,7 @@ generator's feature families; local until deployed), and a calibration sample's 
 ## Tests
 
 ```bash
-uv run pytest                     # 512 tests on 2026-11-21
+uv run pytest                     # 536 tests on 2026-11-21
 ruff format . && ruff check .
 ```
 
