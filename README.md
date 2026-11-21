@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.11.1.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.11.2.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -27,7 +27,7 @@ failure of its oracle, the launch checks content by the application's store cate
 family proposes cases whose union is run once. Since 0.11.1 a goal-directed control run that did not reach its goal
 is a break ("broken: goal not reached"), a control blocks the registrable domains of the baseline's hosts and reports
 a sensitivity failure only where the app tried a blocked host, and the catalogue refuses a slot with stray keys and
-offers no superseded family (`launch@4` and the review's new versions). Checked against the code on 2026-11-21.
+offers no superseded family (`launch@5` and the review's new versions). Checked against the code on 2026-11-21.
 
 ## Role in Asgard
 
@@ -176,20 +176,20 @@ skuld run ws/gemma --recorded <exploration> --config <loki.yaml> --device <seria
 skuld analyse ws/gemma
 ```
 
-- **The launch** is a replay of the cold start. Its oracle (`launch@4`) wants the first screen of the app ready for
-  input and, by the application's store category, more: a temperature for a weather app (a digit followed by the
-  degree sign, "0°" … "9°", which placeholders such as "--°" and unit choices such as "°C" are not; it reaches the
-  purpose's R3, the category's content), a search or a route for a map app (a stronger ready check, DE and EN texts);
-  another category, Productivity and Business among them since `launch@4`, keeps `first_screen_ready` alone. A launch that brought up the launcher or another app first is an invalid run
+- **The launch** is a replay of the cold start. Its oracle (`launch@5`) wants the first screen of the app ready for
+  input (`first_screen_ready`), for every store category. `launch@3` and `launch@4` also checked content by category (a
+  weather app's temperature, "0°" … "9°"); the live check of 21 Nov showed that a cold start with fresh data brings up
+  a weather app's welcome screen, not its forecast, so content is left to the deeper cases, run goal-directed. A
+  launch that brought up the launcher or another app first is an invalid run
   (`launcher_first`), dropped from both sides and made once more.
 - **A deeper case** (its feature has a path) is run goal-directed: `loki crawl <package> --goal "<feature>: <outcome>"
-  --goal-id <case> --max-duration 900`. Its oracles judge the goal episode, from its start to where Loki's agent said
-  it reached the feature; a window the oracle gives in the recording's actions is read against the case's path. The
+  --goal-id <case> --max-duration 900`. Its oracles judge the goal episode, from its start to its end with the screens
+  Loki records as it closes (the agent states the goal from its own screenshot, before Loki records that screen); a window the oracle gives in the recording's actions is read against the case's path. The
   agent's statement alone qualifies nothing: a run qualifies where the goal was reached and the oracle is met. A run
   that did not reach the goal is no run of the feature; what it leaves uncompared is `requirements_not_reached`
   (next step: explore), never a break, except in a control (below). `--replay` replays the path as before.
 - **A control** (a family's `control: {intervention: network, expected: breaks}`: the forecast families, save-location,
-  the AI document families, `launch@4` for weather apps) is the condition `control` of `--case`, rotated with the
+  the AI document families) is the condition `control` of `--case`, rotated with the
   alternatives, and blocks the registrable domain (eTLD+1, Ratatoskr's `registrable_domain`; Heimdall blocks a domain
   with its subdomains) of every host the case's baseline runs contacted, so that a failover or regional host of the
   same domain is blocked too (0.11.1; before, the exact hosts). Its outcome is in the case report's `controls`, never a
