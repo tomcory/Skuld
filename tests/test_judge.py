@@ -7,7 +7,7 @@ import re
 import pytest
 from ratatoskr.llm import LLMResponse, Provider
 
-from skuld import assessment, combine, corpus, expectation, inputs, judge
+from skuld import assessment, combine, corpus, expectation, gaps, inputs, judge
 from skuld.assess import assess
 from skuld.context import Context, ContextError
 from tests.test_expectation import PACKAGE, FakeModel, o_report, run_folder
@@ -568,7 +568,17 @@ class TypedJudge(FakeJudge):
                 "covers": {"verdict": "COVERS", "steps": [{"text": "met", "cites": ["H1", *facts[:1]]}]},
             }
 
-        answer = [alternative([{"property": "attribution by campaign", "cites": ["own knowledge"]}])]
+        # the models word one property differently from seed to seed (P10 trial finding 4): one gap, both as examples
+        asked = sum(f"[{practice}]" in p for p in self.prompts)
+        wording = ("attribution by campaign", "the campaign of the install")[(asked - 1) % 2]
+        answer = [
+            alternative(
+                [
+                    {"property": wording, "cites": ["own knowledge"]},
+                    {"property": "lasts until the app is removed", "kind": "persists", "cites": ["own knowledge"]},
+                ]
+            )
+        ]
         if facts:
             answer.append(
                 alternative([{"property": "reset by the user", "kind": "persists", "cites": facts[:1]}], "ON_DEVICE")
@@ -612,7 +622,8 @@ def test_a_minimisation_context_for_prompt_5_lists_no_admissible_replacements(wo
 def test_typed_alternatives_from_facts_end_to_end(tmp_path, capsys):
     """Minimisation prompt 5: the context gives a passage's readable facts as F parts after it (a fact whose quote the
     text lacks is left out), the typed answers read into claims with change, needs, gives and covers that the schema
-    takes, a give from own knowledge is a fact_missing gap that extends the corpus, and `skuld check` rebuilds it."""
+    takes, a give from own knowledge is a fact_missing gap that extends the corpus (gaps 3: one per node and kind, else
+    per node and change, its wordings kept as examples), and `skuld check` rebuilds it."""
     from skuld import cli
 
     a, built = make_workspace(
@@ -652,9 +663,23 @@ def test_typed_alternatives_from_facts_end_to_end(tmp_path, capsys):
         assert [n["id"] for n in c["needs"]] == [f"{c['id']}:N1"]
     missing = [g for g in report["gaps"] if g["reason"] == "fact_missing"]
     assert missing and all(g["next"]["kind"] == "extend_corpus" for g in missing)
-    assert {(g["fact"]["node"], g["fact"]["property"]) for g in missing} >= {
-        ("device-or-other-ids.advertising-id", "attribution by campaign")
-    }
+    # gaps 3: keyed by (node, kind), else by (node, change), the wordings of both seeds kept as examples
+    adid = "device-or-other-ids.advertising-id"
+    mine = {tuple(sorted((k, v) for k, v in g["fact"].items() if k != "examples")): g for g in missing}
+    by_change = mine[(("change", "remove"), ("node", adid))]
+    assert sorted(by_change["fact"]["examples"]) == ["attribution by campaign", "the campaign of the install"]
+    assert by_change["proposition"].startswith(f"the properties of {adid} that an alternative (remove) gives")
+    by_kind = mine[(("kind", "persists"), ("node", adid))]
+    assert by_kind["fact"]["examples"] == ["lasts until the app is removed"]
+    assert len([g for g in missing if g["fact"]["node"] == adid]) == 2  # not one per wording
+    assert all(len(g["fact"].get("examples", [])) <= gaps.EXAMPLES for g in missing)
+    from skuld.qualify import nextsteps
+
+    class Index:
+        concerns, claims, practices, requirements = {}, {}, {}, {}
+
+    assert nextsteps._gap_step(Index(), by_kind)["target"] == {"node": adid, "kind": "persists"}
+    assert nextsteps._gap_step(Index(), by_change)["target"] == {"node": adid, "change": "remove"}
     capsys.readouterr()
     code = cli.main(["check", str(a.root)])
     out = capsys.readouterr().out

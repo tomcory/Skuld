@@ -26,7 +26,10 @@ audit request (`check`, which refuses it).
                                    13(1)(c), 30) where the corpus holds the recipient's or actor's documentation
     fact_missing                   extend_corpus: a fact (corpus.py, `facts`) on the property of the node a typed
                                    alternative gives without documentation, then the minimisation question asked again;
-                                   never an audit request (Ratatoskr 0.41.0)
+                                   never an audit request (Ratatoskr 0.41.0). One gap per (node, kind) where the give
+                                   has a kind (`fact: {node, kind}`), else per (node, the claim's change key) (`fact:
+                                   {node, change}`), bearing on every claim that lacks it, with up to EXAMPLES of the
+                                   models' wordings of the property (`fact.examples`) for the corpus's author
     not_admitted                   experiment for a minimisation concern or a Dependency or Alternative claim (repeat
                                    the comparison), else re-analyse (the reasoning tier asked again)
     purpose_vague                  review
@@ -59,8 +62,13 @@ from ratatoskr.observability import COMPLETE, NONE, ORGANISATION, PARTIAL, RECOR
 from ratatoskr.observability import check as check_level
 
 #: 1 (21 Nov 2026): gaps bear on propositions and have a structured next step (Ratatoskr 0.39.0); 2 (21 Nov 2026, P10):
-#: the gap reason fact_missing (Ratatoskr 0.41.0), one gap per fact the corpus lacks, whose step extends the corpus
-VERSION = "2"
+#: the gap reason fact_missing (Ratatoskr 0.41.0), one gap per fact the corpus lacks, whose step extends the corpus; 3
+#: (21 Nov 2026, P10 trial finding 4): a fact_missing gap is keyed by the node and the kind, else by the node and the
+#: change, not by the model's wording of the property, which it keeps as examples (`fact.examples`), so that the gaps
+#: aggregate
+VERSION = "3"
+#: The wordings of a fact_missing gap's property kept as examples
+EXAMPLES = 5
 COMPONENT = {"role": "method", "id": "skuld.gaps", "version": VERSION}
 
 ACQUIRE, EXPLORE, EXPERIMENT, REANALYSE, EXTEND, REVIEW, INSTRUMENT, AUDIT = (
@@ -139,6 +147,41 @@ EXPERIMENTS = (
 PURPOSE_CLAIM = declare(PARTIAL, ORGANISATION, "what the controller pursues with the data is its own")
 ON_SERVERS = declare(NONE, RECORD, "a purpose achieved on servers: their configuration and logs")
 ON_DEVICE = declare(COMPLETE, None, "a purpose achieved on the device: what the device shows")
+
+
+def missing_facts(claim: dict, kinds: tuple[str, ...]) -> list[tuple[tuple, dict, str, list[str]]]:
+    """The facts a typed Alternative claim lacks (its sufficiency's `fact: <property> of <node>`, judge.typed), each as
+    (key, fact, what, wordings): keyed by the node and the kind where the property is one of `kinds` (`fact: {node,
+    kind}`), else by the node and the claim's change key (`fact: {node, change}`); the wordings are the model's of the
+    property (of a kind: the claim's ungrounded gives of that kind)."""
+    out = []
+    for missing in claim["sufficiency"].get("missing", []):
+        if not missing.startswith("fact: "):
+            continue
+        prop, _, node = missing.removeprefix("fact: ").rpartition(" of ")
+        if prop in kinds:
+            wordings = [
+                str(x.get("property") or "").strip()
+                for x in claim.get("gives") or ()
+                if not x.get("grounded") and x.get("kind") == prop
+            ]
+            out.append((("kind", node, prop), {"node": node, "kind": prop}, f"the {prop} of {node}", wordings))
+        else:
+            change = claim.get("change_key") or "a change"
+            what = f"the properties of {node} that an alternative ({change}) gives"
+            wordings = [prop] if prop and prop != "a property" else []
+            out.append((("change", node, change), {"node": node, "change": change}, what, wordings))
+    return out
+
+
+def examples(fact: dict, wordings: list[str]) -> None:
+    """Adds to a fact_missing gap's fact (`examples`) the wordings it does not hold yet, up to EXAMPLES."""
+    kept = fact.setdefault("examples", [])
+    for w in wordings:
+        if w and len(kept) < EXAMPLES and w not in kept:
+            kept.append(w)
+    if not kept:
+        del fact["examples"]
 
 
 class NextStepError(AssertionError):

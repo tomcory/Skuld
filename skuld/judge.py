@@ -70,7 +70,7 @@ and reading 5 reads an entry that carries `change` by the typed rule (`typed`), 
                  checked (gates b, c); a fact about a candidate replacement of the component's datum counts as about
                  the component for gate (b), since it documents the component's alternative, and its passage is the
                  one gate (c) reads; one that cites neither is a fact the fact base lacks (gap reason fact_missing,
-                 next step extend_corpus, keyed by the node and the property)
+                 next step extend_corpus, keyed by the node and the kind, else by the node and the change: gaps 3)
     covers       by rule where the change is a REPLACE, every need has a kind and a value, and the corpus's checked
                  facts give the replacement node a property of each kind (scope: the alternative's reaches the need's;
                  persists: the alternative's lasts at least as long; precision_m: the alternative's is at most the

@@ -55,7 +55,7 @@ from skuld import (
 )
 from skuld import scope as run_scope
 from skuld.common import DATA, PURPOSES, RECIPIENT_TYPES, vocabulary
-from skuld.corpus import NORMS
+from skuld.corpus import FACT_KINDS, NORMS
 from skuld.corpus import load as load_corpus
 from skuld.parties import load_registry
 
@@ -759,7 +759,8 @@ def _gaps(
         gaps.check(g, frame, by_id)
         out.append(g)
 
-    facts: dict[str, dict] = {}  # fact_missing gaps by the fact they name, each bearing on every claim that lacks it
+    # fact_missing gaps by (kind or change, node, its value), each bearing on every claim that lacks the fact
+    facts: dict[tuple, dict] = {}
 
     def of_claim(c: dict, requirements: list[str], reason: str | None = None) -> None:
         reason = reason or c["sufficiency"].get("reason") or "not_admitted"
@@ -785,29 +786,31 @@ def _gaps(
 
     def of_missing_facts(c: dict, requirements: list[str]) -> None:
         """A typed Alternative claim whose gives rest on no documentation (judge.typed): one gap per fact the fact base
-        lacks (`fact: <property> of <node>`), keyed by the node and the property, bearing on every claim that lacks it."""
+        lacks, keyed by the node and the kind where the give has one (`fact: {node, kind}`), else by the node and the
+        claim's change (`fact: {node, change}`), so that the claims and the models' wordings of one fact share one gap
+        (gaps 3). It bears on every claim that lacks it and keeps up to gaps.EXAMPLES of the wordings (`examples`)."""
         said = f"{c['type']} of {c['subject']} ({c.get('component')}): {c.get('alternative')}"
-        for missing in c["sufficiency"].get("missing", []):
-            if not missing.startswith("fact: "):
+        bear = gaps.bearing(f"claim:{c['id']}", said)
+        for key, fact, what, asked in gaps.missing_facts(c, FACT_KINDS):
+            node = fact["node"]
+            if key in facts:
+                g = facts[key]
+                if bear not in g["bears_on"]:
+                    g["bears_on"].append(bear)
+                gaps.examples(g["fact"], asked)
                 continue
-            prop, _, node = missing.removeprefix("fact: ").rpartition(" of ")
-            bear = gaps.bearing(f"claim:{c['id']}", said)
-            if missing in facts:
-                if bear not in facts[missing]["bears_on"]:
-                    facts[missing]["bears_on"].append(bear)
-                continue
-            what = f"the {prop} of {node}"
             gap(
                 c["subject"],
                 "fact_missing",
-                f"{what}, which an alternative gives",
+                f"{what}, which no fact of the corpus states",
                 f"a fact in a corpus passage: {what} (facts: about {node})",
                 [bear, *(requirement(r) for r in requirements)],
                 gaps.reason_step("fact_missing", what),
                 of=c["id"],
-                fact={"node": node, "property": prop},
+                fact=fact,
             )
-            facts[missing] = out[-1]
+            gaps.examples(fact, asked)
+            facts[key] = out[-1]
 
     for c in stated:
         for cid in c.condition:

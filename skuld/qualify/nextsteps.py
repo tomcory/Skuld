@@ -11,7 +11,8 @@ A gap's step is the gap's own next step (`next`, gaps.py: kind, and `held` for a
     experiment          skuld, through loki
     re-analyse          skuld
     extend_corpus       skuld (corpus), then the stage asked again; for fact_missing (a fact the corpus lacks), the
-                        target names its node and property, so that the claims lacking one fact share one step
+                        target names its node and kind, else its node and change (a gap of gaps 2: its node and
+                        property), so that the claims lacking one fact share one step
     review              a person
     improve_instrument  verdandi (a decoder, a hook for a payload it could not read), skuld (an oracle)
     audit_request       the provider, for what it holds: a record (an evidence-assisted audit) or its organisation's
@@ -38,12 +39,13 @@ from skuld.qualify.conditions import SOURCE
 from skuld.qualify.conditions import channel as source_channel
 from skuld.qualify.results import Con, View, result
 
-#: 6 (21 Nov 2026, P10): a fact_missing gap's step (extend_corpus) targets the fact's node and property, so that the
+#: 7 (21 Nov 2026, P10 trial finding 4): a fact_missing gap's step targets the fact's node and kind, else its node and
+#: change (gaps 3); 6 (21 Nov 2026, P10): a fact_missing gap's step (extend_corpus) targets the fact's node and property, so that the
 #: claims lacking one fact share one step; 5 (21 Nov 2026): a gap's step is its own next step (Ratatoskr 0.39.0: kind and held, improve_instrument), an open
 #: fact condition's steps follow from the levels of the propositions it bears on, no audit request by a level; 4 (21
 #: Nov 2026): the gap reason substitute_more_invasive (Ratatoskr 0.38.0) goes to a person's review; 3 (20 Nov 2026): the
 #: gap reason purpose_not_in_vocabulary (Ratatoskr 0.32.0) is re-analysed by Skuld
-VERSION = "6"
+VERSION = "7"
 COMPONENT = {"role": "method", "id": "skuld.qualify.nextsteps", "version": VERSION}
 
 KINDS = gap_steps.KINDS
@@ -130,9 +132,9 @@ def _gap_step(index, g: dict) -> dict:
     reason, of, kind = g["reason"], g.get("of"), nxt["kind"]
     by, target = BY[kind], {}
     concern, claim = index.concerns.get(of or ""), index.claims.get(of or "")
-    if reason == "fact_missing":  # a fact the corpus lacks, by its node and property: one step for every claim
+    if reason == "fact_missing":  # a fact the corpus lacks, by its node and kind (or change): one step for every claim
         fact = g.get("fact") or {}
-        target = {k: fact[k] for k in ("node", "property") if fact.get(k)}
+        target = {k: fact[k] for k in ("node", "kind", "change", "property") if fact.get(k)}
     elif reason == "own_knowledge":
         practice = of if of in index.practices else (claim or {}).get("subject")
         p = index.practices.get(practice or "")

@@ -359,3 +359,36 @@ def test_the_practice_lists_the_admissible_replacements_of_its_data_component():
     bad = {"alternatives": [entry(change={"kind": "REPLACE", "node": IDS + "device-model"})]}
     assert judge.refusals(q, _json(bad), [])
     assert judge.typed_gate_a({"kind": "replace", "node": IDS + "android-id"}, "D", SETID, data, True) == "gate_a_typed"
+
+
+def test_fact_gaps_are_keyed_by_node_and_kind_else_by_node_and_change():
+    """Gaps 3 (P10 trial finding 4): a fact_missing gap is keyed by (node, kind) where the give has a kind, else by
+    (node, the claim's change key), not by the model's wording, which it keeps as examples (at most gaps.EXAMPLES)."""
+    from skuld.corpus import FACT_KINDS
+
+    gives = [
+        {"property": "reset with the app", "kind": "persists", "cites": ["own knowledge"]},
+        {"property": "attribution by campaign", "cites": ["own knowledge"]},
+    ]
+    [c] = read(entry(gives=gives))
+    assert sorted(c["sufficiency"]["missing"]) == [
+        f"fact: attribution by campaign of {SETID}",
+        f"fact: persists of {SETID}",
+    ]
+    found = {key: (fact, what, said) for key, fact, what, said in gaps.missing_facts(c, FACT_KINDS)}
+    assert found[("kind", SETID, "persists")] == (
+        {"node": SETID, "kind": "persists"},
+        f"the persists of {SETID}",
+        ["reset with the app"],
+    )
+    assert found[("change", SETID, f"replace:{SETID}")] == (
+        {"node": SETID, "change": f"replace:{SETID}"},
+        f"the properties of {SETID} that an alternative (replace:{SETID}) gives",
+        ["attribution by campaign"],
+    )
+    fact = {"node": SETID, "change": "remove"}
+    gaps.examples(fact, [])
+    assert "examples" not in fact
+    gaps.examples(fact, ["a", "b", "a", ""])
+    gaps.examples(fact, [str(k) for k in range(9)])
+    assert fact["examples"] == ["a", "b", "0", "1", "2"] and len(fact["examples"]) == gaps.EXAMPLES
