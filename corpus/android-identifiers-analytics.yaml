@@ -3,6 +3,7 @@ title: Best practices for unique identifiers, analytics and app development (And
 source: https://developer.android.com/identity/user-data-ids
 retrieved: 2026-11-21
 verified: {by: Thomas Cory, date: 2026-11-21, note: "added or changed by the author's decision of 21 Nov (second round); each quoted segment checked against its source by script, in order, and by an independent review (corpora/adoption-2026-11-21.md)"}
+facts_verified: {by: Thomas Cory, date: 2026-11-21, note: "the facts, added by the author's decision of 21 Nov (P10, the fact base): each quote checked as a substring of the passage by skuld corpus check, and the values by an independent review (corpora/adoption-2026-11-21.md); the text and its verified record are unchanged"}
 # Drafted 21 Nov 2026: the use cases' headings as the page gives them, without the full stops the passage of 18 Nov
 # added; text otherwise unchanged.
 kind: platform
@@ -17,6 +18,20 @@ about:
 # paper's showcase alternative. An exception to the tagging rule (the excerpt does not name the Advertising ID);
 # the Android ID, which it does not name either, is left to the principles. Needs the node cap of 4 (Skuld 0.11.7).
 # Changed 21 Nov (author's decision): also tagged with the Advertising ID.
+# Facts added 21 Nov 2026 (author's decision, P10): the App Set ID across one organisation's apps (developer); the FID scoped to its app and ended by clearing data or reinstalling.
+facts:
+  - about: device-or-other-ids.app-set-id
+    kind: scope
+    value: developer
+    quote: "An App Set ID lets you analyze a user's behavior across multiple apps that your organization owns"
+  - about: device-or-other-ids.installation-id
+    kind: scope
+    value: app
+    quote: "An FID is scoped to the app that creates it"
+  - about: device-or-other-ids.installation-id
+    kind: persists
+    value: reinstall
+    quote: "the user can clear app data or reinstall the app"
 text: >-
   App analytics In this case, your app evaluates a user's behavior to help you determine the following: Which of
   your organization's other products or apps might be suitable for the user. How to keep users interested in using

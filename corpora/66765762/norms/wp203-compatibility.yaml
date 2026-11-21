@@ -1,0 +1,23 @@
+id: wp203-compatibility
+title: Opinion 03/2013 on purpose limitation (WP 203), on the assessment of compatibility (executive summary, p. 3; WP29 under Directive 95/46/EC; not adopted by the EDPB, which notes that it may still be relevant as the wording of the principle is the same under the GDPR (Guidelines 4/2019, fn. 34))
+source: https://ec.europa.eu/justice/article-29/documentation/opinion-recommendation/files/2013/wp203_en.pdf
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+kind: guideline
+authority: wp29
+# Drafted 21 Nov 2026: page and status in the title, and the sentence before the quotation, which the passage of 24 Oct left
+# out unmarked (a review of 21 Nov): further processing is not necessarily incompatible. Executive summary, p. 3;
+# p. 40 gives the same four factors with another lead-in.
+about:
+  requirements: [purpose_compatible]
+text: >-
+  Further processing for a different purpose does not necessarily mean that it is incompatible: compatibility needs
+  to be assessed on a case-by-case basis. A substantive compatibility assessment requires an assessment of all relevant circumstances. In particular, account 
+  should be taken of the following key factors:
+  - the relationship between the purposes for which the personal data have been collected and the purposes of further 
+  processing;
+  - the context in which the personal data have been collected and the reasonable expectations of the data subjects as 
+  to their further use;
+  - the nature of the personal data and the impact of the further processing on the data subjects;
+  - the safeguards adopted by the controller to ensure fair processing and to prevent any undue impact on the data 
+  subjects.

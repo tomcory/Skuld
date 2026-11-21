@@ -3,6 +3,7 @@ title: Advertising ID (Google Play Console Help)
 source: https://support.google.com/googleplay/android-developer/answer/6048248?hl=en
 retrieved: 2026-11-18
 verified: {by: Thomas Cory, date: 2026-11-18}
+facts_verified: {by: Thomas Cory, date: 2026-11-21, note: "the facts, added by the author's decision of 21 Nov (P10, the fact base): each quote checked as a substring of the passage by skuld corpus check, and the values by an independent review (corpora/adoption-2026-11-21.md); the text and its verified record are unchanged"}
 # Drafted 21 Nov 2026: the comment's count of sentences corrected (four, not three); text and verification unchanged.
 kind: platform
 about:
@@ -10,6 +11,12 @@ about:
   entities: []
 # Verbatim, four sentences of the section on the advertising ID; omissions marked […]. The page states no licence:
 # a short quotation for analysis (§ 51 UrhG), to confirm. The earlier version was in our own words.
+# Facts added 21 Nov 2026 (author's decision, P10): persists until the user resets it.
+facts:
+  - about: device-or-other-ids.advertising-id
+    kind: persists
+    value: reset
+    quote: "a unique, user-resettable, and user-deletable ID for advertising"
 text: >-
   The advertising ID is a unique, user-resettable, and user-deletable ID for advertising, provided by Google Play
   services. […] As part of Google Play services update in late 2021, the advertising ID will be removed when a user

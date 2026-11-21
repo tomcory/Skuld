@@ -1,0 +1,28 @@
+id: android-location-permissions
+title: Request location permissions (Android Developers)
+source: https://developer.android.com/develop/sensors-and-location/location/permissions
+retrieved: 2026-11-18
+verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+# Drafted 21 Nov 2026: the headings "Approximate" and "Precise" as the page gives them, without the full stops of the
+# passage of 18 Nov, and the manifest snippet verbatim and in the page's order, before "Accuracy" (its comments
+# stand above the permission each concerns; the earlier passage rearranged them as "ACCESS_COARSE_LOCATION: Always
+# include this permission" and put them last).
+kind: platform
+about:
+  nodes: [location.precise-location, location.approximate-location]
+  entities: []
+# Verbatim from the manifest example and, after it as on the page, the section "Accuracy" (page last updated
+# 2026-10-28);
+# omissions marked […]. location.coordinates lies below location.precise-location, so the tag covers it.
+text: >-
+  <!-- Always include this permission --> <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <!-- Include only if your app benefits from precise location access. --> <uses-permission
+  android:name="android.permission.ACCESS_FINE_LOCATION" /> […] Approximate Provides a device location estimate. If
+  this location estimate is from the LocationManagerService or FusedLocationProvider, this estimate is accurate to
+  within about 3 square kilometers (about 1.2 square miles). […] Precise Provides a device location estimate that is
+  as accurate as possible. If the location estimate is from LocationManagerService or FusedLocationProvider, this
+  estimate is usually within about 50 meters (160 feet) and is sometimes as accurate as within a few meters (10 feet)
+  or better. […] If the user grants the approximate location permission, your app only has access to approximate
+  location, regardless of which location permissions your app declares. Your app should still work when the user
+  grants only approximate location access. If a feature in your app absolutely requires access to precise location
+  using the ACCESS_FINE_LOCATION permission, you can ask the user to allow your app to access precise location.

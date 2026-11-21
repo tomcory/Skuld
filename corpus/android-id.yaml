@@ -3,12 +3,23 @@ title: Settings.Secure.ANDROID_ID (Android API reference)
 source: https://developer.android.com/reference/android/provider/Settings.Secure#ANDROID_ID
 retrieved: 2026-11-18
 verified: {by: Thomas Cory, date: 2026-11-18}
+facts_verified: {by: Thomas Cory, date: 2026-11-21, note: "the facts, added by the author's decision of 21 Nov (P10, the fact base): each quote checked as a substring of the passage by skuld corpus check, and the values by an independent review (corpora/adoption-2026-11-21.md); the text and its verified record are unchanged"}
 kind: platform
 about:
   nodes: [device-or-other-ids.android-id]
   entities: []
 # Verbatim from the constant's description (page last updated 2026-09-16); omissions marked […]. The facts on which
 # asgard-data 1.3.0 places the App set ID and the installation ID below the Android ID.
+# Facts added 21 Nov 2026 (author's decision, P10): scope developer (an app-signing key, i.e. one developer's apps signed alike, and the user); persists until a factory reset (android-id-reinstall: not on uninstall or reinstall).
+facts:
+  - about: device-or-other-ids.android-id
+    kind: scope
+    value: developer
+    quote: "Values of ANDROID_ID are scoped by signing key and user."
+  - about: device-or-other-ids.android-id
+    kind: persists
+    value: factory-reset
+    quote: "The value may change if a factory reset is performed on the device"
 text: >-
   On Android 8.0 (API level 26) and higher versions of the platform, a 64-bit number (expressed as a hexadecimal
   string), unique to each combination of app-signing key, user, and device. Values of ANDROID_ID are scoped by signing

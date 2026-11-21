@@ -1,0 +1,33 @@
+id: edpb-4-2019-minimisation
+title: EDPB Guidelines 4/2019 on Article 25 (version 2.0), data minimisation (paras. 74–76, p. 21)
+source: https://www.edpb.europa.eu/sites/default/files/files/file1/edpb_guidelines_201904_dataprotection_by_design_and_by_default_v2.0_en.pdf
+retrieved: 2026-11-21
+verified: {by: Thomas Cory, date: 2026-11-21, note: "added or changed by the author's decision of 21 Nov (second round); each quoted segment checked against its source by script, in order, and by an independent review (corpora/adoption-2026-11-21.md)"}
+kind: guideline
+authority: edpb
+about:
+  requirements: [data_minimised]
+# Drafted 21 Nov 2026: verbatim from the PDF (Version 2.0, adopted 20 October 2020), paras. 74 and 75 in full and
+# six of the ten elements of para. 76 (left out: access limitation, anonymisation and deletion, data
+# flow, state of the art, which concern the controller's internal processing); footnote marker 37 removed. The
+# paper cites paras. 74-76 for the test whether less, less detailed or aggregated data would suffice: Skuld's
+# alternatives (removal, coarsening, substitution). Para. 76's "Limitation" has no full stop in the source.
+# Changed 21 Nov (author's decision): the element "Relevance" added (the "relevant" limb of Art. 5(1)(c)).
+text: >-
+  Controllers should first of all determine whether they even need to process personal data for their relevant
+  purposes. The controller should verify whether the relevant purposes can be achieved by processing less personal
+  data, or having less detailed or aggregated personal data or without having to process personal data at all. Such
+  verification should take place before any processing takes place, but could also be carried out at any point during
+  the processing lifecycle. This is also consistent with Article 11. Minimising can also refer to the degree of
+  identification. If the purpose of the processing does not require the final set of data to refer to an identified or
+  identifiable individual (such as in statistics), but the initial processing does (e.g. before data aggregation),
+  then the controller shall delete or anonymize personal data as soon as identification is no longer needed. Or, if
+  continued identification is needed for other processing activities, personal data should be pseudonymized to
+  mitigate risks for the data subjects’ rights. Key design and default data minimisation elements may include: Data
+  avoidance – Avoid processing personal data altogether when this is possible for the relevant purpose. Limitation –
+  Limit the amount of personal data collected to what is necessary for the purpose […] Relevance – Personal data
+  should be relevant to the processing in question, and the controller should be able to demonstrate this relevance.
+  Necessity – Each personal data category shall be necessary for the specified purposes and should only be processed
+  if it is not possible to fulfil the purpose by other means. Aggregation – Use aggregated data when possible.
+  Pseudonymization – Pseudonymize personal data as soon as it is no longer necessary to have directly identifiable
+  personal data, and store identification keys separately. […]

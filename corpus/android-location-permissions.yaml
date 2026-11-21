@@ -3,6 +3,7 @@ title: Request location permissions (Android Developers)
 source: https://developer.android.com/develop/sensors-and-location/location/permissions
 retrieved: 2026-11-18
 verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+facts_verified: {by: Thomas Cory, date: 2026-11-21, note: "the facts, added by the author's decision of 21 Nov (P10, the fact base): each quote checked as a substring of the passage by skuld corpus check, and the values by an independent review (corpora/adoption-2026-11-21.md); the text and its verified record are unchanged"}
 # Drafted 21 Nov 2026: the headings "Approximate" and "Precise" as the page gives them, without the full stops of the
 # passage of 18 Nov, and the manifest snippet verbatim and in the page's order, before "Accuracy" (its comments
 # stand above the permission each concerns; the earlier passage rearranged them as "ACCESS_COARSE_LOCATION: Always
@@ -14,6 +15,16 @@ about:
 # Verbatim from the manifest example and, after it as on the page, the section "Accuracy" (page last updated
 # 2026-10-28);
 # omissions marked […]. location.coordinates lies below location.precise-location, so the tag covers it.
+# Facts added 21 Nov 2026 (author's decision, P10): precision in metres: approximate 977, the radius of a disc of 3 km² (the page's "about 3 square kilometers"); precise 50.
+facts:
+  - about: location.approximate-location
+    kind: precision_m
+    value: 1954
+    quote: "this estimate is accurate to within about 3 square kilometers"
+  - about: location.precise-location
+    kind: precision_m
+    value: 50
+    quote: "this estimate is usually within about 50 meters"
 text: >-
   <!-- Always include this permission --> <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
   <!-- Include only if your app benefits from precise location access. --> <uses-permission

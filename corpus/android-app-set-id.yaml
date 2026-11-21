@@ -3,6 +3,7 @@ title: App set ID (Android Developers)
 source: https://developer.android.com/identity/app-set-id
 retrieved: 2026-11-21
 verified: {by: Thomas Cory, date: 2026-11-21, note: "accepted on the drafts of 21 Nov, each quoted segment checked against its source by script, in order, and three independent reviews (corpora/adoption-2026-11-21.md)"}
+facts_verified: {by: Thomas Cory, date: 2026-11-21, note: "the facts, added by the author's decision of 21 Nov (P10, the fact base): each quote checked as a substring of the passage by skuld corpus check, and the values by an independent review (corpora/adoption-2026-11-21.md); the text and its verified record are unchanged"}
 kind: platform
 about:
   nodes: [device-or-other-ids.app-set-id]
@@ -10,6 +11,16 @@ about:
 # Drafted 21 Nov 2026: verbatim from the page (last updated 2026-11-09); omissions marked […]. Licence: the
 # Android Developers licence (developer.android.com/license: documentation under Apache 2.0, to confirm). What the scope and resets of the App set ID are: it is the
 # alternative android-identifiers-analytics names for analytics across one developer's apps.
+# Facts added 21 Nov 2026 (author's decision, P10): scope developer; persists until the last app of the developer's set is uninstalled (reinstall, the nearest value).
+facts:
+  - about: device-or-other-ids.app-set-id
+    kind: scope
+    value: developer
+    quote: "an ID scoped to the set of apps published under the same Google Play developer account"
+  - about: device-or-other-ids.app-set-id
+    kind: persists
+    value: reinstall
+    quote: "The last app from a given set of apps is uninstalled from the device."
 text: >-
   For use cases such as analytics or fraud prevention on a given device, you might need to correlate usage or actions
   across a set of apps owned by your organization. Google Play services offers a privacy-friendly option called app
