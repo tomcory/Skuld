@@ -4,12 +4,13 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.11.8.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.12.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
 (`skuld select`, `propose`, `run`, `analyse`), the provenance check (`skuld check`) and the calibration against an
-expert (`skuld calibrate`). Not built: the reasoning tier's argument form (P10). The model is E's technical report
+expert (`skuld calibrate`). Not built: P10's predicted comparisons, and typed forms for stage 1's dependencies, for
+compatibility and for specificity (after the paper, with P7's calibration). The model is E's technical report
 ([`ODE/expectation/expectation.tex`](../ODE/expectation/expectation.tex), version 0.9); the plan and its history,
 [`plan/archive/SKULD_REDESIGN_PLAN.md`](../plan/archive/SKULD_REDESIGN_PLAN.md). How Skuld works is in
 [`docs/architecture.md`](docs/architecture.md). Since 0.8.0 (Ratatoskr 0.34.0) a result's uncertainty is one level
@@ -33,13 +34,28 @@ retrieved for, which alone it documents (prompts expectation 8). Since 0.11.7 a 
 passages (`PER_NODE`; its recipient up to three, `PER_ENTITY`), a requirement's norms are given by authority (the
 GDPR, then the EDPB, then WP29: each norm passage states its `authority`), and `skuld describe` refuses O's report of
 a run under an intervention: the subjects come from the exploration and baseline runs only (Q9, confirmed with Q1 and
-Q8 by the author on 21 Nov 2026). From 0.12.0 (P10, not yet released) the minimisation question asks for typed
-arguments (prompt 5): each alternative names its change (REMOVE, REPLACE by a data node, ON_DEVICE,
-NARROWER_RECIPIENT), what the purpose needs (cited to screens or purposes), what the alternative gives (cited to
-documentation or to the corpus's facts, F parts) and whether that covers the needs; covers is decided by rule where the
-corpus's facts give the replacement a property of each kind needed (scope, persists, precision_m), otherwise by the
-model (`covers_by_model`), and a property given from own knowledge is a `fact_missing` gap (`skuld/judge.py`,
-`typed`). Checked against the code on 2026-11-21.
+Q8 by the author on 21 Nov 2026). Since 0.12.0 (P10, Ratatoskr 0.41.0;
+[`plan/p10-argument-form.md`](../plan/p10-argument-form.md)) the reasoning tier argues minimisation in a typed form:
+- **Screens in the minimisation context** (prompt 4): the screens (S) of the practice's episodes, from which what a
+  purpose needs may be read.
+- **Typed arguments** (prompt 5, judge reading 5): each alternative names its change (REMOVE, REPLACE by a data node,
+  ON_DEVICE, NARROWER_RECIPIENT), what the purpose needs (cited to screens or purposes), what the alternative gives
+  (cited to documentation or to the corpus's facts, F parts: a passage's `facts`, and those of every candidate
+  replacement of the datum) and whether that covers the needs. Covers is decided by rule where the facts give the
+  replacement a property of each kind needed (scope, persists, precision_m), otherwise by the model
+  (`covers_by_model`); a property given from own knowledge is a `fact_missing` gap that extends the corpus.
+- **Combination per change** (combine 7): alternatives are combined per change as well as per component, so that
+  gate (d) counts the samples that propose the same change.
+- **Traffic is no grounding for need** (expectation 9, reading 5): a dependency step that cites only the observed
+  traffic grounds neither ESSENTIAL nor QUALITY_DEPENDENT.
+- **Specificity v3:** lawfulness and the legal basis are not assessed by the specificity question.
+- **Requirements shared with experiments** (select 5, generator 4, propose 3, combine 8): a need has a stable id
+  (`<claim>:N<k>`), the generator shows the chosen practices' needs and a case's requirement names the need it
+  corresponds to (`need`); an oracle that reaches it tests the need (`tested: {case, outcome, runs}`), and a run
+  outranks the documents: a need not met refutes the Alternative claim at strength run, every need met demonstrates
+  it.
+
+Checked against the code on 2026-11-21.
 
 ## Role in Asgard
 
@@ -345,7 +361,7 @@ generator's feature families, committed, with their reviews in `catalogue/review
 ## Tests
 
 ```bash
-uv run pytest                     # 574 tests on 2026-11-21
+uv run pytest                     # 601 passed, 3 skipped on 2026-11-21
 ruff format . && ruff check .
 ```
 
