@@ -155,8 +155,9 @@ def build(
 ) -> tuple[dict, list[dict]]:
     """The report, and the claims its combined claims combine (`of`): the samples' and the experiments'. `reading`
     is the version of the reasoning tier's reading (judge.READINGS), `notices` the version of Ratatoskr's notice
-    definition the stage-1 contexts leave notice screens out by, `expectation_reading` the version of the expectation
-    stage's reading (expectation.READINGS); a rebuild passes the ones its report names."""
+    definition the stage-1 contexts (and from minimisation prompt 4 the minimisation contexts) leave notice screens
+    out by, `expectation_reading` the version of the expectation stage's reading (expectation.READINGS); a rebuild
+    passes the ones its report names."""
     judge.reading_component(reading)
     expectation.reading_component(expectation_reading)
     notice_rules.component(notices)
@@ -232,7 +233,7 @@ def build(
     )
     hypotheses = combine.hypotheses(stage1, number)
     applicability = frame.applicability(a.frame, decided)
-    tier = _reasoning_tier(a, built, hypotheses, item, registry, applicability, number, reading)
+    tier = _reasoning_tier(a, built, hypotheses, item, registry, applicability, number, reading, notices)
     premises = experiments.premises(a.cases, root, built.practices, item)
     tested = combine.experimental(hypotheses, premises, purposes, number)
     more, cover = concerns.less_invasive_alternative(
@@ -565,6 +566,7 @@ def _reasoning_tier(
     applicability,
     number,
     reading: str = judge.READING,
+    notices: str | None = None,
 ) -> dict:
     """The reasoning tier's combined Alternative claims, its concerns (ii) and (iv) and their coverage from its kept
     samples, the samples' components, and the questions expected but not asked."""
@@ -577,7 +579,7 @@ def _reasoning_tier(
     specific, compatible, members, judged, asked = [], [], [], set(), {q: 0 for q in judge.QUESTIONS}
     minimisation_samples: dict[str, set[str]] = {}  # per practice, the kept samples of its question (gate d)
     for name, q, answer in judge.kept(
-        a, built, corpus, norms, hypotheses, factors, expectation.names(registry), reading
+        a, built, corpus, norms, hypotheses, factors, expectation.names(registry), reading, notices
     ):
         record = json.loads((a.root / name / "record.json").read_text(encoding="utf-8"))
         _record_components(components, record, "assessment")
@@ -620,7 +622,10 @@ def _reasoning_tier(
         stated += more
         covered += cover
     expected = {
-        q.question for q in judge.questions(a, built, corpus, norms, hypotheses, expectation.names(registry), vague)
+        q.question
+        for q in judge.questions(
+            a, built, corpus, norms, hypotheses, expectation.names(registry), vague, notices=notices
+        )
     }
     return {
         "alternatives": combine.alternatives(members, number, minimisation_samples if judge.gated(reading) else None),

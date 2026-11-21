@@ -421,3 +421,55 @@ def test_check_reports_a_folder_with_nothing_to_check_and_an_assessment_not_yet_
     a, _ = workspace
     assert cli.main(["check", str(a.root)]) == 1  # assessment.yaml, but no assessment.json yet
     assert "assessment.json: absent" in capsys.readouterr().out
+
+
+def test_a_minimisation_context_holds_the_screens_of_the_practices_episodes_without_notices(workspace, monkeypatch):
+    """P10 fix 1 (minimisation prompt 4): what a purpose needs may be read from the screens, which stage 1's batches give
+    (the consent dialog and the sign-up form's policy line left out); a context for prompt 3 holds none."""
+    from skuld import config, templates
+    from tests.test_expectation import CONSENT
+
+    a, built = workspace
+    found, norms, hypotheses = tools(a, built)
+    by_data = {p.data: p.id for p in built.practices}
+
+    def minimisation():
+        return {
+            q.subject: q for q in judge.questions(a, built, found, norms, hypotheses) if q.question == "minimisation"
+        }
+
+    assert templates.version("minimisation") == "4"
+    questions = minimisation()
+    launch = questions[by_data["device-or-other-ids.advertising-id"]].context
+    screens = [p for p in launch.parts if p["kind"] == "screen"]
+    assert [p["id"] for p in screens] == ["S1", "S2", "S3"]
+    assert [p["text"] for p in screens] == [
+        "Welcome | Start your first workout",
+        "Create account | Email address",
+        "Your plan | Week 1: three sessions",
+    ]
+    assert all(
+        p["provenance"] == [{"origin": "run", "record": p["provenance"][0]["record"], "run": "run-1"}] for p in screens
+    )
+    assert screens[0]["provenance"][0]["record"] == "events.jsonl#screen/s-home"
+    rendered = judge.render(launch)
+    assert "## Screens of the episodes where the practice occurred" in rendered
+    assert CONSENT[0] not in rendered and "Privacy Policy" not in rendered
+    episode = questions[by_data["app-activity.app-interactions"]].context
+    assert [p["text"] for p in episode.parts if p["kind"] == "screen"] == ["Your plan | Week 1: three sessions"]
+    # gate 1 refuses a notice screen in a stage-2 context, as in stage 1
+    notice = {
+        "id": "S9",
+        "kind": "screen",
+        "text": " | ".join(CONSENT),
+        "provenance": [{"origin": "run", "record": "x"}],
+    }
+    with pytest.raises(ContextError, match="notice"):
+        judge.check(Context(launch.parts + (notice,)))
+    # at most MAX_SCREENS
+    monkeypatch.setattr(expectation, "MAX_SCREENS", 2)
+    assert len([p for p in minimisation()[launch.parts[1]["id"]].context.parts if p["kind"] == "screen"]) == 2
+    # a profile pinning minimisation prompt 3 gets the context without screens, so that its samples are found again
+    loaded = dict(config.load())
+    monkeypatch.setattr(config, "load", lambda: {**loaded, "prompts": {"minimisation": "3"}})
+    assert not [p for q in minimisation().values() for p in q.context.parts if p["kind"] == "screen"]

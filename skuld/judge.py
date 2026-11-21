@@ -35,6 +35,10 @@ concerns:
                    person (`verified: {by, date}`). Otherwise the alternative is plausible and not established, with
                    the gate as its reason; gate (d), a majority of the question's samples, is the combination's
                    (combine.alternatives)
+
+From minimisation prompt version 4 (SCREENS_SINCE) a minimisation context also holds the screens of the episodes the
+practice occurred in, as stage 1's batches give them, notices left out (`screens_of`), so that what a purpose needs may
+be read from the application.
 """
 
 import json
@@ -143,7 +147,12 @@ KINDS = {
     "hypothesis": ("expectation",),
     "declaration": ("d_report",),
     "passage": ("corpus",),
+    "screen": ("run",),
 }
+#: The first minimisation prompt version whose context holds the screens of the practice's episodes (P10 fix 1, 21 Nov
+#: 2026): what a purpose needs may be read from them. Contexts for an earlier version (a profile's `prompts`) hold none,
+#: so that the samples asked with it are found again
+SCREENS_SINCE = 4
 #: Statements per specificity batch, characters of the sentence a statement is quoted with
 BATCH, SENTENCE = 20, 400
 ATTEMPTS = 2
@@ -447,6 +456,29 @@ def _hypothesis(pid: str, text: str, claim: dict) -> dict:
     return _part(pid, "hypothesis", text, ("expectation", claim["id"]))
 
 
+def screens_of(a: Assessment, subjects: Subjects, notices: str | None = None) -> dict[str, list[tuple]]:
+    """Per practice, the screens of its episodes as the expectation stage's batches give them (expectation.batches:
+    the episode's in the first run that has them, notices left out by the notice definition in version `notices`),
+    as (run, screen id, text), each screen once (by run and id, and by text), at most expectation.MAX_SCREENS."""
+    out: dict[str, list[tuple]] = {}
+    for batch in expectation.batches(a, subjects, notices):
+        for p in batch.practices:
+            mine = out.setdefault(p.id, [])
+            for sid, text in batch.screens:
+                if len(mine) < expectation.MAX_SCREENS and not any(
+                    (r, s) == (batch.run, sid) or x == text for r, s, x in mine
+                ):
+                    mine.append((batch.run, sid, text))
+    return out
+
+
+def _screens(screens: list[tuple]) -> list[dict]:
+    return [
+        _part(f"S{n}", "screen", text, ("run", f"events.jsonl#screen/{sid}"), run)
+        for n, (run, sid, text) in enumerate(screens, 1)
+    ]
+
+
 def _passages(passages, prefix: str, folder: str = "") -> list[dict]:
     return [
         _part(f"{prefix}{n}", "passage", f"{p.title} ({p.source}): {p.text}", ("corpus", f"{folder}{p.path.name}"))
@@ -463,9 +495,12 @@ def questions(
     names: dict[str, str] | None = None,
     vague: frozenset = frozenset(),
     kinds: tuple[str, ...] = QUESTIONS,
+    notices: str | None = None,
 ) -> list[Question]:
     """The questions of the reasoning tier for an assessment, each with its context, of the `kinds` asked for; the
-    declarations in `vague` specify no purpose for the compatibility questions."""
+    declarations in `vague` specify no purpose for the compatibility questions. From minimisation prompt version
+    SCREENS_SINCE a minimisation context holds the screens of the practice's episodes (`screens_of`, notices left out
+    by the notice definition in version `notices`, default expectation.NOTICES)."""
     names = names or {}
     data, purposes = vocabulary(DATA), vocabulary(PURPOSES)
     out = []
@@ -518,6 +553,11 @@ def questions(
                 )
             )
 
+    shown = (
+        screens_of(a, subjects, notices)
+        if MINIMISATION in kinds and supported and int(templates.version(MINIMISATION)) >= SCREENS_SINCE
+        else {}
+    )
     for p in subjects.practices if MINIMISATION in kinds else ():
         mine = [h for h in supported if h["subject"] == p.id]
         if not mine:
@@ -526,6 +566,7 @@ def questions(
         for k, h in enumerate(mine, 1):
             parts.append(_hypothesis(f"H{k}", _purpose_text(h["purpose"]), h))
             hyp[f"H{k}"] = h["id"]
+        parts += _screens(shown.get(p.id, []))
         documentation = []
         for kind, value in expectation.components(p).values():
             for passage in corpus.about(value, None, data) if kind == "D" else corpus.about(None, value, data):
@@ -536,7 +577,7 @@ def questions(
             Question(
                 MINIMISATION,
                 p.id,
-                _checked(parts),
+                _checked(parts, notices),
                 [],
                 {"practice": p.id, "components": list(expectation.components(p)), "purposes": hyp},
             )
@@ -548,21 +589,27 @@ def procedure(question: str) -> dict:
     return {"id": "skuld.judge", "version": templates.version(question)}
 
 
-def _checked(parts: list[dict]) -> Context:
+def _checked(parts: list[dict], notices: str | None = None) -> Context:
     context = Context(tuple(parts))
-    check(context)
+    check(context, notices)
     return context
 
 
-def check(context: Context) -> None:
-    """Gate 1 for stage 2: a part of D's report only as a declaration, marked as such; no other kind or origin."""
+def check(context: Context, notices: str | None = None) -> None:
+    """Gate 1 for stage 2: a part of D's report only as a declaration, marked as such; no other kind or origin; a
+    screen that is no notice (by the notice definition in version `notices`, default expectation.NOTICES), as in
+    stage 1."""
     ctx.check(context, KINDS, "stage 2")
+    for p in context.parts:
+        if p["kind"] == "screen" and expectation.classify(p["text"].split(" | "), notices or expectation.NOTICES):
+            raise ContextError(f"{p['id']}: a notice screen is not given to stage 2")
 
 
 SECTIONS = [
     ("The application", "application"),
     ("Practices observed", "practice"),
     ("Hypotheses of the expectation stage", "hypothesis"),
+    ("Screens of the episodes where the practice occurred", "screen"),
     ("Declarations of the provider", "declaration"),
     ("Documentation and norms", "passage"),
 ]
@@ -646,10 +693,12 @@ def judge(
     names: dict[str, str] | None = None,
     only: tuple[str, ...] = QUESTIONS,
     reading: str = READING,
+    notices: str | None = None,
 ) -> list[tuple[Question, ask.Sample]]:
     """The samples of the reasoning tier: per question and seed, kept or asked, as many at a time as the server
     takes. From reading 2 the specificity samples come first: a declared purpose they judge not specific specifies
-    nothing, so the compatibility questions are formed only after them."""
+    nothing, so the compatibility questions are formed only after them. `notices`: the notice definition's version
+    the minimisation contexts leave notice screens out by (`questions`)."""
     seeds = seeds or config.load()["assessment"]["seeds"]
     think = config.load()["assessment"].get("think")
     model = model or a.models.get("assessment") or a.models["expectation"]
@@ -662,13 +711,13 @@ def judge(
             [j for q, sample in specific for j in specificity(_answer(sample), _name(a, sample), q) if sample.text]
         )
         rest = questions(
-            a, subjects, corpus, norms, hypotheses, names, vague, tuple(q for q in only if q != SPECIFICITY)
+            a, subjects, corpus, norms, hypotheses, names, vague, tuple(q for q in only if q != SPECIFICITY), notices
         )
         out = (specific if SPECIFICITY in only else []) + _samples(
             a, rest, factors, seeds, think, model, api, offline, provider, corpus, norms
         )
     else:
-        qs = questions(a, subjects, corpus, norms, hypotheses, names, kinds=only)
+        qs = questions(a, subjects, corpus, norms, hypotheses, names, kinds=only, notices=notices)
         out = _samples(a, qs, factors, seeds, think, model, api, offline, provider, corpus, norms)
     if not offline:
         current = {a.root / "assessment" / q.question / q.subject for q, _ in out}
@@ -755,10 +804,13 @@ def kept(
     factors: list[str],
     names: dict[str, str] | None = None,
     reading: str = READING,
+    notices: str | None = None,
 ) -> list[tuple[str, Question, dict]]:
     """The kept samples of the current questions: (sample name, question, answer), without asking."""
     out = []
-    for q, sample in judge(a, subjects, corpus, norms, hypotheses, factors, offline=True, names=names, reading=reading):
+    for q, sample in judge(
+        a, subjects, corpus, norms, hypotheses, factors, offline=True, names=names, reading=reading, notices=notices
+    ):
         if sample.text is not None:
             out.append((_name(a, sample), q, _answer(sample)))
     return out
@@ -1145,10 +1197,10 @@ def independent(root: Path, report: dict) -> list[str]:
     assessment-stage claim or a minimisation concern is one of D's. A concern that a purpose is not compatible may
     rest on what D specified; that one is compatible is never stated, and its steps citing declarations are dropped
     by the reading."""
-    problems = []
+    problems, notices = [], expectation.notices_of(report)
     for path in sorted((root / "assessment").rglob("context.json")):  # later attempts' too (s<seed>/a<n>/)
         try:
-            check(Context(tuple(json.loads(path.read_text(encoding="utf-8"))["parts"])))
+            check(Context(tuple(json.loads(path.read_text(encoding="utf-8"))["parts"])), notices)
         except ContextError as e:
             problems.append(f"{path.parent.relative_to(root)}: {e}")
     items = {e["id"]: e for e in report.get("evidence", [])}

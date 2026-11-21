@@ -17,7 +17,9 @@ version is part of every sample's identity, and so is the digest of its text.
                                           whether its action, object and outcome determine which processing it includes
                                           (P10, 21 Nov 2026); 2: the context last; 1 before
     compatibility                       2: the context last; 1 before
-    minimisation                        3: the context last, and "list no entry for it" where a component admits no
+    minimisation                        4: the context holds the screens (S) of the practice's episodes, from which what
+                                          a purpose needs may be read (judge.SCREENS_SINCE; P10, 21 Nov 2026); 3: the
+                                          context last, and "list no entry for it" where a component admits no
                                           alternative, which the models wrote as "none" (2: "give none for it")
     propose                             2: the context (the flow) last, the answer's form before it; the generator's
                                           version (propose.VERSION) names the prompt with the procedure
@@ -32,7 +34,7 @@ CURRENT = {
     "expectation_traffic": "9",
     "specificity": "3",
     "compatibility": "2",
-    "minimisation": "3",
+    "minimisation": "4",
     "propose": "2",
 }
 
