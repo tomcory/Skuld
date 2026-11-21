@@ -107,10 +107,18 @@ def test_an_invalid_launch_is_made_once_more_only(tmp_path):
 # -- controls ---------------------------------------------------------------------------------------------------------
 
 
-def controlled(root: Path, control_done: bool) -> Path:
-    """The synthetic workspace with a control declared, and three control runs blocking the app's host; their screens
-    show the outcome (`control_done`) or not. Fixed before the runs."""
-    edit(root, "cases/start.yaml", lambda c: c.update(control=CONTROL, family={"id": "launch", "version": 3}))
+def controlled(
+    root: Path, control_done: bool, block: tuple[str, ...] = ("app.example", "t.tracker.example"), path=None
+) -> Path:
+    """The synthetic workspace with a control declared, and three control runs blocking the app's host (`block`); their
+    screens show the outcome (`control_done`) or not; the case given a `path` (goal-directed). Fixed before the runs."""
+
+    def change(c):
+        c.update(control=CONTROL, family={"id": "launch", "version": 3})
+        if path is not None:
+            c["feature"]["path"] = path
+
+    edit(root, "cases/start.yaml", change)
     lines = [json.loads(line) for line in (root / "runs.jsonl").read_text(encoding="utf-8").splitlines() if line]
     for n in range(10, 13):
         run_id = f"run-{n:02d}"
@@ -123,7 +131,7 @@ def controlled(root: Path, control_done: bool) -> Path:
             done=control_done,
         )
         meta = json.loads((folder / "run.json").read_text(encoding="utf-8"))
-        meta["config"]["capture"]["block_hosts"] = ["app.example", "t.tracker.example"]
+        meta["config"]["capture"]["block_hosts"] = list(block)
         (folder / "run.json").write_text(json.dumps(meta), encoding="utf-8")
         report = root / "observation" / run_id / "observation_report.json"
         report.parent.mkdir(parents=True)
@@ -180,7 +188,8 @@ def test_a_control_run_blocks_every_host_the_cases_baseline_runs_contacted(tmp_p
     control = next(e for e in made if e["condition"] == "control")
     assert control["control_of"] == "start"
     blocked = yaml.safe_load((Path(control["dir"]) / "config.yaml").read_text(encoding="utf-8"))["capture"]
-    assert blocked["block_hosts"] == ["app.example", "t.tracker.example"]  # the baseline runs' hosts, not blocked there
+    # the registrable domains of the baseline runs' hosts (t.tracker.example's is tracker.example), not blocked there
+    assert blocked["block_hosts"] == ["app.example", "tracker.example"]
     with pytest.raises(execute.ExecutionError, match="control"):
         execute.run(workspace, tmp_path / "rec", base, "d", ["control"], 1, [sys.executable, str(script)])
 
@@ -195,3 +204,89 @@ def test_a_family_declares_a_control_the_catalogue_checks():
         cat.check({**family, "control": {"intervention": "network", "expected": "maybe"}})
     with pytest.raises(cat.CatalogueError, match="intervention, expected"):
         cat.check({**family, "control": {"intervention": "network"}})
+
+
+def test_a_control_blocks_the_registrable_domain_of_a_host_an_address_as_it_is():
+    assert execute.block_domain("api2.weather.example.com") == "example.com"
+    assert execute.block_domain("tiles.maps.example.co.uk") == "example.co.uk"
+    assert execute.block_domain("d123.cloudfront.net") == "d123.cloudfront.net"  # a customer of a shared host
+    assert execute.block_domain("API.Example.com:443") == "example.com"
+    assert execute.block_domain("142.250.185.78") == "142.250.185.78"
+    assert execute.block_domain("[2001:db8::1]:443") == "2001:db8::1"
+    assert execute.block_domain("localhost") == "localhost"
+
+
+def test_a_control_that_preserves_where_the_app_tried_no_blocked_host_was_not_exercised(tmp_path):
+    """The control runs tried no host under the blocked domain: the feature may be local, and its preserving is no
+    sensitivity failure of the oracle (21 Nov 2026)."""
+    root = controlled(ws.build(tmp_path / "ws", freeze=False), control_done=True, block=("elsewhere.example",))
+    report = analyse(inputs.load(root), make_observations=False)
+    validate("expectation_report", report)
+    (control,) = report["cases"][0]["controls"]
+    assert control["outcome"] == "preserves" and not control["sensitivity_failure"]
+    assert control["exercised"] is False and control["tried_hosts"] == []
+    assert control["note"].startswith("control not exercised: no attempt to a blocked host in run-10, run-11, run-12")
+    rendered = markdown(report)
+    assert "preserves (control not exercised" in rendered and "Sensitivity failures" not in rendered
+
+
+def test_a_control_run_tried_a_blocked_host_by_a_connection_heimdall_dropped(tmp_path):
+    root = controlled(ws.build(tmp_path / "ws", freeze=False), control_done=True)
+    run = load_run(root / "runs" / "run-10")
+    assert execute.block_domain("t.tracker.example") == "tracker.example"
+    dropped = {"host": "cdn.app.example", "blocked": True, "block_reason": "host_rule"}
+    from skuld.experiments import tried_hosts
+
+    assert tried_hosts(run, ["app.example"]) == ["app.example"]
+    assert tried_hosts(type(run)(**{**run.__dict__, "connections": (dropped,), "messages": ()}), ["app.example"]) == [
+        "cdn.app.example"
+    ]
+    no_name = {"host": None, "remote_ip": "192.0.2.1", "blocked": True, "block_reason": "host_rule"}
+    assert tried_hosts(type(run)(**{**run.__dict__, "connections": (no_name,), "messages": ()}), ["192.0.2.1"]) == [
+        "192.0.2.1"
+    ]
+    report = analyse(inputs.load(root), make_observations=False)
+    (control,) = report["cases"][0]["controls"]
+    assert control["exercised"] is True and control["sensitivity_failure"]
+    assert control["tried_hosts"] == ["app.example", "t.tracker.example"]
+
+
+def test_a_control_run_that_did_not_reach_its_goal_is_a_break_before_the_oracle(tmp_path):
+    """With the baseline's hosts blocked, the agent did not reach the feature: it depends on them, and the control
+    breaks as expected, reported as broken by the goal not reached. Under an alternative, an unreached run stays no
+    run of the feature (requirements_not_reached), never a break (21 Nov 2026)."""
+    from tests.test_goal_runs import PATH, as_goal_runs
+
+    root = controlled(ws.build(tmp_path / "ws", freeze=False), control_done=True, path=PATH)
+    unreached = {f"run-{n:02d}": {"reached": False} for n in (2, 5, 8, 10, 11, 12)}  # every A1 and control run
+    as_goal_runs(root, **unreached)
+    workspace = inputs.load(root)
+    report = analyse(workspace, make_observations=False)
+    validate("expectation_report", report)
+    case = report["cases"][0]
+    (control,) = case["controls"]
+    assert (control["outcome"], control["sensitivity_failure"]) == ("breaks", False)
+    assert control["broke_before_oracle"] == ["run-10", "run-11", "run-12"] == control["control_runs"]
+    assert control["broken"] == "goal not reached" and "exercised" not in control
+    assert not any(r in case["excluded"] for r in ("run-10", "run-11", "run-12"))
+    assert "| breaks (broken: goal not reached) |" in markdown(report)
+    # A1's unreached runs: no break, but requirements_not_reached
+    assert all(case["excluded"][f"run-{n:02d}"].startswith("the goal was not reached") for n in (2, 5, 8))
+    assert {"purpose": "P1", "alternative": "A1", "reason": "requirements_not_reached"} in case["untested"]
+    assert not any(k["outcome"] == "breaks" for k in report["comparisons"])
+
+
+def test_a_control_with_runs_that_reached_the_goal_and_runs_that_did_not_names_both(tmp_path):
+    from tests.test_goal_runs import PATH, as_goal_runs
+
+    root = controlled(ws.build(tmp_path / "ws", freeze=False), control_done=False, path=PATH)
+    as_goal_runs(root, **{"run-10": {"reached": False}, "run-11": {"done_in_window": False}})
+    report = analyse(inputs.load(root), make_observations=False)
+    (control,) = report["cases"][0]["controls"]
+    assert control["broke_before_oracle"] == ["run-10"] and set(control["control_runs"]) == {
+        "run-10",
+        "run-11",
+        "run-12",
+    }
+    # run-12 reached the goal and the oracle saw the outcome: not every control run broke
+    assert control["outcome"] == "undecided"

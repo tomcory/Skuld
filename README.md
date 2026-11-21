@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.11.0.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.11.1.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -24,7 +24,10 @@ stage 1 says where each purpose is achieved (`achieved_on`, device or server). S
 deeper experimental case is run goal-directed (Loki's goal regime) and judged in its goal episode, a launcher-first
 launch is an invalid run made once more, a family may declare a control whose failure to break is a sensitivity
 failure of its oracle, the launch checks content by the application's store category (`launch@3`), and every model
-family proposes cases whose union is run once. Checked against the code on 2026-11-21.
+family proposes cases whose union is run once. Since 0.11.1 a goal-directed control run that did not reach its goal
+is a break ("broken: goal not reached"), a control blocks the registrable domains of the baseline's hosts and reports
+a sensitivity failure only where the app tried a blocked host, and the catalogue refuses a slot with stray keys and
+offers no superseded family (`launch@4` and the review's new versions). Checked against the code on 2026-11-21.
 
 ## Role in Asgard
 
@@ -173,22 +176,34 @@ skuld run ws/gemma --recorded <exploration> --config <loki.yaml> --device <seria
 skuld analyse ws/gemma
 ```
 
-- **The launch** is a replay of the cold start. Its oracle (`launch@3`) wants the first screen of the app ready for
-  input and, by the application's store category, content: a temperature for a weather app, a search or a route for a
-  map app, documents or a scan for a scanner or productivity app (DE and EN texts); another category keeps
-  `launch@2`'s oracle. A launch that brought up the launcher or another app first is an invalid run
+- **The launch** is a replay of the cold start. Its oracle (`launch@4`) wants the first screen of the app ready for
+  input and, by the application's store category, more: a temperature for a weather app (a digit followed by the
+  degree sign, "0°" … "9°", which placeholders such as "--°" and unit choices such as "°C" are not; it reaches the
+  purpose's R3, the category's content), a search or a route for a map app (a stronger ready check, DE and EN texts);
+  another category, Productivity and Business among them since `launch@4`, keeps `first_screen_ready` alone. A launch that brought up the launcher or another app first is an invalid run
   (`launcher_first`), dropped from both sides and made once more.
 - **A deeper case** (its feature has a path) is run goal-directed: `loki crawl <package> --goal "<feature>: <outcome>"
   --goal-id <case> --max-duration 900`. Its oracles judge the goal episode, from its start to where Loki's agent said
   it reached the feature; a window the oracle gives in the recording's actions is read against the case's path. The
   agent's statement alone qualifies nothing: a run qualifies where the goal was reached and the oracle is met. A run
   that did not reach the goal is no run of the feature; what it leaves uncompared is `requirements_not_reached`
-  (next step: explore), never a break. `--replay` replays the path as before.
+  (next step: explore), never a break, except in a control (below). `--replay` replays the path as before.
 - **A control** (a family's `control: {intervention: network, expected: breaks}`: the forecast families, save-location,
-  the AI document families, `launch@3` for weather apps) is the condition `control` of `--case`, rotated with the
-  alternatives, and blocks every host the case's baseline runs contacted. Its outcome is in the case report's
-  `controls`, never a comparison or a claim; a control expected to break that preserves is a sensitivity failure of
-  the family's oracle, listed by family in `report.md` and `assessment.md`.
+  the AI document families, `launch@4` for weather apps) is the condition `control` of `--case`, rotated with the
+  alternatives, and blocks the registrable domain (eTLD+1, Ratatoskr's `registrable_domain`; Heimdall blocks a domain
+  with its subdomains) of every host the case's baseline runs contacted, so that a failover or regional host of the
+  same domain is blocked too (0.11.1; before, the exact hosts). Its outcome is in the case report's `controls`, never a
+  comparison or a claim. A goal-directed control run whose goal was not reached is a break, named in
+  `broke_before_oracle` and shown as "broken: goal not reached" (the feature depends on the blocked hosts; the oracle
+  was not tested). A control expected to break that preserves is a sensitivity failure of the family's oracle only
+  where every judged control run tried a blocked host (a connection Heimdall dropped by the host rule, or a connection
+  or message to a blocked domain: `tried_hosts`); otherwise it is "control not exercised" (`exercised: false`: the
+  feature may be local). Sensitivity failures are listed by family in `report.md` and `assessment.md`.
+- **The catalogue** (`catalogue/families/`, local until deployed) refuses a slot with keys other than `kind` and
+  `description` (a comma in a YAML flow mapping cuts a description and leaves a stray key). The three files written
+  before with one (current-location-forecast@1 and @2, questionnaire-onboarding@1) are still read, for the cases that
+  name them, and refused for new use; `skuld catalogue` names them. A family superseded by another
+  (`superseded_by`; oauth-sign-up by third-party-authentication) is offered to no proposer.
 
 ## Configuration
 
@@ -311,7 +326,7 @@ generator's feature families; local until deployed), and a calibration sample's 
 ## Tests
 
 ```bash
-uv run pytest                     # 536 tests on 2026-11-21
+uv run pytest                     # 547 tests on 2026-11-21
 ruff format . && ruff check .
 ```
 

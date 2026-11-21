@@ -34,12 +34,16 @@ A launch that brought up the launcher or another app first is an invalid run (`o
 launch case's oracle decides invalid is made once more (`LAUNCH_REPEATS`), the first kept in `runs.jsonl`.
 
 A case's control (`catalogue`: `control: {intervention: network, expected: breaks}`) is the condition `control`,
-scheduled and rotated as the alternatives are. `network` blocks every host the case's baseline runs made so far
-contacted (their captured connections and messages), so a control run needs a baseline run of the case before it
+scheduled and rotated as the alternatives are. `network` blocks the registrable domain (Ratatoskr's
+`registrable_domain`, eTLD+1; a host below a shared-hosting domain, an address, a name of one label as it is) of
+every host the case's baseline runs made so far contacted (their captured connections and messages); Heimdall blocks a
+domain with its subdomains, so a failover or regional host of the same domain that the baseline did not use is
+blocked too (21 Nov 2026; before, the exact hosts). A control run needs a baseline run of the case before it
 (`--qualify` makes one first); its entry records the case (`control_of`).
 """
 
 import copy
+import ipaddress
 import json
 import re
 import subprocess
@@ -47,6 +51,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import yaml
+from ratatoskr.registry import registrable_domain
 
 from skuld import config, yamlio
 from skuld.experiments import BASELINE, _compatible
@@ -506,8 +511,9 @@ def launch_invalid(workspace: Workspace, run_dir: Path, entry: dict) -> str | No
 
 def baseline_hosts(workspace: Workspace, case: Case, made: list[dict] = ()) -> list[str]:
     """
-    The hosts the case's baseline runs contacted, those in runs.jsonl and those just made: of their captured
-    connections and messages, the ones not blocked; a run that cannot be read adds none.
+    The domains a control blocks: the registrable domains of the hosts the case's baseline runs contacted, those in
+    runs.jsonl and those just made, of their captured connections and messages, the ones not blocked (`block_domain`);
+    a run that cannot be read adds none.
     """
     from skuld.experiments import RunState, runs_of
     from skuld.runs import RunRefused, load
@@ -529,12 +535,27 @@ def baseline_hosts(workspace: Workspace, case: Case, made: list[dict] = ()) -> l
         for c in run.connections or ():
             host = c.get("host") or c.get("sni")
             if host and not c.get("blocked"):
-                hosts.add(str(host))
+                hosts.add(block_domain(str(host)))
         for m in run.messages or ():
             host = (m.get("http_request") or {}).get("host")
             if host:
-                hosts.add(str(host))
+                hosts.add(block_domain(str(host)))
     return sorted(hosts)
+
+
+def block_domain(host: str) -> str:
+    """What a control blocks for a host: its registrable domain; an IP address, or a name of one label, as it is."""
+    name = host.strip().strip(".").casefold()
+    if name.startswith("["):  # [IPv6]:port
+        name = name[1:].partition("]")[0]
+    elif name.count(":") == 1:  # host:port
+        name = name.partition(":")[0]
+    try:
+        ipaddress.ip_address(name)
+        return name
+    except ValueError:
+        pass
+    return registrable_domain(name) if "." in name else name
 
 
 def _entry(made: dict):

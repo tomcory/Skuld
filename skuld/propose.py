@@ -33,7 +33,7 @@ propose` (no `--model`, no `--merge`) is the single-model path: the configuratio
 are merged and fixed at once, as before (`propose`).
 
 The launch is filled by rule from the newest `launch` family. Its oracle adds the conditions of the application's
-store category (`launch@3`: a forecast, a search field, a document list), read from the store listing Sága collected
+store category (`launch@4`: a temperature for a weather app, a search field for a map app), read from the store listing Sága collected
 (`store_category`: a listing, a collection, or D's report on it; `skuld propose --listing`, else the D report the
 workspace's assessment.yaml names); a category without an entry keeps the family's own conditions. A family's control
 (`catalogue`) is written into its cases.
@@ -379,9 +379,10 @@ def feature_problems(
                     out.append(f"requirement {r['statement']!r} names {hit!r}, data whose need the experiment tests")
         slots = _slots(data)
     else:
-        family = catalogue.get(family_id or "")
-        if family is None:
-            return [f"{family_id!r} is no family of the catalogue"]
+        try:
+            family = catalogue.usable(family_id or "")
+        except cat.CatalogueError as e:
+            return [str(e)]
         slots = _slots(family.data)
     values = {s["name"]: s["values"] for s in answer.get("slots") or ()}
     for name, slot in slots.items():
@@ -916,7 +917,10 @@ def _family(catalogue: cat.Catalogue, key: str) -> cat.Family:
     found = catalogue.get(family_id, int(version)) if version.isdigit() else None
     if found is None:
         raise ProposalError(f"a proposal names the family {key}, which the catalogue does not hold")
-    return found
+    try:
+        return catalogue.usable(family_id, found.version)
+    except cat.CatalogueError as e:
+        raise ProposalError(f"a proposal names the family {key}: {e}; propose anew") from e
 
 
 def _feature_case(
@@ -1029,7 +1033,7 @@ def _write_case(
                 "id": oracle_id,
                 "version": 1,
                 "purpose": pid,
-                "reach": [rid[r] for r in o["reach"]],
+                "reach": [rid[r] for r in cat.reach(o, category)],
                 "success": cat.fill(cat.success(o, category), bindings),
                 "invalid": cat.fill(o.get("invalid") or [], bindings),
                 "measurements": cat.fill(o.get("measurements") or [], bindings),

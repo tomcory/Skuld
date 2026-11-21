@@ -564,10 +564,14 @@ def main(argv: list[str] | None = None) -> int:
                 f = found.review(args.review, args.by, args.note)
                 print(f"{f.key}: {f.review_state()} -> {catalogue.review_path(found.root, f.key)}")
                 return 0
-            for f in found.latest():
-                print(f"{f.key:<40} {f.review_state():<32} {f.data['name']}")
+            for f in found.latest(superseded=True):
+                state = f" (superseded by {f.superseded_by})" if f.superseded_by else ""
+                print(f"{f.key:<40} {f.review_state():<32} {f.data['name']}{state}")
             unreviewed = sum(1 for f in found.latest() if not f.reviewed)
             print(f"{len(found.families)} families, {unreviewed} newest not reviewed, digest {found.sha256}")
+            for f in found.families:
+                if f.problems:
+                    print(f"{f.key}: read for the cases that name it, refused for new use: {'; '.join(f.problems)}")
         elif args.command == "freeze":
             author = {"kind": "model" if args.model else "person", "name": args.author}
             if args.prompt:

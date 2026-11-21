@@ -534,12 +534,15 @@ def test_a_purpose_no_family_observes_is_refused_and_one_a_family_observes_is_no
 
     purposes, observed = vocabulary(PURPOSES), select.observed_purposes()
     assert ("ServiceProvision", "user") in observed  # the launch family's
-    why = select.unobservable("TargetedAdvertising", "provider", observed, purposes)
-    assert why and "provider at TargetedAdvertising" in why
+    why = select.unobservable("ServiceUsageAnalytics", "provider", observed, purposes)
+    assert why and "provider at ServiceUsageAnalytics" in why
     assert select.unobservable("ServiceUsageAnalytics", "third parties", observed, purposes)
     # the same node is observable for the user, through a family's purpose above it of that beneficiary
     assert select.unobservable("RequestedServiceProvision", "user", observed, purposes) is None
-    assert select.unobservable("ServiceUsageAnalytics", "user", observed, purposes) is None  # ServiceManagement
+    # catalogue of 21 Nov 2026: notification preferences at CommunicationManagement, no longer ServiceManagement, and
+    # perks as the provider's Marketing, above every advertising node
+    assert select.unobservable("ServiceUsageAnalytics", "user", observed, purposes)
+    assert select.unobservable("TargetedAdvertising", "provider", observed, purposes) is None
     assert select.unobservable("NoSuchNode", "provider", observed, purposes) is None  # left to the cases
 
 
@@ -548,7 +551,7 @@ def test_the_selection_refuses_an_unobservable_group_with_its_reason():
     report = {
         "concerns": [],
         "claims": [
-            hypothesis("h-ads", "P-ads", "TargetedAdvertising", who="provider"),
+            hypothesis("h-ads", "P-ads", "ServiceUsageAnalytics", who="provider"),
             hypothesis("h-map", "P-map", "RequestedServiceProvision"),
         ],
     }

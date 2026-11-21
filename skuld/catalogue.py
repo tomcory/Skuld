@@ -80,14 +80,29 @@ oracle:
   categories:
     - names: [Weather, Wetter]
       success:
-        - text_shown: {any: ["°"]}
+        - text_shown: {any: ["0°", "1°", "2°", "3°", "4°", "5°", "6°", "7°", "8°", "9°"]}
+      reach: [R3]
       control: {intervention: network, expected: breaks}
 ```
+
+A category entry may name requirements of its purpose that its conditions reach (`reach`, 21 Nov 2026: launch@4's R3,
+the category's content), added to the template's own for an application of the category.
+
+A slot is `{kind, description}` and nothing else (21 Nov 2026). In a YAML flow mapping a comma ends a plain value, so
+`{kind: text, description: the place, as shown}` gives a description cut at the comma and a stray key `as shown`;
+`check` refuses such a slot. Families written before with one (current-location-forecast@1 and @2,
+questionnaire-onboarding@1) are still read, for the cases that name them, with the problem recorded in the family's
+`problems`; they are refused for any new use (`add`, `usable`: the proposer's choice of a family, a merge of
+proposals), and a later version fixes them.
+
+A family may be superseded by another (21 Nov 2026: oauth-sign-up by third-party-authentication, which holds both
+purposes of the same path). Its next version is its last and says so, `superseded_by: <id>`; the newest versions
+(`latest`) leave it out, and a proposal that names it is refused.
 """
 
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -129,6 +144,13 @@ class Family:
     review: dict | None = None
     #: Why a stored review is no review of the family (it names another digest), or None
     review_problem: str | None = None
+    #: What the strict check refuses in a family file written before it (a slot with other keys than kind and
+    #: description): the family is read for the cases that name it, never used anew
+    problems: tuple[str, ...] = ()
+
+    @property
+    def superseded_by(self) -> str | None:
+        return self.data.get("superseded_by")
 
     @property
     def key(self) -> str:
@@ -177,17 +199,29 @@ class Catalogue:
         listing = "\n".join(f"{f.key} {f.sha256}" for f in sorted(self.families, key=lambda f: f.key))
         return hashlib.sha256(listing.encode("utf-8")).hexdigest()
 
-    def latest(self) -> list[Family]:
-        """The newest version of every family."""
+    def latest(self, superseded: bool = False) -> list[Family]:
+        """The newest version of every family; of a superseded family none, unless `superseded`."""
         newest: dict[str, Family] = {}
         for f in self.families:
             if f.id not in newest or f.version > newest[f.id].version:
                 newest[f.id] = f
-        return sorted(newest.values(), key=lambda f: f.id)
+        return sorted((f for f in newest.values() if superseded or not f.superseded_by), key=lambda f: f.id)
 
     def get(self, family_id: str, version: int | None = None) -> Family | None:
         found = [f for f in self.families if f.id == family_id and (version is None or f.version == version)]
         return max(found, key=lambda f: f.version) if found else None
+
+    def usable(self, family_id: str, version: int | None = None) -> Family:
+        """A family for a new use (a proposer's choice, a merge of proposals): the given version, else the newest.
+        Raises CatalogueError for an unknown family, one superseded or one the strict check refuses."""
+        family = self.get(family_id, version)
+        if family is None:
+            raise CatalogueError(f"{family_id!r} is no family of the catalogue")
+        if family.superseded_by:
+            raise CatalogueError(f"{family.key} is superseded by {family.superseded_by}: choose that family")
+        if family.problems:
+            raise CatalogueError(f"{family.key} is malformed ({'; '.join(family.problems)}); use a later version")
+        return family
 
     def add(self, data: dict) -> Family:
         """Writes a family as the next version of its id, or as version 1 of a new id; returns it. An empty `reviewed`
@@ -231,7 +265,7 @@ class Catalogue:
         path.parent.mkdir(parents=True, exist_ok=True)
         text = yaml.safe_dump(record, sort_keys=False, allow_unicode=True, width=120)
         path.write_text(text, encoding="utf-8", newline="\n")
-        reviewed = Family(family.id, family.version, family.data, family.sha256, family.path, record)
+        reviewed = replace(family, review=record, review_problem=None)
         self.families[self.families.index(family)] = reviewed
         return reviewed
 
@@ -261,7 +295,9 @@ def _review(root: Path, key: str, sha256: str, data: dict) -> tuple[dict | None,
 
 
 def load(root: str | Path) -> Catalogue:
-    """Reads a catalogue folder; an absent one is empty. Raises CatalogueError for a family that fails the checks."""
+    """Reads a catalogue folder; an absent one is empty. Raises CatalogueError for a family that fails the checks, but
+    for slot keys (`slot_problems`), which a family written before the strict check may have: it is read with them as
+    its `problems`."""
     root = Path(root)
     families = []
     for path in sorted((root / "families").glob("*.yaml")):
@@ -270,22 +306,25 @@ def load(root: str | Path) -> Catalogue:
         if not isinstance(data, dict):
             raise CatalogueError(f"{path.name}: not a mapping")
         try:
-            check(data)
+            check(data, strict_slots=False)
         except CatalogueError as e:
             raise CatalogueError(f"{path.name}: {e}") from e
         if path.stem != f"{data['id']}@{data['version']}":
             raise CatalogueError(f"{path.name}: named otherwise than its id and version")
         key, sha256 = f"{data['id']}@{data['version']}", _digest(text)
         review, problem = _review(root, key, sha256, data)
-        families.append(Family(data["id"], int(data["version"]), data, sha256, path, review, problem))
+        problems = tuple(slot_problems(data))
+        families.append(Family(data["id"], int(data["version"]), data, sha256, path, review, problem, problems))
     return Catalogue(root, families)
 
 
-def check(data: dict) -> None:
+def check(data: dict, strict_slots: bool = True) -> None:
     """
     Refuses a family that is malformed: an id that is not lower-case words with hyphens; a purpose without its parts
     or requirements; an oracle that reaches requirements its purpose does not have, names a predicate or metric the
-    instance does not know, or uses a slot it does not declare (or declares one it does not use).
+    instance does not know, or uses a slot it does not declare (or declares one it does not use); a slot with keys
+    other than `kind` and `description` (`slot_problems`; not with `strict_slots` False, as `load` reads a family
+    written before); a `superseded_by` that is no family id.
     """
     missing = [k for k in ("id", "version", "name", "entry", "path", "outcome", "purposes") if k not in data]
     if missing:
@@ -296,6 +335,10 @@ def check(data: dict) -> None:
         raise CatalogueError("no purpose")
     if data.get("control") is not None:
         check_control(data["control"], "the family's control")
+    if "superseded_by" in data and not _ID.match(str(data["superseded_by"] or "")):
+        raise CatalogueError("superseded_by names the id of the family that supersedes it")
+    if strict_slots and (found := slot_problems(data)):
+        raise CatalogueError("; ".join(found))
     for p in data["purposes"]:
         where = f"purpose {p.get('id')}"
         parts = ("id", "action", "object", "beneficiary", "context", "outcome", "node", "specificity", "role")
@@ -318,6 +361,8 @@ def check(data: dict) -> None:
                 raise CatalogueError(f"{where}: category entry {n} needs names and conditions of success")
             if entry.get("control") is not None:
                 check_control(entry["control"], f"{where}: category entry {n}'s control")
+            if not set(entry.get("reach") or ()) <= requirements:
+                raise CatalogueError(f"{where}: category entry {n} reaches {entry['reach']}, not requirements of it")
         for spec in [
             *oracle["success"],
             *(oracle.get("invalid") or ()),
@@ -346,6 +391,17 @@ def check(data: dict) -> None:
             raise CatalogueError(f"{where}: slots {sorted(unused)} are declared but not used")
 
 
+def slot_problems(data: dict) -> list[str]:
+    """The slots of a family's oracles with keys other than `kind` and `description`: in a YAML flow mapping a comma
+    ends a plain description, and the rest of it becomes a key of its own (21 Nov 2026)."""
+    out = []
+    for p in data.get("purposes") or ():
+        for name, slot in ((p.get("oracle") or {}).get("slots") or {}).items():
+            if isinstance(slot, dict) and (other := sorted(map(str, set(slot) - {"kind", "description"}))):
+                out.append(f"purpose {p.get('id')}: slot {name} has keys other than kind and description: {other}")
+    return out
+
+
 def check_control(control, where: str) -> None:
     """Refuses a control that names no known intervention or expected outcome."""
     if not isinstance(control, dict) or set(control) != {"intervention", "expected"}:
@@ -365,6 +421,14 @@ def category_entry(oracle: dict, category: str | None) -> dict | None:
         if any(" ".join(n.split()).casefold() == wanted for n in entry["names"]):
             return entry
     return None
+
+
+def reach(oracle: dict, category: str | None) -> list:
+    """An oracle template's requirements reached for an application of the store category: its own, and those the
+    category's entry adds."""
+    entry = category_entry(oracle, category)
+    extra = [r for r in (entry.get("reach") or ()) if r not in oracle["reach"]] if entry else []
+    return [*oracle["reach"], *extra]
 
 
 def success(oracle: dict, category: str | None) -> list:

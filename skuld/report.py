@@ -79,7 +79,9 @@ def markdown(report: dict) -> str:
 
 def controls_markdown(report: dict, heading: str = "## Controls") -> list[str]:
     """The case report's controls by family: each control's outcome against what was expected; a control expected to
-    break that preserves is a sensitivity failure of the family's oracle. Nothing where no case has a control."""
+    break that preserves is a sensitivity failure of the family's oracle, where the control runs tried the blocked
+    hosts ("control not exercised" otherwise); a break by control runs that did not reach their goal is "broken: goal
+    not reached". Nothing where no case has a control."""
     controls = [(c["id"], k) for c in report["cases"] for k in c.get("controls") or ()]
     if not controls:
         return []
@@ -94,7 +96,8 @@ def controls_markdown(report: dict, heading: str = "## Controls") -> list[str]:
     ]
     for case, k in sorted(controls, key=lambda x: (x[1].get("family") or "?", x[0])):
         runs = f"{len(k.get('baseline_runs') or ())} + {len(k.get('control_runs') or ())}"
-        outcome = k["outcome"] + (f" ({k['reason']})" if k.get("reason") else "")
+        why = k.get("reason") or (f"broken: {k['broken']}" if k.get("broken") else None) or k.get("note")
+        outcome = k["outcome"] + (f" ({why})" if why else "")
         flag = "**failure**" if k["sensitivity_failure"] else "–"
         lines.append(
             f"| {k.get('family') or '?'} | {case} | {k['purpose']} | {k['intervention']} | {k['expected']} "

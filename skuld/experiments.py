@@ -15,6 +15,18 @@ reason `requirements_not_reached`, whose next step is an exploration, not a brea
 A case's control (`execute`: the condition `control`, its family's `control`) is judged as a comparison is, against
 the valid baseline runs, and recorded in the case's `controls`; it is never a comparison and no claim is made from it.
 A control expected to break that preserves is a sensitivity failure of the family's oracle.
+
+A goal-directed control run whose goal was not reached (author, 21 Nov 2026) is a break: with the baseline's hosts
+blocked, the agent did not reach the feature, which shows that the feature depends on them. It counts as an unmet run
+of the control, and the control names it (`broke_before_oracle`; "broken: goal not reached" beside a break the oracle
+decided). The oracle is not tested by such a run. Under an alternative, an unreached run stays no run of the feature
+(`requirements_not_reached`), never a break.
+
+A control that preserves is a sensitivity failure only where every judged control run shows that the app tried a
+blocked host (author, 21 Nov 2026): a connection Heimdall dropped by the host rule (`blocked`, `block_reason`
+`host_rule`), or any connection or message to a host under a blocked domain (`tried_hosts`). Otherwise the control was
+not exercised (`exercised` false): the feature may be local, and its preserving says nothing of the oracle. The
+attempts are read over the whole control run, not only the feature's window.
 """
 
 import json
@@ -26,7 +38,7 @@ from ratatoskr.vocabularies import Vocabulary
 
 import skuld
 from skuld import configuration, oracles, rules, space, yamlio
-from skuld.common import vocabulary
+from skuld.common import under, vocabulary
 from skuld.comparison import Comparison, compare
 from skuld.comparison import outcome as compared_outcome
 from skuld.inputs import CONTROL, Case, InputError, Workspace, check_frozen, digest
@@ -152,6 +164,29 @@ def unreached(run) -> str | None:
     return f"{GOAL_NOT_REACHED} ({run.meta.get('stop_reason') or '?'})"
 
 
+def _blocked_hosts(run) -> list[str]:
+    """The hosts (domains, with their subdomains) a run's configuration blocked."""
+    return list(((run.meta.get("config") or {}).get("capture") or {}).get("block_hosts") or ())
+
+
+def tried_hosts(run, blocked: list[str]) -> list[str]:
+    """The hosts under a blocked domain the run tried to reach: of its captured connections (Heimdall records a
+    connection it dropped with `blocked` and `block_reason` 'host_rule') and messages; a connection dropped by the host
+    rule counts by its address where its name is not known."""
+    found = set()
+    for c in run.connections or ():
+        host = c.get("host") or c.get("sni")
+        if host and any(under(str(host).casefold(), d.casefold()) for d in blocked):
+            found.add(str(host))
+        elif c.get("blocked") and c.get("block_reason") == "host_rule":
+            found.add(str(host or c.get("remote_ip") or "?"))
+    for m in run.messages or ():
+        host = (m.get("http_request") or {}).get("host")
+        if host and any(under(str(host).casefold(), d.casefold()) for d in blocked):
+            found.add(str(host))
+    return sorted(found)
+
+
 def runs_of(case: Case, state: RunState) -> bool:
     """Whether a run is meant as a run of the experimental case's feature: a goal-directed run whose goal is the case;
     a control run of the case's control; else a replay of the recording its path is taken from, and, for a replay of a
@@ -244,7 +279,7 @@ class _Report:
                 continue
             elif departure := departed(case, state.run):
                 excluded[state.id] = departure
-            elif missed := unreached(state.run):
+            elif (missed := unreached(state.run)) and state.entry.condition != CONTROL:
                 excluded[state.id] = missed
                 not_reached.add(state.entry.condition)
             elif (ran := str((state.run.meta.get("app") or {}).get("version_name", version))) != version and (
@@ -333,6 +368,9 @@ class _Report:
             if not ((s.run.meta.get("config") or {}).get("capture") or {}).get("block_hosts"):
                 excluded[s.id] = "a control run that blocked no host"
         controls = [s for s in controls if s.id not in excluded]
+        # a control run that did not reach its goal broke before the oracle: a break, not judged by the oracle
+        broke = [s for s in controls if unreached(s.run)]
+        controls = [s for s in controls if s not in broke]
         path = (case.feature.start, case.feature.actions)
         comparisons, checked = {}, []
         for purpose in case.purposes:
@@ -347,7 +385,7 @@ class _Report:
                 self._decision_evidence(case, purpose.id, oracle, s, d)
             valid_baseline = {s.id: decided[s.id] for s in baseline if decided[s.id].decision != "invalid"}
             if case.control:
-                checked.append(self._control(case, purpose.id, oracle, valid_baseline, controls, decided))
+                checked.append(self._control(case, purpose.id, oracle, valid_baseline, controls, decided, broke))
             for alt in alternatives_ok:
                 if not present[alt.component]:
                     # C2 (author, 14 Nov 2026): no baseline run of the case's path read the source or reached the
@@ -397,15 +435,22 @@ class _Report:
                             missing_why[(p.id, alt.id)] = "requirements_not_reached"
         self._case_record(case, inputs, u0, present, usable, excluded, problems, missing_why, checked)
 
-    def _control(self, case: Case, purpose: str, oracle, baseline: dict, runs: list, decided: dict) -> dict:
+    def _control(
+        self, case: Case, purpose: str, oracle, baseline: dict, runs: list, decided: dict, broke: list = ()
+    ) -> dict:
         """The control of a purpose: its runs judged by the purpose's oracle against the valid baseline runs, as a
-        comparison is; a sensitivity failure where it was expected to break and preserves."""
+        comparison is, a goal-directed run that did not reach its goal counting as unmet (`broke_before_oracle`); a
+        sensitivity failure where it was expected to break and preserves although every judged run tried a blocked
+        host (else `exercised` is false)."""
         valid = {s.id: decided[s.id] for s in runs if decided[s.id].decision != "invalid"}
-        hosts = sorted(
-            {h for s in runs for h in ((s.run.meta.get("config") or {}).get("capture") or {}).get("block_hosts") or ()}
-        )
+        unmet = {s.id: oracles.Decision("unmet", reasons=(GOAL_NOT_REACHED,)) for s in broke}
+        blocked = {s.id: _blocked_hosts(s.run) for s in [*runs, *broke]}
+        hosts = sorted({h for found in blocked.values() for h in found})
         expected = case.control["expected"]
-        found = compared_outcome(list(baseline.values()), list(valid.values())) if baseline and valid else None
+        judged = {**valid, **unmet}
+        found = compared_outcome(list(baseline.values()), list(judged.values())) if baseline and judged else None
+        tried = {s.id: tried_hosts(s.run, blocked[s.id]) for s in runs if s.id in valid}
+        exercised = bool(tried) and all(tried.values())
         family = case.family or {}
         out = {
             "id": f"{case.id}:{purpose}:{CONTROL}",
@@ -416,13 +461,31 @@ class _Report:
             "expected": expected,
             "block_hosts": hosts,
             "baseline_runs": list(baseline),
-            "control_runs": list(valid),
+            "control_runs": list(judged),
             "outcome": found or "not_compared",
-            "sensitivity_failure": expected == "breaks" and found == "preserves",
+            "sensitivity_failure": expected == "breaks" and found == "preserves" and exercised,
         }
+        if unmet:
+            out["broke_before_oracle"] = list(unmet)
+        if tried:
+            out["exercised"] = exercised
+            out["tried_hosts"] = sorted({h for found in tried.values() for h in found})
         if found is None:
             out["reason"] = (
-                "no control run" if not runs else "no valid control run" if not valid else "no valid baseline run"
+                "no control run"
+                if not runs and not broke
+                else "no valid control run"
+                if not judged
+                else "no valid baseline run"
+            )
+        elif found == "breaks" and unmet:
+            out["broken"] = (
+                "goal not reached" if not valid else f"goal not reached in {len(unmet)} of {len(judged)} runs"
+            )
+        elif expected == "breaks" and found == "preserves" and not exercised:
+            idle = sorted(r for r, h in tried.items() if not h)
+            out["note"] = (
+                f"control not exercised: no attempt to a blocked host in {', '.join(idle)} (the feature may be local)"
             )
         return out
 
