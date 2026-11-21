@@ -61,9 +61,33 @@ PROCEDURE = {"id": "skuld.expectation", "version": VERSION}
 #: How the samples' answers are read, apart from VERSION (which identifies the kept samples): 2 since a purpose at no
 #: node of the vocabulary has the gap reason purpose_not_in_vocabulary, not purpose_vague (20 Nov 2026); 3: an answer
 #: keyed by practice id (prompt version 6) is read as the list it stands for (`listed`, 21 Nov 2026); 4: a purpose says
-#: where it is achieved (`achieved_on`, prompt version 7; 21 Nov 2026)
-READING = "4"
+#: where it is achieved (`achieved_on`, prompt version 7; 21 Nov 2026); 5: a dependency step that cites only the observed
+#: traffic (T) is dropped like one citing a practice, since traffic shows that the processing happens, not that it is
+#: needed, and a dependency left with no grounded step is own knowledge, at essential and quality_dependent alike (P10
+#: fix 3, 21 Nov 2026). A report names its reading, and `skuld check` rebuilds with the one it names (`reading_of`);
+#: readings 1 to 4 read as 4 does, as before 5 (their changes were made before a report could name them apart)
+READING = "5"
+READINGS = ("1", "2", "3", "4", "5")
 READING_COMPONENT = {"role": "method", "id": "skuld.expectation.reading", "version": READING}
+
+
+def reading_component(reading: str = READING) -> dict:
+    """The stage-1 reading as a component of a report."""
+    if reading not in READINGS:
+        raise ValueError(f"unknown reading {reading!r} of skuld.expectation (known: {', '.join(READINGS)})")
+    return {**READING_COMPONENT, "version": reading}
+
+
+def reading_of(report: dict) -> str:
+    """The stage-1 reading a report was made with; 4 for one that names none, as the readings before 5 read alike."""
+    named = [
+        c.get("version")
+        for c in report.get("report", {}).get("components", [])
+        if c.get("id") == READING_COMPONENT["id"]
+    ]
+    return named[0] if named else "4"
+
+
 #: The kinds of part a stage-1 context may hold, each with the origins its provenance may have; never D's report
 KINDS = {
     "application": ("input",),
@@ -151,6 +175,8 @@ ACHIEVED_SINCE = 7
 #: retrieved for, and which says that a passage documents only those (21 Nov 2026: 78% of the passages a practice saw
 #: in its batch had been retrieved for other practices of the batch); an earlier version's contexts do not
 LABELED_SINCE = 8
+#: Why a dependency step is dropped from reading 5: it cites the observed traffic only
+TRAFFIC_ONLY = "cites the observed traffic only, which shows that the processing happens, not that it is needed"
 #: Where a purpose is achieved, as the answer names it
 ACHIEVED_ON = {"DEVICE": "device", "SERVER": "server"}
 
@@ -841,9 +867,14 @@ def purpose_map_sha256() -> str | None:
     return _purpose_map_file()[1]
 
 
-def read(answer: dict, sample: str, context: Context, practices: dict[str, Practice]) -> list[dict]:
+def read(
+    answer: dict, sample: str, context: Context, practices: dict[str, Practice], reading: str = READING
+) -> list[dict]:
     """The claims of one stage-1 sample, by E's status rules, with the citation rule applied; a keyed answer as the list
-    it stands for (`listed`)."""
+    it stands for (`listed`); `reading` is the version to read with (READINGS; from 5 a step citing only traffic is
+    dropped)."""
+    reading_component(reading)
+    traffic_only = int(reading) >= 5
     answer = listed(answer)
     ids = context.ids
     practice_parts = context.of_kind("practice")
@@ -946,6 +977,8 @@ def read(answer: dict, sample: str, context: Context, practices: dict[str, Pract
             cites = [ref(c) for c in s.get("cites") or ()] if isinstance(s, dict) else []
             if set(cites) & practice_parts:
                 dropped.append({"step": i, "reason": "cites the occurrence of a practice as a reason it is needed"})
+            elif traffic_only and cites and all(kinds.get(c) == "traffic" for c in cites):
+                dropped.append({"step": i, "reason": TRAFFIC_ONLY})
             else:
                 steps.append(cites)
         documented = bool(steps) and all(cited(c, ids) for c in steps)
@@ -955,6 +988,8 @@ def read(answer: dict, sample: str, context: Context, practices: dict[str, Pract
             status, why, prose = "not_established", "needs_run", "not dependent needs a run without the component"
         elif documented:
             status, why, prose = "supported", None, None
+        elif traffic_only and dropped and not steps:
+            status, why, prose = "not_established", "own_knowledge", "no step is left that grounds the need"
         else:
             status, why, prose = "not_established", "own_knowledge", "a step does not cite the context"
         claim(

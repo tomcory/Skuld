@@ -555,8 +555,8 @@ def test_the_stage_1_prompt_tells_the_keyed_shape_and_earlier_versions_are_kept(
     from skuld import templates
 
     for prompt in ("expectation", "expectation_traffic"):
-        assert templates.CURRENT[prompt] == "8"
-        for keyed in ("6", "7", "8"):
+        assert templates.CURRENT[prompt] == "9"
+        for keyed in ("6", "7", "8", "9"):
             assert "under the practice's id" in templates.text(prompt, keyed)
         for earlier in ("4", "5"):
             assert "under the practice's id" not in templates.text(prompt, earlier)
@@ -566,6 +566,9 @@ def test_the_stage_1_prompt_tells_the_keyed_shape_and_earlier_versions_are_kept(
         # version 8 says that a passage documents only the practices it was retrieved for; the earlier ones do not
         assert "documents only the practices" in templates.text(prompt, "8")
         assert all("documents only the practices" not in templates.text(prompt, v) for v in ("4", "5", "6", "7"))
+        # version 9 says that a step may not cite only the traffic for a need; the earlier ones do not
+        assert "cite only the observed traffic" in templates.text(prompt, "9")
+        assert all("cite only the observed traffic" not in templates.text(prompt, v) for v in ("4", "5", "6", "7", "8"))
 
 
 def test_each_passage_names_the_practices_it_was_retrieved_for_from_prompt_version_8(workspace, tmp_path):
@@ -631,3 +634,46 @@ def test_a_model_given_the_keyed_schema_answers_every_practice_and_needs_no_topu
     for b in batches:
         (_, _, answer), *_ = [k for k in expectation.kept(a, built, load_corpus(a.corpus)) if k[0].startswith(b.key)]
         assert {x["practice"] for x in answer["purposes"]} == {p.id for p in b.practices}
+
+
+def test_a_dependency_step_citing_only_traffic_is_dropped_from_reading_5(workspace):
+    """P10 fix 3: traffic shows that the processing happens, not that it is needed, like the practice; a dependency left
+    with no grounded step is own knowledge, at essential and quality_dependent alike. Reading 4 reads as before."""
+    a, built = workspace
+    expectation.expect(a, built, load_corpus(a.corpus), seeds=[1], provider=FakeModel())
+    (name, context, answer), *_ = [
+        k for k in expectation.kept(a, built, load_corpus(a.corpus)) if k[0].startswith("launch")
+    ]
+    practices = {p.id: p for p in built.practices}
+    practice = answer["dependencies"][0]["practice"]
+    traffic = {
+        "id": "T1",
+        "kind": "traffic",
+        "text": f"{practice}: POST https://adco.example/attribution",
+        "provenance": [{"origin": "o_report", "record": "c1"}],
+    }
+    context = Context(context.parts + (traffic,))
+
+    def dependency(relationship, *steps, reading):
+        given = {**answer["dependencies"][0], "relationship": relationship}
+        given["steps"] = [{"text": "AdCo receives it.", "cites": cites} for cites in steps]
+        claims = expectation.read({**answer, "dependencies": [given]}, name, context, practices, reading)
+        (c,) = [c for c in claims if c["type"] == "dependency"]
+        return c
+
+    assert expectation.READING == "5"
+    for relationship in ("ESSENTIAL", "QUALITY_DEPENDENT"):
+        c = dependency(relationship, ["T1"], reading="5")
+        assert (c["status"], c["strength"], c["sufficiency"]["reason"]) == ("not_established", "own", "own_knowledge")
+        assert c["dropped_steps"] == [{"step": 0, "reason": expectation.TRAFFIC_ONLY}]
+        assert c["reason"] == "no step is left that grounds the need"
+        # beside a passage the traffic-only step is still dropped, and the passage grounds the need
+        c = dependency(relationship, ["T1"], ["D1"], reading="5")
+        assert c["status"] == "supported" and len(c["dropped_steps"]) == 1
+        # a step citing traffic and a passage stays
+        assert "dropped_steps" not in dependency(relationship, ["T1", "D1"], reading="5")
+        # reading 4: the traffic grounds the need, as before
+        c = dependency(relationship, ["T1"], reading="4")
+        assert c["status"] == "supported" and "dropped_steps" not in c
+    with pytest.raises(ValueError):
+        dependency("ESSENTIAL", ["T1"], reading="6")

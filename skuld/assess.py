@@ -151,11 +151,14 @@ def build(
     write: bool = True,
     reading: str = judge.READING,
     notices: str = expectation.NOTICES,
+    expectation_reading: str = expectation.READING,
 ) -> tuple[dict, list[dict]]:
     """The report, and the claims its combined claims combine (`of`): the samples' and the experiments'. `reading`
     is the version of the reasoning tier's reading (judge.READINGS), `notices` the version of Ratatoskr's notice
-    definition the stage-1 contexts leave notice screens out by; a rebuild passes the ones its report names."""
+    definition the stage-1 contexts leave notice screens out by, `expectation_reading` the version of the expectation
+    stage's reading (expectation.READINGS); a rebuild passes the ones its report names."""
     judge.reading_component(reading)
+    expectation.reading_component(expectation_reading)
     notice_rules.component(notices)
     started = time.monotonic()
     root = Path(root)
@@ -224,7 +227,9 @@ def build(
     }
     stated, covered = concerns.information_not_given(a.frame, statuses, evidence_of)
     number = combine.Numbers()
-    stage1, components = _expectation(a, every_practice, item, registry, {p.id for p in built.practices}, notices)
+    stage1, components = _expectation(
+        a, every_practice, item, registry, {p.id for p in built.practices}, notices, expectation_reading
+    )
     hypotheses = combine.hypotheses(stage1, number)
     applicability = frame.applicability(a.frame, decided)
     tier = _reasoning_tier(a, built, hypotheses, item, registry, applicability, number, reading)
@@ -440,6 +445,7 @@ def _expectation(
     registry,
     judged: set[str] | None = None,
     notices: str | None = None,
+    reading: str = expectation.READING,
 ) -> tuple[list[dict], list[dict]]:
     """The expectation stage's claims from the kept samples, with an evidence item per context part a supported claim
     rests on, and the samples' components. The samples are read with all practices (`built`), as they were asked;
@@ -450,7 +456,7 @@ def _expectation(
         record = json.loads((a.root / "expectation" / name / "record.json").read_text(encoding="utf-8"))
         _record_components(components, record, "expectation")
         parts = {p["id"]: p for p in context.parts}
-        for c in expectation.read(answer, name, context, practices):
+        for c in expectation.read(answer, name, context, practices, reading):
             if judged is not None and c["subject"] not in judged:
                 continue
             cited = c.pop("parts", [])
@@ -458,7 +464,7 @@ def _expectation(
                 c["supporting"] = [i for x in cited for i in _part_items(item, name, parts[x])]
             claims.append(c)
     components["procedure"] = {"role": "method", **expectation.PROCEDURE, "stage": "expectation"}
-    components["reading"] = {**expectation.READING_COMPONENT, "stage": "expectation"}
+    components["reading"] = {**expectation.reading_component(reading), "stage": "expectation"}
     return claims, list(components.values()) if claims else []
 
 

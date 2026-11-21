@@ -4,7 +4,9 @@ The prompts' texts by version. `prompts/<id>.md` is the current version (CURRENT
 names them (config.json's or a profile's `prompts`, e.g. `{"minimisation": "2"}` in the fixtures' profile). A prompt's
 version is part of every sample's identity, and so is the digest of its text.
 
-    expectation, expectation_traffic   8: each passage of the context names the practices it was retrieved for, and
+    expectation, expectation_traffic   9: a dependency step may not cite only the observed traffic (T), which shows that
+                                          the processing happens, not that it is needed (expectation reading 5; 21 Nov
+                                          2026); 8: each passage of the context names the practices it was retrieved for, and
                                           the prompt says a passage documents only those (expectation.LABELED_SINCE;
                                           21 Nov 2026); 7: each purpose says where it is achieved (achieved_on: DEVICE or SERVER),
                                           required by the answer schema (21 Nov 2026); 6: the answer keyed by practice id, every practice of the batch required by
@@ -26,8 +28,8 @@ from importlib import resources
 from ratatoskr.errors import ConfigError
 
 CURRENT = {
-    "expectation": "8",
-    "expectation_traffic": "8",
+    "expectation": "9",
+    "expectation_traffic": "9",
     "specificity": "3",
     "compatibility": "2",
     "minimisation": "3",

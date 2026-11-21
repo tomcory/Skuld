@@ -29,6 +29,8 @@ For each practice listed in the context (its id starts with P):
    - NO_DEPENDENCY_IDENTIFIED: you cannot tell.
    Give your reasoning as numbered steps, each citing the context ids it rests on. That the application does
    something is never a reason that it needs to: a step may not cite a practice to show that the practice is needed.
+   Nor may it cite only the observed traffic (ids starting with T): traffic shows that the processing happens, not
+   that it is needed.
 
 Where no part of the context shows a part of a purpose or supports a step, cite "own knowledge" for it.
 

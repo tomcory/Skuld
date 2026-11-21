@@ -10,7 +10,7 @@ skuld change <workspace> <input> --reason …: record a change of a fixed input.
 skuld run <workspace> --recorded … --config … --device …: the runs, made by Loki in rotated order.
 skuld analyse <workspace>: the expectation report.
 skuld check <workspace>: the provenance of the reports (every digest verifies, every pointer resolves); an assessment
-    is rebuilt with the reading and notice definition it names and compared.
+    is rebuilt with the readings (the reasoning tier's and the expectation stage's) and notice definition it names and compared.
 skuld expect <workspace>: the expectation stage's samples (contexts without D, and the model's answers).
 skuld judge <workspace>: the assessment stage's reasoning tier: specificity, compatibility and minimisation samples.
 skuld describe <workspace> --package … --version … --observation …: write the assessment workspace's assessment.yaml.
@@ -913,11 +913,13 @@ def main(argv: list[str] | None = None) -> int:
             elif assessment_ws:
                 from skuld import judge
                 from skuld.assess import REPORT, build
-                from skuld.expectation import notices_of
+                from skuld.expectation import READINGS as STAGE1_READINGS
+                from skuld.expectation import notices_of, reading_of
 
                 report = json.loads((root / REPORT).read_text(encoding="utf-8"))
                 # rebuild with the reading the report was made with, so that a later reading changes no old report, and
-                # with the notice definition its stage-1 contexts were made with (1.1.0 if it names none)
+                # with the notice definition its stage-1 contexts were made with (1.1.0 if it names none), and with the
+                # expectation stage's reading it names (4 if it names none)
                 named = [
                     c.get("version")
                     for c in report.get("report", {}).get("components", [])
@@ -926,16 +928,26 @@ def main(argv: list[str] | None = None) -> int:
                 reading = named[0] if named else judge.READING
                 notes: list[str] = []
                 rebuilt = members = None
-                if reading in judge.READINGS:
+                stage1_reading = reading_of(report)
+                if reading in judge.READINGS and stage1_reading in STAGE1_READINGS:
                     try:
                         rebuilt, members = build(
-                            root, args.registry, write=False, reading=reading, notices=notices_of(report)
+                            root,
+                            args.registry,
+                            write=False,
+                            reading=reading,
+                            notices=notices_of(report),
+                            expectation_reading=stage1_reading,
                         )
                     except inputs.InputError:
                         pass  # a changed input refuses the rebuild; check_assessment names it by its digest
                 problems = check_assessment(inputs.load_assessment(root, check=False), report, rebuilt, members, notes)
                 if reading not in judge.READINGS:
                     problems.append(f"names the reading {reading}, which this Skuld does not know {judge.READINGS}")
+                elif stage1_reading not in STAGE1_READINGS:
+                    problems.append(
+                        f"names the expectation reading {stage1_reading}, which this Skuld does not know {STAGE1_READINGS}"
+                    )
                 elif rebuilt is None:
                     problems.append("not rebuilt: an input it names has changed")
                 for problem in problems:
