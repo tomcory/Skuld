@@ -48,7 +48,10 @@ the identifier, "precision 50 m"; `fact_text`). For a data component it also giv
 documentation, the facts of the corpus's checked passages about each candidate replacement of the datum (`replacements`:
 every node configuration.coarser admits, other than the datum and the root), each once, with its own passage as
 provenance, so that an alternative can ground what a replacement gives although no passage retrieved for the component
-states it (an Android ID's context shows the App Set ID's and the installation ID's facts). Each alternative states:
+states it (an Android ID's context shows the App Set ID's and the installation ID's facts). From minimisation prompt
+version 6 (REPLACEMENTS_SINCE) the practice's part also lists those candidate replacements of its data component as
+the admissible ones ("Admissible replacements of P-1.data: <node> (<title>), …", or "none"; `admissible`), and the
+prompt says that a REPLACE must name one of them; gate (a) and the refusal still check. Each alternative states:
 
     change       {kind: REMOVE | REPLACE | ON_DEVICE | NARROWER_RECIPIENT, node?}, node a data node for REPLACE
     alternative  free text, for the reader
@@ -205,6 +208,10 @@ SCREENS_SINCE = 4
 #: The first minimisation prompt version that asks for typed arguments (`SCHEMAS`, `typed`) and whose context gives the
 #: corpus's facts as parts F<n> after their passages (P10 (b), 21 Nov 2026)
 TYPED_SINCE = 5
+#: The first minimisation prompt version whose context lists, in the practice's part, the admissible replacements of
+#: its data component (`admissible`: the nodes `replacements` gives, or none), which a REPLACE must name (P10 trial
+#: finding 3, 21 Nov 2026). Contexts for an earlier version list none, so that the samples asked with it are found again
+REPLACEMENTS_SINCE = 6
 #: Statements per specificity batch, characters of the sentence a statement is quoted with
 BATCH, SENTENCE = 20, 400
 ATTEMPTS = 2
@@ -560,10 +567,22 @@ def _application(a: Assessment) -> dict:
     )
 
 
-def _practice(p: Practice, data: Vocabulary, names: dict[str, str]) -> dict:
+def _practice(p: Practice, data: Vocabulary, names: dict[str, str], replaceable: bool = False) -> dict:
+    """A practice's part; with `replaceable` (minimisation from REPLACEMENTS_SINCE), followed by the admissible
+    replacements of its data component (`admissible`)."""
     components = ", ".join(expectation.components(p))
     text = f"{expectation._describe(p, data, names)} Components: {components}."
+    if replaceable:
+        text += " " + admissible(p, data)
     return _part(p.id, "practice", text, ("o_report", json.dumps(p.claims[0], sort_keys=True)))
+
+
+def admissible(p: Practice, data: Vocabulary) -> str:
+    """The admissible replacements of a practice's data component, as its part states them: "Admissible replacements
+    of P-1.data: <node> (<title>), …." in the vocabulary's order, or "none." where `replacements` gives none."""
+    nodes = replacements(p.data, data)
+    listed = ", ".join(f"{n.id} ({n.title})" for n in data if n.id in nodes) or "none"
+    return f"Admissible replacements of {p.id}.data: {listed}."
 
 
 def _declaration(pid: str, text: str, pointers: list[str]) -> dict:
@@ -749,7 +768,8 @@ def questions(
         mine = [h for h in supported if h["subject"] == p.id]
         if not mine:
             continue
-        parts, hyp = [_application(a), _practice(p, data, names)], {}
+        replaceable = int(templates.version(MINIMISATION)) >= REPLACEMENTS_SINCE
+        parts, hyp = [_application(a), _practice(p, data, names, replaceable)], {}
         for k, h in enumerate(mine, 1):
             parts.append(_hypothesis(f"H{k}", _purpose_text(h["purpose"]), h))
             hyp[f"H{k}"] = h["id"]

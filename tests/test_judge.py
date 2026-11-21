@@ -576,6 +576,39 @@ class TypedJudge(FakeJudge):
         return LLMResponse(text=json.dumps({"alternatives": answer}))
 
 
+def test_a_minimisation_context_for_prompt_5_lists_no_admissible_replacements(workspace, monkeypatch):
+    """Minimisation prompt 6 (P10 trial finding 3) adds the admissible replacements to the practice's part, and only
+    that; a profile pinning prompt 5 gets the context as 0.12.0 made it, so that its kept samples are found again."""
+    from skuld import config
+
+    a, built = workspace
+    found, norms, hypotheses = tools(a, built)
+
+    def contexts():
+        return {
+            q.subject: q.context
+            for q in judge.questions(a, built, found, norms, hypotheses)
+            if q.question == judge.MINIMISATION
+        }
+
+    six = contexts()
+    loaded = dict(config.load())
+    monkeypatch.setattr(config, "load", lambda: {**loaded, "prompts": {"minimisation": "5"}})
+    five = contexts()
+    assert six.keys() == five.keys() and six
+    data = judge.vocabulary(judge.DATA)
+    practices = {p.id: p for p in built.practices}
+    for subject, context in five.items():
+        assert "Admissible replacements" not in judge.render(context)
+        line = " " + judge.admissible(practices[subject], data)
+        unlisted = [
+            {**p, "text": p["text"].removesuffix(line)} if p["id"] == subject else p for p in six[subject].parts
+        ]
+        assert six[subject].parts != context.parts and tuple(unlisted) == context.parts
+    interactions = next(p.id for p in built.practices if p.data == "app-activity.app-interactions")
+    assert f"Admissible replacements of {interactions}.data: app-activity (" in judge.render(six[interactions])
+
+
 def test_typed_alternatives_from_facts_end_to_end(tmp_path, capsys):
     """Minimisation prompt 5: the context gives a passage's readable facts as F parts after it (a fact whose quote the
     text lacks is left out), the typed answers read into claims with change, needs, gives and covers that the schema
@@ -600,6 +633,12 @@ def test_typed_alternatives_from_facts_end_to_end(tmp_path, capsys):
     assert passages[1]["provenance"] == [{"origin": "corpus", "record": "a.yaml", "fact": 0}]
     assert 'persists until reset, as the passage before states it: "the  advertising ID"' in judge.render(q.context)
     assert judge.refusals(q, json.dumps({"alternatives": []}), []) == []
+    # prompt 6: the practice lists the admissible replacements of its data component, or none
+    shown = q.context.parts[1]
+    assert shown["id"] == identifier and f"Admissible replacements of {identifier}.data: " in shown["text"]
+    assert "device-or-other-ids.app-set-id (" in shown["text"]
+    observed = next(p for p in built.practices if p.id == identifier)
+    assert shown["text"].endswith(" " + judge.admissible(observed, judge.vocabulary(judge.DATA)))
 
     judge.judge(a, built, found, norms, hypotheses, FACTORS, seeds=[1, 2], provider=TypedJudge())
     report = assess(a.root)  # validated against expectation_assessment

@@ -334,3 +334,28 @@ def test_the_context_gives_the_facts_of_the_candidate_replacements_of_a_datum():
     assert parts[0]["provenance"] == [{"origin": "corpus", "record": FILE, "fact": 0}]
     assert "persists until reinstall" in parts[1]["text"] and "as t (https://example.org) states it" in parts[1]["text"]
     assert judge.replacement_facts(corpus, [setid], [ADID], data, 0) == []  # given after its passage already, once
+
+
+def test_the_practice_lists_the_admissible_replacements_of_its_data_component():
+    """Minimisation prompt 6 (P10 trial finding 3): the practice's part lists the nodes `replacements` gives, which a
+    REPLACE must name, in the vocabulary's order with their titles, or none; the gate and the refusal still check."""
+    data = judge.vocabulary(judge.DATA)
+    line = judge.admissible(practice(), data)
+    assert line.startswith("Admissible replacements of P-1.data: ") and line.endswith(".")
+    listed = [x.split(" (", 1)[0] for x in line.removeprefix("Admissible replacements of P-1.data: ").split("), ")]
+    assert set(listed) == judge.replacements(ADID, data) and SETID in listed and ADID not in listed
+    assert f"{SETID} ({data[SETID].title})" in line
+    assert judge.admissible(practice(data="app-activity"), data) == "Admissible replacements of P-1.data: none."
+    assert judge.admissible(practice(data=data.root), data) == "Admissible replacements of P-1.data: none."
+    import dataclasses
+
+    observed = dataclasses.replace(practice(), claims=[{"claim": "P-1"}])
+    five = judge._practice(observed, data, {})
+    six = judge._practice(observed, data, {}, replaceable=True)
+    assert "Admissible" not in five["text"] and six["text"] == f"{five['text']} {line}"
+    assert six["provenance"] == five["provenance"]
+    # a node outside the vocabulary is still refused, one the vocabulary does not order below the datum fails gate (a)
+    q = question()
+    bad = {"alternatives": [entry(change={"kind": "REPLACE", "node": IDS + "device-model"})]}
+    assert judge.refusals(q, _json(bad), [])
+    assert judge.typed_gate_a({"kind": "replace", "node": IDS + "android-id"}, "D", SETID, data, True) == "gate_a_typed"

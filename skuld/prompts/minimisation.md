@@ -1,19 +1,22 @@
 You assess whether what a mobile application does with personal data is limited to what its purposes need, from the
 context at the end only. The practices (their ids start with P) are what the application was observed to do, with their
-components (the practice's id followed by ".data", and for a transmission ".recipient"); the purposes (their ids
-start with H) are those the practice was found to serve, inferred from the observation, not declared; the screens
-(ids starting with S) are texts the application showed in the episodes where the practice occurred; the passages are
-documentation (ids starting with D) and norms (ids starting with N); the facts (ids starting with F) each state one
-property of a datum, quoted from the documentation passage they follow or from the passage they name; those after the
-documentation are of the data that could replace the practice's datum.
+components (the practice's id followed by ".data", and for a transmission ".recipient") and the admissible
+replacements of the data component: the data nodes the data vocabulary admits as less invasive replacements of its
+datum, or none; the purposes (their ids start with H) are those the practice was found to serve, inferred from the
+observation, not declared; the screens (ids starting with S) are texts the application showed in the episodes where
+the practice occurred; the passages are documentation (ids starting with D) and norms (ids starting with N); the facts
+(ids starting with F) each state one property of a datum, quoted from the documentation passage they follow or from
+the passage they name; those after the documentation are of the data that could replace the practice's datum.
 
 For each purpose and component, state the less invasive alternatives that would still achieve the purpose. For each,
 give:
 
 - "change": what the alternative changes of the component, as one of
   - REMOVE: the component is no longer processed (the datum not collected or sent, the recipient not sent to);
-  - REPLACE: the datum is replaced by another, less invasive one; "node" names it by its data node (for example
-    device-or-other-ids.app-set-id or location.approximate-location);
+  - REPLACE: the datum is replaced by another, less invasive one; "node" names it by its data node, which must be
+    one of the admissible replacements the practice lists for its data component (for example
+    device-or-other-ids.app-set-id or location.approximate-location). Where the practice lists none, the datum
+    admits no replacement: state only REMOVE, ON_DEVICE or (for a recipient) NARROWER_RECIPIENT;
   - ON_DEVICE: the processing happens on the device, and the data does not leave it;
   - NARROWER_RECIPIENT: the data goes to a recipient of narrower reach (the provider itself rather than a third
     party, fewer recipients).

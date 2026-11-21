@@ -39,7 +39,7 @@ def test_an_unknown_version_is_refused(prompts):
 
 
 def test_the_prompt_versions_of_p10_and_the_ones_before_are_kept(prompts):
-    """P10 (21 Nov 2026): minimisation 5 asks for typed arguments, 4 tells of the screens, specificity 3 leaves
+    """P10 (21 Nov 2026): minimisation 6 lists the admissible replacements, 5 asks for typed arguments, 4 tells of the screens, specificity 3 leaves
     lawfulness out, expectation 9 forbids citing only the traffic for a need; the profiles of the study and the fixtures
     keep their pinned versions, and a profile pinning minimisation 4 or before gets the earlier answer form."""
     import json
@@ -47,7 +47,7 @@ def test_the_prompt_versions_of_p10_and_the_ones_before_are_kept(prompts):
 
     prompts(None)
     assert {k: templates.CURRENT[k] for k in ("minimisation", "specificity", "expectation", "expectation_traffic")} == {
-        "minimisation": "5",
+        "minimisation": "6",
         "specificity": "3",
         "expectation": "9",
         "expectation_traffic": "9",
@@ -69,6 +69,14 @@ def test_the_prompt_versions_of_p10_and_the_ones_before_are_kept(prompts):
     ):
         assert words in typed, words
     assert "TECHNICALLY_SUPPORTED" not in typed and "TECHNICALLY_SUPPORTED" in templates.text("minimisation", "4")
+    # minimisation 6 (P10 trial finding 3): a REPLACE names one of the admissible replacements the practice lists; 5,
+    # the typed form without them, is kept
+    flat = " ".join(typed.split())
+    assert "which must be one of the admissible replacements the practice lists for its data component" in flat
+    none = "Where the practice lists none, the datum admits no replacement: state only REMOVE, ON_DEVICE or (for a"
+    assert f"{none} recipient) NARROWER_RECIPIENT" in flat
+    five = templates.text("minimisation", "5")
+    assert '"gives"' in five and "(ids starting with F)" in five and "admissible" not in five
     assert judge.schema("minimisation") is judge.SCHEMAS["minimisation"]
     assert "level" not in judge.SCHEMAS["minimisation"]["properties"]["alternatives"]["items"]["properties"]
     assert "(ids starting with S)" not in templates.text("minimisation", "3")
