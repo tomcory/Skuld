@@ -372,6 +372,21 @@ def test_a_gap_with_an_external_step_is_not_beyond_external_evidence():
     assert not [t for t in q["triggers"] if t["trigger"] == "beyond_external_observability"]
 
 
+def test_a_concern_not_assessable_is_beyond_external_evidence_only_if_it_rests_on_an_audit_request():
+    # the author's decision of 21 Nov 2026: an instrument's limit leaves the case insufficient evidence
+    for kind, held, expected in (
+        ("improve_instrument", None, INSUFFICIENT),
+        ("audit_request", "record", NOT_ASSESSABLE),
+    ):
+        a = Assessment()
+        p = a.practice()
+        a.assessed_for_practice(p)
+        cid = a.concern(p, status="not_assessable")
+        a.gap(p, "oracle_not_observable", of=cid, kind=kind, **({"held": held} if held else {}))
+        q = case(qualified(a), p)
+        assert q["result"] == expected, (kind, q["result"])
+
+
 def test_an_audit_request_carries_what_it_requests():
     a = Assessment()
     p = a.practice()

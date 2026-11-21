@@ -100,6 +100,11 @@ def test_the_fact_conditions_of_o_d_relations_take_their_levels_from_ratatoskr_a
     assert (reading["level"], reading["reach"], reading["held"]) == ("E2", "partial", "organisation")
     assert gaps.condition_step("role:ThirdParty", role, "x")["kind"] == "audit_request"
     assert gaps.condition_step("reading:root-category", reading, "x")["kind"] == "review"
+    # the product a denial is limited to is decided by observing the application (complete reach); the other scope
+    # conditions are partial, the provider's records holding the rest
+    product = gaps.level_of("scope:product", FRAME)
+    assert (product["level"], product["reach"], "held" in product) == ("E1", "complete", False)
+    assert gaps.level_of("scope:jurisdiction", FRAME)["level"] == "E2"
     # correspondence reads the definitions' texts from Ratatoskr, not a table of its own
     assert correspondence.DEFINITIONS[("google-play-data-safety", "data")].startswith("the processing is not only")
 

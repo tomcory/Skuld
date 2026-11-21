@@ -41,7 +41,9 @@ from skuld.qualify.conditions import APPLICABILITY, FACT, SOURCE
 #: concern, not a discrepancy; a concern under an applicability condition is insufficient evidence (framework report
 #: 0.6, def:qualification; 18 Nov 2026); 5: step 4 reads a gap whose next step is an audit request, not a level
 #: (Ratatoskr 0.39.0, OBSERVABILITY_PLAN §9; 21 Nov 2026)
-VERSION = "5"
+#: 6: a concern not assessable is beyond external observability only where a gap of it, or of a claim it rests on, ends in
+#: an audit request; otherwise (an instrument's limit) it is insufficient evidence (the author's decision of 21 Nov 2026)
+VERSION = "6"
 COMPONENT = {"role": "method", "id": "skuld.qualify.results", "version": VERSION}
 
 DISCREPANCY = "externally_established_discrepancy"
@@ -162,6 +164,14 @@ def _list(parts: list[str], most: int = 4) -> str:
     return "; ".join(shown) + (f"; and {len(named) - most} more" if len(named) > most else "")
 
 
+def audited(view: View, c: Con) -> bool:
+    """Whether a concern not assessable rests on what only the controller could settle: a gap of the concern, or of a
+    claim it rests on, whose next step is an audit request (the author's decision of 21 Nov 2026; before, every concern
+    not assessable was step 4)."""
+    of = {c.id, *c.basis}
+    return any(g.audit and g.of in of for g in view.gaps)
+
+
 def steps(view: View) -> list[Step]:
     """Every step of the precedence that holds, in order; if none of 1–4 holds, step 5 where the case was assessed for
     a requirement, else not applicable."""
@@ -192,6 +202,9 @@ def steps(view: View) -> list[Step]:
         if c.status in ("conflicted", "not_established"):
             parts.append(f"{c.requirement} {c.status.replace('_', ' ')}")
             rests.append(c.id)
+        elif c.status == "not_assessable" and not audited(view, c):
+            parts.append(f"{c.requirement} not assessable with the suite's instruments")
+            rests.append(c.id)
         elif c.status == "supported" and c.condition == SOURCE:
             parts.append(f"{c.requirement} supported only if {', '.join(c.conditions)}")
             rests.append(c.id)
@@ -212,7 +225,7 @@ def steps(view: View) -> list[Step]:
         rests += sorted({u.gap for u in view.unassessed if u.gap})
     if parts:
         out.append(Step(INSUFFICIENT, _list(parts), rests))
-    beyond = [c for c in view.concerns if c.status == "not_assessable"]
+    beyond = [c for c in view.concerns if c.status == "not_assessable" and audited(view, c)]
     external = [g for g in view.gaps if g.audit]
     if beyond or external:
         parts = [f"{c.requirement} not assessable" for c in beyond] + [

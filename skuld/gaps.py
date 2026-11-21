@@ -97,7 +97,7 @@ READINGS = {
     },
     "scope:product": {
         "proposition": "the product the denial is limited to is the application observed",
-        "observability": declare(PARTIAL, RECORD, "what was observed; which products the provider means, its records"),
+        "observability": declare(COMPLETE, None, "what was observed: the application itself"),
     },
     "scope:condition": {
         "proposition": "the denial's own condition held when the data were sent",
