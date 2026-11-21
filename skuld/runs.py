@@ -14,9 +14,9 @@ app handed what the settings say"; Skuld's own verifier adds the traffic and the
 
 A goal-directed run (Loki's regime goal, `loki crawl --goal … --goal-id <case>`, 21 Nov 2026) also has its episodes
 (`episodes.json`) and its scope (`run_scope.json`, whose `goal` names the goal and where Loki's agent said it reached
-it). Its `window` is the goal episode: from the episode's start to the agent's statement (a `goal_reached` event),
-or to the episode's end where the agent made none. That the feature was reached is the agent's statement only; an
-oracle decides it.
+it). Its `window` is the goal episode: from the episode's start to its end, with the screens Loki records as it closes
+(the agent states the goal from its own screenshot, before Loki records that screen). That the feature was reached
+is the agent's statement only; an oracle decides it.
 """
 
 import json
@@ -79,9 +79,9 @@ class Window:
     Attributes:
         episode: The goal episode (the one the agent said it reached the goal in, else the last that sought it)
         start: The run's actions before the episode's first
-        end: The run's actions up to the agent's statement, or to the episode's end
+        end: The run's actions up to the episode's end
         first: The index in the run's events of the episode's start
-        last: The index of the statement, or of the episode's end (the events after it are outside the window)
+        last: The index of the last event before the next episode's start (the events after it are outside the window)
         reached: Whether the agent said it reached the goal
     """
 
@@ -189,7 +189,11 @@ def goal_of(meta: dict, scope: dict | None) -> dict | None:
 def goal_window(events: tuple[dict, ...] | list[dict]) -> Window | None:
     """
     The goal episode of a goal-directed run's events: the episode of its `goal_reached` event, else the last episode
-    of kind goal; from that episode's start to the statement, else to the episode's end (or the run's).
+    of kind goal; from that episode's start to its end, with the screens Loki records as it closes (up to the next
+    episode's start, or the run's end). Not up to the agent's statement: the agent states it from its own screenshot,
+    and Loki records the screen it saw only when the episode closes (live check of 21 Nov 2026: the statement named
+    the search screen, and the forecast was recorded after the episode's end). The goal regime ends the episode at the
+    statement, so the window holds nothing the agent did after it.
     """
     reached = next((e for e in events if e.get("type") == "goal_reached"), None)
     goals = [e.get("episode") for e in events if e.get("type") == "episode_start" and e.get("kind") == "goal"]
@@ -201,11 +205,8 @@ def goal_window(events: tuple[dict, ...] | list[dict]) -> Window | None:
         kind = event.get("type")
         if first is None and kind == "episode_start" and event.get("episode") == episode:
             first, start = i, taken
-        elif first is not None and (
-            (reached is not None and event is reached)
-            or (reached is None and kind == "episode_end" and event.get("episode") == episode)
-        ):
-            return Window(episode, start, taken, first, i, reached is not None)
+        elif first is not None and kind == "episode_start" and event.get("episode") != episode:
+            return Window(episode, start, taken, first, i - 1, reached is not None)
         if kind == "action":
             taken += 1
     if first is None:

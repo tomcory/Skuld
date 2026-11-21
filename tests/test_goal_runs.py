@@ -160,7 +160,7 @@ def test_a_goal_run_is_a_run_of_the_case_its_goal_names_only(tmp_path):
     assert not runs_of(launch, RunState(run.run_id, None, run=run))
 
 
-def test_the_window_of_a_goal_run_is_its_goal_episode_up_to_the_agents_statement(tmp_path):
+def test_the_window_of_a_goal_run_is_its_goal_episode(tmp_path):
     root = deep(ws.build(tmp_path / "ws", freeze=False))
     run = load_run(goal_run(root / "runs" / "run-01"))
     window = run.window
@@ -171,7 +171,7 @@ def test_the_window_of_a_goal_run_is_its_goal_episode_up_to_the_agents_statement
     oracle = inputs.load(root).oracles["O@1"]
     assert oracles.decide(oracle, run, (0, 1)).decision == "met"
     assert oracles.decide(oracle, late, (0, 1)).decision == "unmet"
-    # a window given in the recording's actions is read against the case's path: its end is the agent's statement
+    # a window given in the recording's actions is read against the case's path: its end is the goal episode's end
     at_end = {"screen_reached": {"exact_key": "main", "after_action": 48, "until_action": 48}}
     assert oracles.rebased(at_end, window, (40, 48)) == {
         "screen_reached": {"exact_key": "main", "after_action": 1, "until_action": 1}
@@ -185,6 +185,30 @@ def test_the_window_of_a_goal_run_is_its_goal_episode_up_to_the_agents_statement
     assert oracles.rebased(at_end, None, (40, 48)) is at_end  # a replay's window stays
     unreached = goal_window([{"type": "episode_start", "episode": 3, "kind": "goal"}, {"type": "action"}])
     assert (unreached.episode, unreached.end, unreached.reached) == (3, 1, False)
+
+
+def test_the_goal_window_holds_the_screen_loki_records_as_the_episode_closes():
+    # the live check of 21 Nov 2026: the agent stated the goal from its screenshot, naming the search screen (s16);
+    # Loki recorded the forecast (s17) only after the episode's end, before the logout episode
+    events = [
+        {"type": "episode_start", "episode": 1, "kind": "goal"},
+        {"type": "screen", "episode": 1, "screen_id": "s16"},
+        {"type": "action", "episode": 1},
+        {"type": "goal_reached", "episode": 1, "screen_id": "s16"},
+        {"type": "episode_end", "episode": 1},
+        {"type": "screen", "episode": 1, "screen_id": "s17"},
+        {"type": "episode_start", "episode": 2, "kind": "logout"},
+        {"type": "screen", "episode": 2, "screen_id": "s18"},
+    ]
+    window = goal_window(events)
+    assert (window.episode, window.start, window.end, window.first, window.last, window.reached) == (
+        1,
+        0,
+        1,
+        0,
+        5,
+        True,
+    )
 
 
 def test_a_goal_run_qualifies_only_where_the_goal_was_reached_and_the_oracle_is_met(tmp_path):

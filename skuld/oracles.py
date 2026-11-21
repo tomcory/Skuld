@@ -28,8 +28,8 @@ invalid (it is dropped from both sides of a comparison, and `skuld run` makes it
 
 The window of `text_shown` and `screen_reached` is given in actions of a replay of the recording (`after_action`,
 `until_action`, filled from the feature's path: `{path_start}`, `{path_end}`). A goal-directed run follows no
-recording: its window is its goal episode (`runs.Window`), from the episode's start to where Loki's agent said it
-reached the goal (else to the episode's end). `decide` reads the oracle's window against the case's path there: a
+recording: its window is its goal episode (`runs.Window`), from the episode's start to its end, with the screens Loki
+records as the episode closes. `decide` reads the oracle's window against the case's path there: a
 bound at or before the path's start is the episode's start, a bound at or after the path's end is the statement,
 and one between them widens to the episode (21 Nov 2026).
 """
@@ -134,7 +134,7 @@ def after_actions(run: Run) -> list[tuple[int, dict]]:
     """
     The screens of the app, each with the number of actions taken before it. Loki records the screen an action led to
     (label 'post_action') before the action's own event, so such a screen counts as after the next action. Of a
-    goal-directed run, only the screens of its goal episode up to the agent's statement (`Run.window`).
+    goal-directed run, only the screens of its goal episode (`Run.window`).
     """
     window = getattr(run, "window", None)
     taken, out = 0, []
@@ -245,7 +245,7 @@ def decide(oracle: Oracle, run: Run, path: tuple[int, int] | None = None) -> Dec
 def rebased(spec, window, path: tuple[int, int] | None):
     """
     An oracle's condition with its window in actions of a goal-directed run: a bound at or before the path's start is
-    the goal episode's start, one at or after the path's end its end (the agent's statement), one between them widens
+    the goal episode's start, one at or after the path's end its end, one between them widens
     to the episode; without a bound, the episode's. A condition of a replay, or without a window, is left as it is.
     """
     if window is None or not isinstance(spec, dict) or len(spec) != 1:
