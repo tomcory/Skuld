@@ -58,5 +58,8 @@
   "calibration": {
     "per_stratum": 10,
     "seed": 1
+  },
+  "gaps": {
+    "own_knowledge_exhausted": false
   }
 }
