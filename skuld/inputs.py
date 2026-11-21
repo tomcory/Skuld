@@ -674,6 +674,83 @@ def load_assessment(root: str | Path, check: bool = True) -> Assessment:
     )
 
 
+#: Source settings that impose nothing: a source handed to the app unchanged, a sink recorded (`execute.configuration`)
+UNCHANGED = ("pass", "record")
+
+
+def interventions_in(report: dict) -> list[str]:
+    """
+    The interventions an O report records of its runs, from what Verðandi copies of the instruments' settings into
+    each scope (`context.instruments`): a source setting other than `pass` or `record` (substituted, rounded, blocked,
+    …) and a blocked host, by the capture's settings (`blocked_hosts`) or by its connections (a host with connections
+    blocked). Empty for a run under no intervention: an exploration, a baseline run. The report's own record is read,
+    not the run folder it names, which describe need not find; the report is fixed by its digest, so what was checked
+    stays what is assessed.
+    """
+    found = []
+    for scope in report.get("scopes") or ():
+        instruments = ((scope.get("context") or {}).get("instruments")) if isinstance(scope, dict) else None
+        if not isinstance(instruments, dict):
+            continue
+        run = scope.get("observation") or "?"
+        for name, record in instruments.items():
+            if not isinstance(record, dict):
+                continue
+            settings = record.get("settings")
+            if name == "frida" and isinstance(settings, list):
+                found += [f"{run}: {s}" for s in settings if str(s).partition("=")[2] not in UNCHANGED]
+            elif name.startswith("heimdall"):
+                hosts = list(settings.get("blocked_hosts") or ()) if isinstance(settings, dict) else []
+                hosts += [h for h, c in (record.get("hosts") or {}).items() if isinstance(c, dict) and c.get("blocked")]
+                found += [f"{run}: {h} blocked" for h in dict.fromkeys(hosts)]
+    return found
+
+
+def _conditions(*folders: Path) -> dict[str, str]:
+    """The conditions of the runs that the case workspaces in `folders` list (runs.jsonl), by run id."""
+    found = {}
+    for folder in folders:
+        path = folder / "runs.jsonl"
+        if path.is_file():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    entry = json.loads(line)
+                    found.setdefault(str(entry.get("run")), str(entry.get("condition")))
+    return found
+
+
+def check_subject(root: Path, report: Path, run: str | None) -> None:
+    """
+    Refuses an O report of a run made under an intervention as a subject of the assessment (Q9, confirmed by the author
+    on 21 Nov 2026): the subjects come from O's report of the exploration, corroborated by baseline runs; runs under
+    interventions are evidence of experiments only. Two signals, either refuses: the report's record of the
+    instruments' settings (`interventions_in`), and a condition other than `baseline` under which a case workspace
+    lists the run (runs.jsonl of the assessment workspace, and of the workspace whose `observation/<run>/` holds the
+    report), which also refuses a control run or a run whose intervention left no setting in the report.
+    """
+    try:
+        data = json.loads(report.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise InputError(f"{report}: not an O report ({e})") from e
+    if not isinstance(data, dict):
+        raise InputError(f"{report}: not an O report (no JSON object)")
+    found = interventions_in(data)
+    folders = [root]
+    if report.parent.parent.name == "observation":
+        folders.append(report.parent.parent.parent)
+    conditions = _conditions(*folders)
+    ids = {Path(run).name} if run else set()
+    ids |= {str(s.get("observation")) for s in (data.get("scopes") or ()) if isinstance(s, dict)}
+    found += [f"{i}: condition {conditions[i]}" for i in sorted(ids) if conditions.get(i, "baseline") != "baseline"]
+    if found:
+        raise InputError(
+            f"{report}: a run under an intervention ({'; '.join(found[:5])}"
+            f"{f'; {len(found) - 5} more' if len(found) > 5 else ''}). Runs under interventions are evidence of "
+            "experiments only, never subjects of the assessment (Q9): name O's report of the exploration and of "
+            "baseline runs"
+        )
+
+
 def describe_assessment(
     root: str | Path,
     package: str,
@@ -693,12 +770,15 @@ def describe_assessment(
     pairs. The frame is the bundled frame's current version unless `frame_version` names an earlier one, as for a
     workspace assessed with it. What an existing `assessment.yaml` states beyond what describe writes is kept: the
     compatibility statements (`compatible_versions`) and the models (`models`; `model` names both stages' model).
+    An O report of a run under an intervention is refused (`check_subject`, Q9), and nothing is written.
     """
     from ratatoskr.frames import Frame
 
     from skuld.corpus import load as load_corpus
 
     root = Path(root)
+    for report, run in observations:
+        check_subject(root, Path(report), run)
     root.mkdir(parents=True, exist_ok=True)
 
     def rel(path: Path) -> str:

@@ -200,3 +200,63 @@ def test_compat_add_on_the_command_line(workspace, capsys):
     assert main(["compat", "add", str(root), "--o", "1.0", "--d", "1.2", "--reason", "r", "--author", "a"]) == 0
     assert "1.0 ~ 1.2" in capsys.readouterr().out
     assert main(["compat", "add", str(root), "--o", "1.0", "--d", "1.2", "--reason", "r", "--author", "a"]) == 1
+
+
+def o_report(path: Path, run: str, frida=("location=pass",), blocked=(), hosts=None) -> Path:
+    """An O report of one run, with what Verðandi copies of the instruments' settings into its scope."""
+    instruments = {
+        "heimdall:capture/1": {"settings": {"blocked_hosts": list(blocked)}, "hosts": hosts or {}},
+        "frida": {"settings": list(frida)},
+    }
+    scope = {"observation": run, "context": {"instruments": instruments}}
+    return write(path, {"scopes": [scope], "claims": []})
+
+
+@pytest.mark.parametrize(
+    "report",
+    [
+        dict(frida=("location=round:1",)),
+        dict(frida=("advertising_id=replace:00000000-0000-0000-0000-000000000000",)),
+        dict(frida=("location=block",)),
+        dict(blocked=("ads.example",)),
+        dict(hosts={"ads.example": {"connections": 2, "blocked": 2}}),  # settings unread ("?"), connections blocked
+    ],
+)
+def test_a_run_under_an_intervention_is_no_subject_of_the_assessment(tmp_path, report):
+    o = o_report(tmp_path / "o" / "observation_report.json", "r1", **report)
+    root = tmp_path / "ws"
+    with pytest.raises(inputs.InputError, match=r"under an intervention .*\(Q9\)"):
+        inputs.describe_assessment(root, "app.example", "1.0", [(o, "r1")], None, None, CORPUS)
+    assert not (root / inputs.ASSESSMENT).exists()  # nothing written
+
+
+def test_the_exploration_and_baseline_runs_are_subjects(tmp_path):
+    exploration = o_report(tmp_path / "e.json", "r0", frida=("location=pass", "clipboard=record"))
+    baseline = o_report(tmp_path / "b.json", "r1", hosts={"api.example": {"connections": 3, "blocked": 0}})
+    root = tmp_path / "ws"
+    inputs.describe_assessment(root, "app.example", "1.0", [(exploration, "r0"), (baseline, "r1")], None, None, CORPUS)
+    assert len(inputs.load_assessment(root).observations) == 2
+
+
+@pytest.mark.parametrize(
+    "entry, refused",
+    [
+        ({"condition": "baseline"}, False),  # a baseline replay: corroborates the exploration
+        ({"condition": "baseline", "regime": "goal", "goal_id": "c1"}, False),  # a goal run under no intervention
+        ({"condition": "G1"}, True),  # a replay under an alternative's condition
+        ({"condition": "G1", "regime": "goal", "goal_id": "c1"}, True),  # a goal run under an intervention
+        ({"condition": "control", "control_of": "c1"}, True),
+    ],
+)
+def test_a_run_a_case_workspace_lists_under_another_condition_than_baseline_is_refused(tmp_path, entry, refused):
+    # the report's settings show no intervention (as for an intervention that left none in it): the case workspace
+    # whose observation/<run>/ holds the report says under which condition the run was made
+    cases = tmp_path / "cases"
+    o = o_report(cases / "observation" / "r5" / "observation_report.json", "r5")
+    (cases / "runs.jsonl").write_text(json.dumps({"run": "r5", "dir": "r5", "order": 1, **entry}) + "\n")
+    root = tmp_path / "ws"
+    if refused:
+        with pytest.raises(inputs.InputError, match=f"r5: condition {entry['condition']}"):
+            inputs.describe_assessment(root, "app.example", "1.0", [(o, "r5")], None, None, CORPUS)
+    else:
+        inputs.describe_assessment(root, "app.example", "1.0", [(o, "r5")], None, None, CORPUS)

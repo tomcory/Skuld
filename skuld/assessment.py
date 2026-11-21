@@ -18,6 +18,10 @@ dropped that lenient reading on 21 Nov 2026). O's and D's reasons pass through u
 Ratatoskr 0.34.0, which states factor levels and no reason, is read as low (`uncertainty.read`). Which of D's channels is exhaustive
 for a predicate, so that its silence is closed, is D's, as Ratatoskr states its channel types (ratatoskr.channels).
 
+The design questions Q1 (what one practice is), Q8 (O and D of different versions) and Q9 (which O reports are
+subjects: the exploration's and baseline runs', never a run under an intervention, which `skuld describe` refuses,
+`inputs.check_subject`) were built as proposed on 24 Oct 2026 and confirmed by the author on 21 Nov 2026.
+
 The assessment records whether O's and D's scopes are comparable (Q8): O's installed version and D's store version
 equal, or a pair the assessment states compatible. The relations read it: where they are not, D's claims are passed
 on as not comparable, with the reason, and the collection is still a subject of its own.
