@@ -45,8 +45,9 @@
   "experiments": {
     "budget_seconds": 0,
     "repeats": 3,
-    "run_seconds": 240,
-    "goal_max_duration_s": 900
+    "run_seconds": 360,
+    "goal_max_duration_s": 900,
+    "control_run_seconds": 900
   },
   "assessment": {
     "seeds": [

@@ -24,7 +24,7 @@ def every_purpose_observable(request, monkeypatch):
     (marked `catalogue`) read Skuld's catalogue."""
     if "catalogue" not in request.keywords:
         monkeypatch.setattr(
-            select, "observed_purposes", lambda: [("Purpose", b) for b in ("user", "provider", "other")]
+            select, "observed_purposes", lambda **_: [("Purpose", b) for b in ("user", "provider", "other")]
         )
 
 
@@ -579,3 +579,15 @@ def test_a_preserved_purpose_reaches_its_own_node_only_and_a_broken_one_also_tho
     same = hypothesis("claim:P-loc:1", "P-loc", "ServiceProvision")
     out = combine.experimental([same], [preserved], PURPOSES, combine.Numbers())
     assert out[0]["basis"] == ["claim:P-loc:1"]
+
+
+def test_a_baseline_counts_its_control_runs_at_their_cap(monkeypatch):
+    # 21 Nov 2026: goal runs took 5 to 6 minutes, and a control that does not reach its goal runs to its cap
+    s = {"budget_seconds": 0, "repeats": 3, "run_seconds": 360, "control_run_seconds": 900}
+    assert select._baseline_seconds(s) == 4 * 360 + 3 * 900
+    candidate = {"components": [{"alternatives": ["a", "b"]}]}
+    assert select._cost(candidate, s) == 4 * 360 + 3 * 900 + 2 * 3 * 360
+    assert select._added(candidate, {"a"}, baseline=True, s=s) == 3 * 360
+    assert select._added(candidate, set(), baseline=False, s=s) == 4 * 360 + 3 * 900 + 2 * 3 * 360
+    monkeypatch.setattr(select.config, "load", lambda: {"experiments": {"goal_max_duration_s": 600}})
+    assert select.settings()["control_run_seconds"] == 600 and select.settings()["run_seconds"] == 360
