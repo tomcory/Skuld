@@ -20,7 +20,36 @@ about:
 text: >-
   …, in our own words where the source's licence asks for it
 verified: {by: assessor, date: 2026-10-23, note: checked against the page as retrieved}
+facts:                    # optional (P10, 21 Nov 2026): properties the text states, quoted from it
+  - about: device-or-other-ids.app-set-id       # a data node of the data vocabulary
+    kind: scope                                 # scope, persists or precision_m (FACT_KINDS)
+    value: developer                            # one of the kind's values (below)
+    quote: shared by all apps of the same developer   # a substring of `text` (whitespace normalised)
 ```
+
+A fact states one property of a datum, as the passage's text does: its kind, its value and the words it is read from
+(`quote`, which must occur in `text` as written there, case included; runs of whitespace compare as one space). The
+kinds and their values are those of the minimisation question's typed form (judge.py), by which a rule compares what
+a purpose needs with what an alternative gives:
+
+    scope        the apps among which the same value of an identifier links the user, by containment
+                 (SCOPES: app ⊂ developer ⊂ device ⊂ cross-app):
+                   app          one app alone (one app's own identifier: an installation ID)
+                   developer    the apps of one developer account on the device (the App Set ID)
+                   device       every app on the device, though it is not made to link the user across apps
+                   cross-app    every app on the device, and made to link the user across apps and the parties they
+                                share it with (the advertising ID)
+    persists     the event that ends an identifier's value, ordered by how much it survives
+                 (PERSISTS: session < reinstall < reset < factory-reset):
+                   session        the app's session or process ends
+                   reinstall      the app is uninstalled or its data cleared (it survives sessions)
+                   reset          the user resets it in the system's settings (it survives reinstalls)
+                   factory-reset  only the device's factory reset (it survives the user's resets)
+    precision_m  a location's precision in metres, a positive number: how far from the user it may place them (the
+                 larger, the coarser)
+
+A fact is rendered as a part of its own (F<n>) right after its passage in a minimisation context (judge.py, prompt
+version 5 on), with the passage file as its provenance, so that gates (b) and (c) read it as they read the passage.
 
 A passage is tagged (`about`) with each data node it names, or that a rule it states plainly covers, listed one by
 one and never through a parent: the rules of Android's guidance on identifiers cover the Android ID although they do
@@ -67,6 +96,32 @@ AUTHORITIES = ("gdpr", "edpb", "wp29")
 AUTHORITY_OF_KIND = {"norm": ("gdpr",), "guideline": ("edpb", "wp29")}
 #: The folder of the norms and guidelines, inside the corpus folder
 NORMS = "norms"
+#: The kinds of a fact, and the values of each in their order (see above): a scope by containment, a persistence by the
+#: event that ends it; precision_m takes a positive number of metres
+SCOPES = ("app", "developer", "device", "cross-app")
+PERSISTS = ("session", "reinstall", "reset", "factory-reset")
+FACT_KINDS = ("scope", "persists", "precision_m")
+ORDERS = {"scope": SCOPES, "persists": PERSISTS}
+
+
+def valid_value(kind: str, value) -> bool:
+    """Whether a value is one of a fact kind's: a scope or persistence of its order, or a positive number of metres."""
+    if kind in ORDERS:
+        return value in ORDERS[kind]
+    if kind == "precision_m":
+        return isinstance(value, int | float) and not isinstance(value, bool) and value > 0
+    return False
+
+
+@dataclass(frozen=True)
+class Fact:
+    """A property of a datum a passage states: the data node it is about, its kind, its value and the words of the
+    passage it is read from."""
+
+    about: str
+    kind: str
+    value: object
+    quote: str
 
 
 @dataclass(frozen=True)
@@ -84,6 +139,7 @@ class Passage:
     requirements: tuple[str, ...] = ()
     recipient_types: tuple[str, ...] = ()
     authority: str | None = None
+    facts: tuple[Fact, ...] = ()
 
     @property
     def checked(self) -> bool:
@@ -156,6 +212,9 @@ def load(directory: str | Path) -> Corpus:
         if lacking:
             raise CorpusError(f"{path}: no {', '.join(lacking)}")
         about = data.get("about") or {}
+        facts = data.get("facts") or []
+        if not isinstance(facts, list) or not all(isinstance(f, dict) for f in facts):
+            raise CorpusError(f"{path}: facts is not a list of mappings ({{about, kind, value, quote}})")
         passages.append(
             Passage(
                 id=data["id"],
@@ -171,16 +230,26 @@ def load(directory: str | Path) -> Corpus:
                 requirements=tuple(about.get("requirements") or ()),
                 recipient_types=tuple(about.get("recipient_types") or ()),
                 authority=str(data["authority"]) if data.get("authority") else None,
+                facts=tuple(
+                    Fact(str(f.get("about") or ""), str(f.get("kind") or ""), f.get("value"), str(f.get("quote") or ""))
+                    for f in facts
+                ),
             )
         )
         digest.update(path.name.encode() + b"\0" + path.read_bytes() + b"\0")
     return Corpus(tuple(passages), digest.hexdigest())
 
 
-def problems(corpus: Corpus) -> list[str]:
+def problems(corpus: Corpus, data: Vocabulary | None = None) -> list[str]:
     """What keeps passages from being relied on: no source, no date retrieved, nothing they are about, an id not
-    their file's name, no record that a person checked them against their source, or a norm or guideline without its
-    authority (`gdpr` for a norm, `edpb` or `wp29` for a guideline; another passage states none)."""
+    their file's name, no record that a person checked them against their source, a norm or guideline without its
+    authority (`gdpr` for a norm, `edpb` or `wp29` for a guideline; another passage states none), or a fact whose
+    quote is not in the passage's text, whose kind is unknown, whose value is not one of its kind's, or which is about
+    no node of the data vocabulary (`data`, default the bundled one)."""
+    if data is None and any(p.facts for p in corpus.passages):
+        from skuld.common import DATA, vocabulary
+
+        data = vocabulary(DATA)
     out = []
     for p in corpus.passages:
         if p.path.stem != p.id:
@@ -202,6 +271,25 @@ def problems(corpus: Corpus) -> list[str]:
             )
         elif not allowed and p.authority is not None:
             out.append(f"{p.id}: a {p.kind} passage states an authority ({p.authority}); only norms and guidelines do")
+        out += fact_problems(p, data)
+    return out
+
+
+def fact_problems(p: Passage, data: Vocabulary | None) -> list[str]:
+    """What keeps a passage's facts from being read (see `problems`), each named by its position (facts[k])."""
+    out = []
+    for k, f in enumerate(p.facts):
+        name = f"{p.id}: facts[{k}]"
+        if f.kind not in FACT_KINDS:
+            out.append(f"{name}: kind {f.kind or '(none)'!r} is not one of {', '.join(FACT_KINDS)}")
+        elif not valid_value(f.kind, f.value):
+            allowed = " < ".join(ORDERS[f.kind]) if f.kind in ORDERS else "a positive number of metres"
+            out.append(f"{name}: value {f.value!r} is not a {f.kind} ({allowed})")
+        if data is not None and (not f.about or f.about not in data or f.about == data.root):
+            out.append(f"{name}: about {f.about or '(none)'!r} is not a node of the data vocabulary")
+        quote = " ".join(f.quote.split())
+        if not quote or quote not in p.text:
+            out.append(f"{name}: its quote is not in the passage's text")
     return out
 
 

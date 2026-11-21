@@ -168,3 +168,49 @@ def test_a_passage_without_its_title_or_text_is_named_not_a_traceback(tmp_path):
     (tmp_path / "ids.yaml").write_text(PASSAGE.format(id="ids", entity="appsflyer").replace("title: Identifiers\n", ""))
     with pytest.raises(corpus.CorpusError, match="ids.yaml: no title"):
         corpus.load(tmp_path)
+
+
+FACTS = """verified: {by: assessor, date: 2026-11-21}
+facts:
+  - {about: device-or-other-ids.advertising-id, kind: persists, value: reset, quote: "advertising  ID is\\n resettable"}
+  - {about: device-or-other-ids.advertising-id, kind: scope, value: cross-app, quote: The advertising ID}
+  - {about: location.approximate-location, kind: precision_m, value: 3000, quote: resettable}
+"""
+
+
+def test_a_passages_facts_are_read_with_their_kind_value_and_quote(tmp_path):
+    (tmp_path / "ids.yaml").write_text(PASSAGE.format(id="ids", entity="") + FACTS)
+    found = corpus.load(tmp_path)
+    [p] = found.passages
+    assert [(f.about, f.kind, f.value) for f in p.facts] == [
+        ("device-or-other-ids.advertising-id", "persists", "reset"),
+        ("device-or-other-ids.advertising-id", "scope", "cross-app"),
+        ("location.approximate-location", "precision_m", 3000),
+    ]
+    assert corpus.problems(found) == []  # the quote's whitespace compares as one space
+    assert corpus.SCOPES == ("app", "developer", "device", "cross-app")
+    assert corpus.PERSISTS == ("session", "reinstall", "reset", "factory-reset")
+
+
+def test_a_fact_whose_quote_kind_value_or_node_is_wrong_is_refused(tmp_path):
+    wrong = """verified: {by: assessor, date: 2026-11-21}
+facts:
+  - {about: device-or-other-ids.advertising-id, kind: persists, value: reset, quote: is not resettable}
+  - {about: device-or-other-ids.advertising-id, kind: lifetime, value: reset, quote: resettable}
+  - {about: device-or-other-ids.advertising-id, kind: scope, value: global, quote: resettable}
+  - {about: location.approximate-location, kind: precision_m, value: about 3 km, quote: resettable}
+  - {about: no-such-node, kind: scope, value: app, quote: resettable}
+  - {about: device-or-other-ids.advertising-id, kind: scope, value: app, quote: The Advertising ID}
+"""
+    (tmp_path / "ids.yaml").write_text(PASSAGE.format(id="ids", entity="") + wrong)
+    assert corpus.problems(corpus.load(tmp_path)) == [
+        "ids: facts[0]: its quote is not in the passage's text",
+        "ids: facts[1]: kind 'lifetime' is not one of scope, persists, precision_m",
+        "ids: facts[2]: value 'global' is not a scope (app < developer < device < cross-app)",
+        "ids: facts[3]: value 'about 3 km' is not a precision_m (a positive number of metres)",
+        "ids: facts[4]: about 'no-such-node' is not a node of the data vocabulary",
+        "ids: facts[5]: its quote is not in the passage's text",  # the quote's case is the text's
+    ]
+    (tmp_path / "ids.yaml").write_text(PASSAGE.format(id="ids", entity="") + "facts: {about: x}\n")
+    with pytest.raises(corpus.CorpusError, match="facts is not a list"):
+        corpus.load(tmp_path)
