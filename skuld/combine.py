@@ -18,7 +18,8 @@ model and yields no finding: the claims it combines are kept, in the samples and
     hypotheses    the expectation stage's claims across its samples: purposes aligned by node and beneficiary within a
                   practice (E's ≈), and the dependencies of each combined purpose by component; they enter the
                   assessment stage as its hypotheses, and nothing of the assessment stage passes back into them
-    alternatives  the reasoning tier's Alternative claims across its samples, by purpose and component; from reading 2
+    alternatives  the reasoning tier's Alternative claims across its samples, by purpose and component, and from
+                  reading 5 by the change the alternative makes (judge.change_key); from reading 2
                   a documented alternative stays supported only with a majority of its question's samples (gate (d),
                   MAJORITY), else it is not established
     experimental  the experimental channel's claims with the hypotheses of aligned purposes: a hypothesis purpose of a
@@ -47,11 +48,13 @@ DECISIVE = ("supported", "refuted")
 #: that support it (20 Nov 2026); 4: one level with its reasons (Ratatoskr 0.34.0): either over the agreeing members,
 #: needs over all where none agrees, aligned_above for C1; 5: a substitutable dependency that decides keeps its reason,
 #: which names the substitutes (21 Nov 2026); 6: a combined purpose says where it is achieved only where its members
-#: agree (21 Nov 2026)
-VERSION = "6"
+#: agree (21 Nov 2026); 7: alternatives are combined per change as well (`change_key`, from the reasoning tier's reading
+#: 5), so that gate (d) counts the samples that propose the same change (P10 fix 2, 21 Nov 2026); claims of an earlier
+#: reading name no change and are combined per component as before
+VERSION = "7"
 COMPONENT = {"role": "method", "id": "skuld.combine", "version": VERSION}
 #: What a combined claim carries over from the claim that decides it
-CARRIED = ("stage", "tier", "case", "scope", "component", "relationship", "alternative", "level")
+CARRIED = ("stage", "tier", "case", "scope", "component", "relationship", "alternative", "change_key", "level")
 
 
 def decide(members: list[dict]) -> tuple[str, dict | None]:
@@ -217,14 +220,15 @@ MAJORITY = "gate (d): no majority of the samples of its question supports the al
 
 
 def alternatives(claims: list[dict], number: Numbers, asked: dict[str, set[str]] | None = None) -> list[dict]:
-    """The reasoning tier's Alternative claims combined across its samples, per practice, purpose and component.
-    With `asked` (the samples of each practice's minimisation question, by sample name), a supported combined claim
+    """The reasoning tier's Alternative claims combined across its samples, per practice, purpose, component and change
+    (`change_key`, from the reasoning tier's reading 5; a claim of an earlier reading names none, and its component's
+    are combined as one). With `asked` (the samples of each practice's minimisation question, by sample name), a supported combined claim
     must be supported by more than half of them (gate d), and is otherwise not established."""
     groups: dict[tuple, list[dict]] = {}
     for c in claims:
-        groups.setdefault((c["subject"], c["basis"][0], c["component"]), []).append(c)
+        groups.setdefault((c["subject"], c["basis"][0], c["component"], c.get("change_key")), []).append(c)
     out = []
-    for (subject, pid, _), members in groups.items():
+    for (subject, pid, _, _), members in groups.items():
         claim = combined(number(subject), members, basis=[pid])
         if asked is not None and claim["status"] == "supported" and claim.get("tier") == "reasoning":
             samples = asked.get(subject) or set()

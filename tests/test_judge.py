@@ -473,3 +473,65 @@ def test_a_minimisation_context_holds_the_screens_of_the_practices_episodes_with
     loaded = dict(config.load())
     monkeypatch.setattr(config, "load", lambda: {**loaded, "prompts": {"minimisation": "3"}})
     assert not [p for q in minimisation().values() for p in q.context.parts if p["kind"] == "screen"]
+
+
+def test_reading_5_names_each_alternatives_change_and_reading_4_none(workspace):
+    """P10 fix 2: the change key the combination groups alternatives by, read from the alternative's text."""
+    a, built = workspace
+    found, norms, hypotheses = tools(a, built)
+    by_id = {h["id"]: h for h in hypotheses}
+    by_data = {p.data: p for p in built.practices}
+    practice = by_data["device-or-other-ids.advertising-id"]
+    (q,) = [
+        q
+        for q in judge.questions(a, built, found, norms, hypotheses)
+        if q.question == "minimisation" and q.subject == practice.id
+    ]
+
+    def entry(text):
+        return {
+            "purpose": "H1",
+            "component": f"{practice.id}.data",
+            "alternative": text,
+            "level": "PLAUSIBLE",
+            "steps": [],
+        }
+
+    texts = [
+        "use an app-generated installation ID instead",
+        "remove the advertising ID",
+        "store less",
+        "use the Android ID or an installation ID",
+    ]
+    claims = judge.minimisation({"alternatives": [entry(t) for t in texts]}, "s", q, by_id, "5", practice, found)
+    assert [c["change_key"] for c in claims] == [
+        "replace:device-or-other-ids.installation-id",
+        "remove",
+        judge.OTHER_CHANGE,
+        "replace:device-or-other-ids.android-id,device-or-other-ids.installation-id",
+    ]
+    old = judge.minimisation({"alternatives": [entry(t) for t in texts]}, "s", q, by_id, "4", practice, found)
+    assert not [c for c in old if "change_key" in c]
+    assert [{k: v for k, v in c.items() if k != "change_key"} for c in claims] == old
+
+
+def test_check_rebuilds_a_report_under_the_readings_it_names(workspace, capsys):
+    """A report made under judge reading 4 and expectation reading 4 (before P10) is rebuilt by `skuld check` under
+    them, not under the current ones, and so identically."""
+    from skuld import cli
+    from skuld.assess import build
+
+    a, built = workspace
+    found, norms, hypotheses = tools(a, built)
+    judge.judge(a, built, found, norms, hypotheses, FACTORS, seeds=[1], provider=FakeJudge())
+    assess(a.root)
+    report, _ = build(a.root, reading="4", expectation_reading="4")
+    named = {c["id"]: c["version"] for c in report["report"]["components"] if c["id"].endswith(".reading")}
+    assert named == {"skuld.judge.reading": "4", "skuld.expectation.reading": "4"}
+    assert expectation.reading_of(report) == "4" and expectation.reading_of({"report": {"components": []}}) == "4"
+    assert not [c for c in report["claims"] if "change_key" in c]
+    capsys.readouterr()
+    code = cli.main(["check", str(a.root)])
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "rebuilt from the same inputs" not in out and "earlier components" not in out

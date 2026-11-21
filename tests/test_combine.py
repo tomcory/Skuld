@@ -198,3 +198,38 @@ def test_gate_d_an_alternative_it_demotes_takes_the_uncertainty_of_the_members_n
         "level": "moderate",
         "reasons": [{"reason": "from_documents", "level": "moderate"}],
     }
+
+
+def test_gate_d_counts_the_samples_that_propose_the_same_change_from_reading_5():
+    """P10 fix 2: two samples supporting different changes of one component are no majority of three; two supporting
+    the same change are. Claims of an earlier reading name no change and combine per component as before."""
+    from skuld import combine
+
+    asked = {"P-1": {"m/P-1/s1", "m/P-1/s2", "m/P-1/s3"}}
+
+    def keyed(sample, status, key):
+        return {**_alternative(sample, status), "change_key": key}
+
+    different = [
+        keyed("m/P-1/s1", "supported", "replace:device-or-other-ids.installation-id"),
+        keyed("m/P-1/s2", "supported", "remove"),
+        keyed("m/P-1/s3", "not_established", "other"),
+    ]
+    out = combine.alternatives(different, combine.Numbers(), asked)
+    assert [c["change_key"] for c in out] == ["replace:device-or-other-ids.installation-id", "remove", "other"]
+    assert all(c["status"] == "not_established" for c in out)
+    assert all("(1 of 3)" in c["reason"] for c in out[:2])
+    same = [
+        keyed("m/P-1/s1", "supported", "remove"),
+        keyed("m/P-1/s2", "supported", "remove"),
+        keyed("m/P-1/s3", "not_established", "other"),
+    ]
+    out = combine.alternatives(same, combine.Numbers(), asked)
+    assert [(c["change_key"], c["status"], len(c["of"])) for c in out] == [
+        ("remove", "supported", 2),
+        ("other", "not_established", 1),
+    ]
+    # without change keys (reading 4), the two supporting samples agree per component, as before
+    unkeyed = [{k: v for k, v in c.items() if k != "change_key"} for c in different]
+    (one,) = combine.alternatives(unkeyed, combine.Numbers(), asked)
+    assert one["status"] == "supported" and "change_key" not in one

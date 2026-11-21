@@ -34,7 +34,8 @@ concerns:
                    recipient's entity or type, never the root); (c) that passage was checked against its source by a
                    person (`verified: {by, date}`). Otherwise the alternative is plausible and not established, with
                    the gate as its reason; gate (d), a majority of the question's samples, is the combination's
-                   (combine.alternatives)
+                   (combine.alternatives), which from READING 5 counts the samples that propose the same change
+                   (`change_key`)
 
 From minimisation prompt version 4 (SCREENS_SINCE) a minimisation context also holds the screens of the episodes the
 practice occurred in, as stage 1's batches give them, notices left out (`screens_of`), so that what a purpose needs may
@@ -75,8 +76,12 @@ QUESTIONS = (SPECIFICITY, COMPATIBILITY, MINIMISATION)
 #: alternatives", "None needed", "No change", "Not applicable – …" and "No alternative is needed; …" name no
 #: alternative (_NO_ALTERNATIVE_4); a declared purpose judged not specific specifies nothing only where
 #: purpose_specific applies (vague_declarations).
-READING = "4"
-READINGS = ("1", "2", "3", "4")
+#: 5 (21 Nov 2026, P10 fix 2): each Alternative claim names the change its text makes of the component (`change_key`:
+#: "remove", "replace:<node>[,<node>…]" or "other", by `recognised`), and the combination groups alternatives by it as
+#: well as by practice, purpose and component, so that gate (d) counts the samples that propose the same change
+#: (combine.alternatives).
+READING = "5"
+READINGS = ("1", "2", "3", "4", "5")
 
 
 def reading_component(reading: str = READING) -> dict:
@@ -1045,6 +1050,22 @@ def _removes(text: str, kind: str, value: str, data) -> bool:
     return False
 
 
+#: The change key of an alternative whose text names no change `recognised` reads (reading 5): one key for all of a
+#: component's, rather than one per text, since such an alternative fails gate (a) and is never supported; grouping
+#: them by their words would only split the not-established alternatives of a component the more, the more the samples'
+#: wordings differ
+OTHER_CHANGE = "other"
+
+
+def change_key(change) -> str:
+    """The key of a recognised change (reading 5): "remove", "replace:" and the nodes it names in order, or
+    OTHER_CHANGE for none."""
+    if change is None:
+        return OTHER_CHANGE
+    how, nodes = change
+    return "remove" if how == "remove" else "replace:" + ",".join(sorted(nodes))
+
+
 def less_invasive(change, value: str, data) -> bool:
     """Whether a recognised change is less invasive than the component (E def:alternative): a removal always; a
     replacement if every node it names is coarser than the component's by the vocabulary (configuration.coarser)."""
@@ -1099,7 +1120,7 @@ def minimisation(
     """The Alternative claims of a minimisation sample, of the assessment stage and the reasoning tier; `reading`
     is the version to read with, and READING 2's gates read the practice's components and the corpus's passages."""
     reading_component(reading)
-    gates = gated(reading)
+    gates, keyed = gated(reading), int(reading) >= 5
     parts_of = expectation.components(practice) if practice is not None else {}
     data, types = (vocabulary(DATA), vocabulary(RECIPIENT_TYPES)) if gates else (None, None)
     ids, documentation = q.context.ids, _documentation(q.context)
@@ -1136,6 +1157,10 @@ def minimisation(
                 cites & documentation, q.context, kind, value, categories, corpus, data, types
             )
             documented = failed is None
+        key = None
+        if keyed:  # the change it names, by which the combination groups it (reading 5)
+            kind, value = parts_of.get(component, (None, None))
+            key = change_key(recognised(item.get("alternative"), kind, value, data, reading) if kind else None)
         if basis["purpose"]["specificity"] == "vague":
             status, why, reason = "not_assessable", "purpose_vague", "the purpose is too vague"
         elif failed:
@@ -1161,6 +1186,7 @@ def minimisation(
                 "subject": q.record["practice"],
                 "component": component,
                 "alternative": item.get("alternative", ""),
+                **({"change_key": key} if key is not None else {}),
                 "level": "technically_supported" if documented else "plausible",
                 "purpose": basis["purpose"],
                 "basis": [basis["id"]],
