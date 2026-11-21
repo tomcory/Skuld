@@ -70,6 +70,25 @@ def test_passages_about_the_datum_never_push_out_those_about_its_recipient(tmp_p
     assert [p.id for p in found] == ["a0", "a1", "z"]
 
 
+def test_the_root_datum_finds_no_passage_by_node_only_by_entity(tmp_path):
+    for n in range(2):
+        (tmp_path / f"a{n}.yaml").write_text(
+            f"id: a{n}\ntitle: t\nsource: https://example.org\nkind: platform\n"
+            "about: {nodes: [device-or-other-ids.advertising-id]}\ntext: x\n"
+        )
+    (tmp_path / "r.yaml").write_text(
+        "id: r\ntitle: t\nsource: https://example.org\nkind: platform\nabout: {nodes: [data]}\ntext: x\n"
+    )
+    (tmp_path / "z.yaml").write_text(
+        "id: z\ntitle: t\nsource: https://example.org\nkind: component\nabout: {entities: [adco]}\ntext: x\n"
+    )
+    found, data = corpus.load(tmp_path), Vocabulary.load("asgard-data")
+    assert [p.id for p in found.about("data", "adco", data)] == ["z"]
+    assert found.about("data", None, data) == []
+    # a node other than the root: as before, the node above it (the root) and the node itself
+    assert [p.id for p in found.about("device-or-other-ids.advertising-id", None, data)] == ["a0", "a1", "r"]
+
+
 def test_a_passage_without_its_title_or_text_is_named_not_a_traceback(tmp_path):
     (tmp_path / "ids.yaml").write_text(PASSAGE.format(id="ids", entity="appsflyer").replace("title: Identifiers\n", ""))
     with pytest.raises(corpus.CorpusError, match="ids.yaml: no title"):

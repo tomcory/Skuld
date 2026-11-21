@@ -102,7 +102,11 @@ class Corpus:
         """The passages about a datum's node (or a node above or below it) or about an entity, in the corpus's order:
         at most PER_COMPONENT in all where no more are found, else at most PER_COMPONENT about the entity and as many
         about the node, so that the passages about the datum never push out those about its recipient (18 Nov 2026;
-        a corpus of no more than PER_COMPONENT passages per practice gives the same contexts as before)."""
+        a corpus of no more than PER_COMPONENT passages per practice gives the same contexts as before). The
+        vocabulary's root matches no node: every node is below it, so it would find every passage about a node, the
+        first PER_COMPONENT of them by file order (21 Nov 2026; coverage and the gate leave the root out alike)."""
+        if node is not None and node == vocabulary.root:
+            node = None
         found, by_entity, by_node = [], [], []
         for p in self.passages:
             if entity and entity in p.entities:
