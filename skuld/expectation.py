@@ -687,7 +687,7 @@ def expect(
     corpus: Corpus,
     seeds: list[int] | None = None,
     model: str | None = None,
-    api: str = "ollama",
+    api: str = "openai",
     offline: bool = False,
     provider=None,
     names: dict[str, str] | None = None,

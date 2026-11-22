@@ -14,7 +14,7 @@
     }
   },
   "client": {
-    "api": "ollama",
+    "api": "openai",
     "timeout": 5400.0,
     "retry_budget": 1800,
     "limits": {

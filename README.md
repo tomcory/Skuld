@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.12.2.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.12.3.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -252,7 +252,7 @@ skuld analyse ws/gemma
 | `model` | `gemma4:31b` | the model of the generator and both stages |
 | `sampling.default` | temperature 1.0, `top_p` 0.95, `top_k` 64; `max_tokens` 8192 | gemma4's recommended sampling, for every task that `sampling.tasks` or a profile does not set otherwise (Ratatoskr's seed 42) |
 | `sampling.tasks.propose` | seed 1 | the generator |
-| `client.api`, `.timeout` | `ollama`, 5400 s | the provider (the default of `--api`) and its timeout (the gateway allows about 100 minutes; qwen3.8 at `xhigh` took up to 30 minutes, queue included) |
+| `client.api`, `.timeout` | `openai`, 5400 s | the provider (the default of `--api`; the gateway's OpenAI API since 0.12.3, Ollama's before: Ratatoskr 0.42.0 sends thinking levels as the gateway's Ollama API made them) and its timeout (the gateway allows about 100 minutes; qwen3.8 at `xhigh` took up to 30 minutes, queue included) |
 | `client.cache.enabled` | false | no response cache: the kept samples are Skuld's record of every answer |
 | `client.limits` | 128 requests at a time for gemma4:31b, 256 for qwen3.8:27b, 4 for others | per model, within what the gateway recommends ([`../docs/INFERENCE_GUIDE.md`](../docs/INFERENCE_GUIDE.md): 128–160 and 256–384); the study's profiles keep theirs (timeout 1800 s, fewer requests at a time) |
 | `client.retry_budget` | 1800 s | a failed request is retried, with jittered backoff, as long as the time since its first attempt stays within this (Ratatoskr 0.32.0), so that a gateway outage of minutes is waited out |
@@ -289,8 +289,8 @@ digest of the configuration in force (`configuration`), and `skuld config` shows
 | `study-2026-11-qwen-low-traffic-topup` | its final qwen3.8:27b run: temperature 0.4, reasoning low, `max_tokens` 32,768, traffic, top-up, known data only, the study's purpose map; timeout 1800 s, 128 requests at a time |
 | `gemma-xhigh` | gemma4:31b as in the study's final run for stages 1 and 2 (vendor sampling, `max_tokens` 32,768, traffic, top-up, known data only, the study's purpose map), with thinking `xhigh`; the generator's sampling and the client's timeout and limits from `config.json` |
 | `qwen-xhigh` | qwen3.8:27b with its recommended sampling for thinking (temperature 1.0, `top_p` 0.95, `top_k` 20, `min_p` 0) and thinking `xhigh`, otherwise as `gemma-xhigh` |
-| `rerun-2026-11-gemma` | the re-run of the Expectation paper's evaluation (`expectation-paper/rerun-2026-11/rerun-plan.md`), gemma4:31b: vendor sampling, `max_tokens` 32,768, thinking `high` (a cap of 16,384 thinking tokens; the plan's D-21), traffic, top-up, known data only, the study's purpose map, `dpv-purposes` 2.3.1 and the prompts of 0.12.1 pinned; 25 requests at a time per process (the gateway's 100 split over at most four processes) |
-| `rerun-2026-11-qwen` | the same for qwen3.8:27b: its recommended sampling for thinking (temperature 1.0, `top_p` 0.95, `top_k` 20, `min_p` 0), thinking `xhigh`; 68 requests at a time per process (300 over four processes, less Loki's crawls) |
+| `rerun-2026-11-gemma` | the re-run of the Expectation paper's evaluation (`expectation-paper/rerun-2026-11/rerun-plan.md`), gemma4:31b: vendor sampling, `max_tokens` 32,768, thinking `high` (a cap of 16,384 thinking tokens; the plan's D-21), traffic, top-up, known data only, the study's purpose map, `dpv-purposes` 2.3.1 and the prompts of 0.12.1 pinned; 100 requests at a time per process (the gateway's rule; Ratatoskr's shared limit keeps the machine's processes together within it) |
+| `rerun-2026-11-qwen` | the same for qwen3.8:27b: its recommended sampling for thinking (temperature 1.0, `top_p` 0.95, `top_k` 20, `min_p` 0), thinking `xhigh`; 272 requests at a time per process (300 less Loki's 28 on catalyst) |
 | `fixtures-2026-10` | the three fixtures in `workspaces/`: `config.json` until 20 Nov 2026 (temperature 0.4 for both stages, 0.2 for the generator, `max_tokens` 8192, the model's default thinking); their kept samples are found only under it |
 
 Every profile above but the two `xhigh` ones also names what its samples were asked with that has changed since:

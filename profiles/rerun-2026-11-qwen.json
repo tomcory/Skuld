@@ -1,5 +1,5 @@
 {
-  "description": "The re-run of the Expectation paper's evaluation (rerun-plan 2026-11), qwen3.8:27b: its recommended sampling for thinking (temperature 1.0, top_p 0.95, top_k 20, min_p 0), max_tokens 32,768, thinking xhigh (config.json's, author 20 Nov 2026), traffic and top-up in stage 1, known data only. The prompts are pinned to the versions current at the re-run's start (Skuld 0.12.1), dpv-purposes 2.3.1, the study's purpose map (extended after the run by `skuld purposes map`, rerun-plan §5 step 7). client.limits is per process: the gateway allows 100 requests in flight for gemma4:31b and 300 for qwen3.8:27b in all (D-22), so the orchestration runs at most 4 Skuld processes per family at once (4 x 25 gemma; 4 x 68 qwen, leaving 28 for Loki's 7 crawls).",
+  "description": "The re-run of the Expectation paper's evaluation (rerun-plan 2026-11), qwen3.8:27b: its recommended sampling for thinking (temperature 1.0, top_p 0.95, top_k 20, min_p 0), max_tokens 32,768, thinking xhigh (config.json's, author 20 Nov 2026), traffic and top-up in stage 1, known data only. The prompts are pinned to the versions current at the re-run's start (Skuld 0.12.1), dpv-purposes 2.3.1, the study's purpose map (extended after the run by `skuld purposes map`, rerun-plan §5 step 7). client.limits is per process and as wide as the gateway's rule (100 gemma4:31b, 272 qwen3.8:27b: 300 less Loki's 28 on catalyst); Ratatoskr 0.42.0's shared limit (RATATOSKR_SHARED_LIMITS in the machine file) keeps every process of the machine together within it (D-22, D-36).",
   "model": "qwen3.8:27b",
   "sampling": {
     "default": {
@@ -25,7 +25,7 @@
       "default": 4,
       "models": {
         "gemma4:31b": 4,
-        "qwen3.8:27b": 68
+        "qwen3.8:27b": 272
       },
       "prefixes": {}
     }
