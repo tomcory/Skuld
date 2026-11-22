@@ -31,6 +31,7 @@ reason. Alternatives are the reasoning tier's (judge.py).
 import base64
 import functools
 import json
+import logging
 import re
 import urllib.parse
 import zlib
@@ -49,7 +50,9 @@ from skuld.context import Context, ContextError
 from skuld.context import part as _part
 from skuld.corpus import Corpus
 from skuld.inputs import Assessment
-from skuld.runs import RunRefused, load
+from skuld.runs import RunRefused, capture_source, load
+
+log = logging.getLogger(__name__)
 
 #: The procedure's version, part of every sample's identity. Not raised on 20 Nov 2026, when a long screen shown again
 #: in a row came to be shown once (the context's digest, also part of the identity, re-asks the batches that changes)
@@ -92,7 +95,8 @@ def reading_of(report: dict) -> str:
 KINDS = {
     "application": ("input",),
     "practice": ("o_report",),
-    "traffic": ("o_report",),
+    # a traffic part read from the capture's latest snapshot also names the snapshot, and why (22 Nov 2026)
+    "traffic": ("o_report", "run"),
     "screen": ("run",),
     # from prompt version 10 (DESCRIBED_SINCE): a model's description of a screen (Loki 0.5.0), never cited, and the
     # list of the screenshots attached
@@ -258,7 +262,14 @@ def descriptions(directory: Path | None, model: str) -> list[dict]:
 
 def description_of(shown: dict, found: list[dict]) -> dict | None:
     """The description of a shown screen: the one of its own visit (`screen_seq` the screen's `seq`), else the latest
-    earlier visit of the same screen in the same episode."""
+    earlier visit of the same screen in the same episode; never one of a visit that is a notice (the shown screen's
+    `noticed`, `_notice_visits`), and none for a shown screen whose own visit is one."""
+    # gate 1 on the described visit, not only on the shown one (22 Nov 2026): an earlier visit of the same screen may be
+    # a notice that Loki recorded, or whose own texts are one
+    noticed = shown.get("noticed") or frozenset()
+    if shown.get("seq") in noticed:
+        return None
+    found = [d for d in found if d.get("screen_seq") not in noticed]
     exact = [d for d in found if d.get("screen_seq") == shown.get("seq")]
     if exact:
         return exact[0]
@@ -358,7 +369,7 @@ def components(practice: Practice) -> dict[str, tuple[str, str]]:
 
 def _runs(a: Assessment) -> list:
     """The runs of the assessment's O reports, in order: the exploration, or the case workspace's runs."""
-    out = []
+    out, refused = [], []
     for report in a.observations:
         directory = None
         if a.exploration is not None and report.run == a.exploration.name:
@@ -368,9 +379,14 @@ def _runs(a: Assessment) -> list:
         if directory is None:
             continue
         try:
-            out.append(load(directory, capture=False))
-        except RunRefused:
-            continue
+            # an exploration Loki stopped on an error is read if its traffic is usable (22 Nov 2026: com.gamma.scan)
+            out.append(load(directory, capture=False, errored=True))
+        except RunRefused as e:
+            # not silently (22 Nov 2026): a skipped run gives its batches no screens
+            log.warning("stage 1 does not use run %s: %s", report.run, e)
+            refused.append(f"{report.run} ({e})")
+    if refused and not out:
+        raise ContextError(f"no run of the assessment can be read, so no batch has its screens: {'; '.join(refused)}")
     return out
 
 
@@ -378,24 +394,99 @@ def _screens(run, episode: str | None, first: int | None = None) -> list[tuple[s
     return [(s["sid"], s["text"]) for s in _shown(run, episode, first)]
 
 
-def _shown(run, episode: str | None, first: int | None = None) -> list[dict]:
-    """The screens of an episode (or the run's first ones) as shown: {sid, text, seq, episode, screenshot}; a screen
-    shown again in a row is shown once, with its first event's seq. The screenshot is the event's, else the one of the
-    screen in graph.json (the first time it was seen)."""
-    graph = json.loads((run.directory / "graph.json").read_text(encoding="utf-8")).get("screens", {})
-    shown: list[dict] = []
+def _visit_texts(event: dict, graph: dict) -> list[str]:
+    return (
+        event["texts"] if event.get("texts") else ctx.screen_text(graph.get(event.get("screen_id")) or {}).split(" | ")
+    )
+
+
+def _notice_visits(run, notices: str | None = None, graph: dict | None = None) -> frozenset:
+    """
+    The seqs of a run's screen visits that are notices (gate 1): a visit Loki recorded as a notice (a `notice_capture`'s
+    `screen_seq`), every visit of the same structure and content keys (Loki records a notice once by the pair, and a
+    later visit of it is the same notice), and a visit whose own texts Skuld's notice classifier (by the definition in
+    version `notices`) takes for one, whole or in part. Loki's classifier reads the screen scrolled to its end and
+    differs from Skuld's, so either suffices (22 Nov 2026: Weather e7 attached a screenshot of a screen Loki recorded as
+    a notice, whose first texts held none).
+    """
+    if graph is None:
+        graph = json.loads((run.directory / "graph.json").read_text(encoding="utf-8")).get("screens", {})
+    captured = [e for e in run.events if e.get("type") == "notice_capture"]
+    seqs = {e.get("screen_seq") for e in captured} - {None}
+    pairs = {
+        (e.get("exact_key"), e.get("content_key")) for e in captured if e.get("exact_key") and e.get("content_key")
+    }
+    out = set()
     for event in run.events:
-        if event.get("type") != "screen":
+        if event.get("type") != "screen" or event.get("seq") is None:
             continue
+        if (
+            event["seq"] in seqs
+            or (event.get("exact_key"), event.get("content_key")) in pairs
+            or classify(_visit_texts(event, graph), notices or NOTICES)
+        ):
+            out.add(event["seq"])
+    return frozenset(out)
+
+
+def _same_content(event: dict) -> tuple | None:
+    """What makes two visits of a screen show the same: its id, Loki's structure and content keys (the content key
+    leaves out the texts of lists, so it alone does not do) and its texts; None if a visit lacks any of them."""
+    same = (event.get("screen_id"), event.get("exact_key"), event.get("content_key"), event.get("texts"))
+    return same if all(same) else None
+
+
+def _screenshot(event: dict, visits: list[dict], noticed: frozenset) -> str | None:
+    """The screenshot of a visit: its own, else the first of another visit that shows the same (`_same_content`);
+    none of a visit that is a notice, nor one taken on such a visit (`_notice_visits`)."""
+    if event.get("seq") in noticed:
+        return None
+    if event.get("screenshot"):
+        return event["screenshot"]
+    same = _same_content(event)
+    if same is None:
+        return None
+    return next(
+        (
+            v["screenshot"]
+            for v in visits
+            if v.get("screenshot") and v.get("seq") not in noticed and _same_content(v) == same
+        ),
+        None,
+    )
+
+
+def _shown(
+    run, episode: str | None, first: int | None = None, noticed: frozenset | None = None, notices: str | None = None
+) -> list[dict]:
+    """The screens of an episode (or the run's first ones) as shown: {sid, text, seq, episode, screenshot, noticed}; a
+    screen shown again in a row is shown once, with its first event's seq. The screenshot is one taken on that visit,
+    else on another visit that showed the same (`_screenshot`), never of a notice; `noticed` are the run's visits that
+    are notices (`_notice_visits`, by the notice definition in version `notices`), whose descriptions are not given."""
+    graph = json.loads((run.directory / "graph.json").read_text(encoding="utf-8")).get("screens", {})
+    if noticed is None:
+        noticed = _notice_visits(run, notices, graph)
+    visits = [e for e in run.events if e.get("type") == "screen"]
+    shown: list[dict] = []
+    for event in visits:
         if episode is not None and str(event.get("episode")) != episode:
             continue
         sid = event.get("screen_id")
         text = " | ".join(event["texts"]) if event.get("texts") else ctx.screen_text(graph.get(sid) or {})
         text = text[:SCREEN_TEXT] if text else text
         if text and (not shown or (shown[-1]["sid"], shown[-1]["text"]) != (sid, text)):
-            shot = event.get("screenshot") or (graph.get(sid) or {}).get("screenshot")
+            # 22 Nov 2026: no longer graph.json's screenshot of the screen's first visit, which showed other content
+            # where one screen id has many (AccuWeather's WebView home: 82% of the images showed another page)
+            shot = _screenshot(event, visits, noticed)
             shown.append(
-                {"sid": sid, "text": text, "seq": event.get("seq"), "episode": event.get("episode"), "screenshot": shot}
+                {
+                    "sid": sid,
+                    "text": text,
+                    "seq": event.get("seq"),
+                    "episode": event.get("episode"),
+                    "screenshot": shot,
+                    "noticed": noticed,
+                }
             )
         if first is not None and len(shown) >= first:
             break
@@ -424,13 +515,17 @@ def batches(a: Assessment, subjects: Subjects, notices: str | None = None) -> li
     version `notices`, default NOTICES)."""
     notices = notices or NOTICES
     runs = _runs(a)
+    noticed = {}  # per run, its visits that are notices
     keys = sorted({e for p in subjects.practices for e in p.episodes}, key=lambda e: (e == "?", len(e), e))
     out = []
     for key in keys:
         practices = [p for p in subjects.practices if key in p.episodes]
         screens, run_id, directory = [], None, None
         for run in runs:
-            screens = _shown(run, None, LAUNCH_SCREENS) if key == "?" else _shown(run, key)
+            if run.run_id not in noticed:
+                noticed[run.run_id] = _notice_visits(run, notices)
+            seen = noticed[run.run_id]
+            screens = _shown(run, None, LAUNCH_SCREENS, noticed=seen) if key == "?" else _shown(run, key, noticed=seen)
             if screens:
                 run_id, directory = run.run_id, run.directory
                 break
@@ -530,9 +625,11 @@ def assemble(
         shown = _Traffic(a)
         n = 0
         for p in batch.practices:
-            for text, ref_ in shown.of(p, batch.key):
+            for text, ref_, message in shown.of(p, batch.key):
                 n += 1
                 parts.append(_part(f"T{n}", "traffic", f"{p.id}: {text}", ("o_report", ref_)))
+                if pointer := shown.pointer(message):
+                    parts[-1]["provenance"].append(pointer)
     screen_parts = []
     for n, (sid, text) in enumerate(batch.screens, 1):
         screen_parts.append(_part(f"S{n}", "screen", text, ("run", f"events.jsonl#screen/{sid}"), batch.run))
@@ -561,8 +658,18 @@ class _Traffic:
             except OSError:
                 continue
         self.messages = {}
+        self.snapshot = None  # the snapshot the messages are read from, and why; None for the final export
+        self.exploration = a.exploration
         if a.exploration is not None:
-            for path in sorted(a.exploration.glob("capture/*/messages.jsonl")):
+            paths = sorted(a.exploration.glob("capture/*/messages.jsonl"))
+            if not paths:
+                # a run whose final export failed: its latest snapshot, which O annotated (22 Nov 2026: com.gamma.scan)
+                meta = _json_or_none(a.exploration / "run.json") or {}
+                source = capture_source(a.exploration, meta.get("capture"), _capture_events(a.exploration))
+                if source is not None and source["source"] == "snapshot":
+                    self.snapshot = source
+                    paths = [a.exploration / source["folder"] / "messages.jsonl"]
+            for path in paths:
                 for line in path.read_text(encoding="utf-8").splitlines():
                     if line.strip():
                         m = json.loads(line)
@@ -605,14 +712,38 @@ class _Traffic:
             if key in seen:
                 continue
             seen.add(key)
-            out.append((_message_text(rq, e), ref_))
+            out.append((_message_text(rq, e), ref_, m["id"]))
             if len(out) >= TRAFFIC_MESSAGES:
                 break
         if unreadable:
             ref_ = json.dumps(practice.claims[0], sort_keys=True)
             hosts = ", ".join(f"{h} ({r})" for h, r in sorted(unreadable.items())[:6])
-            out.append((f"connections whose content could not be read: {hosts}", ref_))
+            out.append((f"connections whose content could not be read: {hosts}", ref_, None))
         return out
+
+    def pointer(self, message: str | None) -> dict | None:
+        """The provenance of a message read from a snapshot: the snapshot, and why; None for the final export's."""
+        if self.snapshot is None or message is None:
+            return None
+        record = f"{self.snapshot['folder']}/messages.jsonl#{message}"
+        run = self.exploration.name
+        return {"origin": "run", "record": record, "run": run, "capture": "snapshot", "why": self.snapshot["why"]}
+
+
+def _json_or_none(path: Path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _capture_events(directory: Path) -> list[dict]:
+    """The `capture` events of a run's events.jsonl, which name its snapshots."""
+    try:
+        lines = (directory / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    return [e for e in (json.loads(x) for x in lines if '"capture"' in x) if e.get("type") == "capture"]
 
 
 def _decoded(rq: dict, field_: str) -> str | None:
@@ -678,11 +809,16 @@ def _described(batch: Batch, screen_parts: list[dict], model: str | None, notice
     from skuld import images
 
     shown = batch.shown[: len(screen_parts)]
-    usable = [
-        i
-        for i, s in enumerate(shown)
-        if not s.get("notice") and s.get("screenshot") and (batch.directory / s["screenshot"]).is_file()
-    ]
+    usable, given = [], set()
+    for i, s in enumerate(shown):
+        if s.get("notice") or not s.get("screenshot") or not (batch.directory / s["screenshot"]).is_file():
+            continue
+        # one file once per request (22 Nov 2026: AccuWeather sent one screenshot as S2 to S8): the spread is over the
+        # screens with a screenshot not given before. By file, not by content: two visits' identical screenshots are
+        # each its own screen's
+        if s["screenshot"] not in given:
+            usable.append(i)
+            given.add(s["screenshot"])
     chosen = [usable[j] for j in images.spread(len(usable))]
     for i in chosen:
         path = shown[i]["screenshot"]

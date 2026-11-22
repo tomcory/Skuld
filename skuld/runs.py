@@ -34,6 +34,9 @@ CAPTURE_FILES = {"messages": "messages.jsonl", "connections": "connections.jsonl
 
 #: The apps' scans, exported only if the run asked for them (`capture.export: [..., scans]`)
 SCANS_FILE = "scans.jsonl"
+#: Loki's periodic snapshots of the capture (`capture` events of state snapshot), the latest of which stands for the
+#: final export where that failed
+SNAPSHOTS = "capture-snapshot"
 
 
 class RunRefused(Exception):
@@ -112,6 +115,8 @@ class Run:
             tracker libraries it contains; None if the capture was not read or the run exported no scans
         episodes: The records of `episodes.json` (an exploration's or a goal-directed run's), in order
         scope: The run's `run_scope.json`; None if it has none
+        traffic: Where the run's traffic is read from if not its final export, and why: {source: 'snapshot',
+            folder, why}; None for a run whose final export holds it
     """
 
     directory: Path
@@ -126,6 +131,7 @@ class Run:
     scans: dict[str, dict] | None = None
     episodes: tuple[dict, ...] = ()
     scope: dict | None = None
+    traffic: dict | None = None
 
     @property
     def run_id(self) -> str:
@@ -214,13 +220,16 @@ def goal_window(events: tuple[dict, ...] | list[dict]) -> Window | None:
     return Window(episode, start, taken, first, len(events), reached is not None)
 
 
-def load(run_dir: str | Path, capture: bool = True) -> Run:
+def load(run_dir: str | Path, capture: bool = True, errored: bool = False) -> Run:
     """
     Reads a Loki run folder.
 
     Args:
         capture: Whether the run's capture is read. A run without a complete, validated capture
             export is then refused; with False the capture is not looked at.
+        errored: Whether a run Loki stopped on an error is read, if its traffic is usable (`capture_source`): its
+            final export, else its latest snapshot, which `Run.traffic` then names with the reason. Without it such a
+            run is refused ('failed'), as a replay that did not impose its condition must be.
 
     Raises RunRefused if the folder is not one Skuld can rely on.
     """
@@ -237,16 +246,27 @@ def load(run_dir: str | Path, capture: bool = True) -> Run:
 
     events = tuple(_lines(directory / "events.jsonl"))
     ended = next((e for e in reversed(events) if e.get("type") == "run_end"), None)
+    traffic = None
     if ended is not None and str(ended.get("stop_reason") or "").startswith("error"):
         # Loki stopped the run on an error (exit 1), e.g. the app was not instrumented: what the run shows is not the
         # condition it was asked to impose (12 Nov 2026: 'no process of <app> started within 30 s' in replays)
-        raise RunRefused("failed", f"Loki stopped the run: {ended['stop_reason']}"[:300])
+        stopped = f"Loki stopped the run: {ended['stop_reason']}"[:300]
+        # An exploration that lost its emulator at the end still shows what it explored, with the traffic of its final
+        # export or its latest snapshot, which O annotated (22 Nov 2026: com.gamma.scan, AdbError at the run's end, was
+        # skipped and its stage-1 contexts had no screens); the caller asks for it (`errored`)
+        source = capture_source(directory, meta.get("capture"), events) if errored else None
+        if source is None:
+            raise RunRefused("failed", stopped + ("; no usable capture" if errored else ""))
+        if source["source"] == "snapshot":
+            traffic = {**source, "why": f"{stopped}; {source['why']}"[:600]}
     instrumentation = meta.get("instrumentation")
     source_reads = tuple(e for e in events if e.get("type") == "source_read")
     _check_instrumentation(instrumentation, source_reads)
 
     messages = connections = scans = None
-    if capture:
+    if capture and traffic is not None:
+        messages, connections = _read_snapshot(directory / traffic["folder"])
+    elif capture:
         messages, connections, scans = _read_capture(directory, meta.get("capture"))
     episodes = _json(directory / "episodes.json")
     scope = _json(directory / "run_scope.json")
@@ -264,7 +284,42 @@ def load(run_dir: str | Path, capture: bool = True) -> Run:
         scans=scans,
         episodes=tuple(e for e in episodes if isinstance(e, dict)) if isinstance(episodes, list) else (),
         scope=scope if isinstance(scope, dict) else None,
+        traffic=traffic,
     )
+
+
+def capture_source(directory: str | Path, block: dict | None, events=()) -> dict | None:
+    """
+    Where a run's traffic can be read: its final export (`capture.export`) if its messages are there, as {source:
+    'export', folder}; else its latest snapshot (the folder `capture.snapshot` names, else that of the latest snapshot
+    event, else the last folder below capture-snapshot/) with its messages, as {source: 'snapshot', folder, why}; None
+    if there is neither.
+    """
+    directory, block = Path(directory), block or {}
+    messages = CAPTURE_FILES["messages"]
+    if block.get("export") and (directory / block["export"] / messages).is_file():
+        return {"source": "export", "folder": block["export"]}
+    named = [block.get("snapshot")]
+    named += [
+        e.get("snapshot") for e in reversed(events) if e.get("type") == "capture" and e.get("state") == "snapshot"
+    ]
+    if (directory / SNAPSHOTS).is_dir():
+        named += [f"{SNAPSHOTS}/{p.name}" for p in sorted((directory / SNAPSHOTS).iterdir(), reverse=True)]
+    folder = next((f for f in named if f and (directory / f / messages).is_file()), None)
+    if folder is None:
+        return None
+    why = f"no final export ({block.get('error') or 'none recorded'}): the traffic is the capture's latest snapshot"
+    return {"source": "snapshot", "folder": folder, "why": why}
+
+
+def _read_snapshot(folder: Path) -> tuple[tuple[dict, ...], tuple[dict, ...]]:
+    """The captured messages and connections of a snapshot, which Loki does not validate."""
+    read = {}
+    for name, file in CAPTURE_FILES.items():
+        if not (folder / file).is_file():
+            raise RunRefused("incomplete_export", f"{folder / file} is missing")
+        read[name] = tuple(_lines(folder / file))
+    return read["messages"], read["connections"]
 
 
 def _check_instrumentation(block: dict | None, source_reads: tuple[dict, ...]) -> None:
