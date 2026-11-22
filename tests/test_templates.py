@@ -47,11 +47,13 @@ def test_the_prompt_versions_of_p10_and_the_ones_before_are_kept(prompts):
 
     prompts(None)
     assert {k: templates.CURRENT[k] for k in ("minimisation", "specificity", "expectation", "expectation_traffic")} == {
-        "minimisation": "6",
+        "minimisation": "7",
         "specificity": "3",
-        "expectation": "9",
-        "expectation_traffic": "9",
+        "expectation": "10",
+        "expectation_traffic": "10",
     }
+    assert "never cite a description" in templates.text("minimisation")
+    assert "never cite a description" not in templates.text("minimisation", "6")
     assert "(ids starting with S)" in templates.text("minimisation")
     assert "(ids starting with S)" in templates.text("minimisation", "4")
     # minimisation 5: the typed form, the facts (F), the kinds with their values in order; 4 has the free steps

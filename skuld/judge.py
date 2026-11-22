@@ -200,6 +200,7 @@ KINDS = {
     "declaration": ("d_report",),
     "passage": ("corpus",),
     "screen": ("run",),
+    "description": ("run",),  # a screen's description, never cited (DESCRIBED_SINCE)
 }
 #: The first minimisation prompt version whose context holds the screens of the practice's episodes (P10 fix 1, 21 Nov
 #: 2026): what a purpose needs may be read from them. Contexts for an earlier version (a profile's `prompts`) hold none,
@@ -212,6 +213,11 @@ TYPED_SINCE = 5
 #: its data component (`admissible`: the nodes `replacements` gives, or none), which a REPLACE must name (P10 trial
 #: finding 3, 21 Nov 2026). Contexts for an earlier version list none, so that the samples asked with it are found again
 REPLACEMENTS_SINCE = 6
+#: The first minimisation prompt version whose context gives, after the screens, their descriptions by the model
+#: `expectation.descriptions` names (Loki 0.5.0; never cited: a model's reading of the screen; the rerun plan's D-37,
+#: 22 Nov 2026). No screenshots: the minimisation question reads what a purpose needs, which the stage-1 answers and the
+#: screens' texts give. Contexts for an earlier version give none, so that the samples asked with it are found again
+DESCRIBED_SINCE = 7
 #: Statements per specificity batch, characters of the sentence a statement is quoted with
 BATCH, SENTENCE = 20, 400
 ATTEMPTS = 2
@@ -601,24 +607,40 @@ def _hypothesis(pid: str, text: str, claim: dict) -> dict:
 def screens_of(a: Assessment, subjects: Subjects, notices: str | None = None) -> dict[str, list[tuple]]:
     """Per practice, the screens of its episodes as the expectation stage's batches give them (expectation.batches:
     the episode's in the first run that has them, notices left out by the notice definition in version `notices`),
-    as (run, screen id, text), each screen once (by run and id, and by text), at most expectation.MAX_SCREENS."""
+    as (run, screen id, text, shown, directory), each screen once (by run and id, and by text), at most
+    expectation.MAX_SCREENS; `shown` is the screen's seq, episode and notice flag (expectation.Batch.shown)."""
     out: dict[str, list[tuple]] = {}
     for batch in expectation.batches(a, subjects, notices):
         for p in batch.practices:
             mine = out.setdefault(p.id, [])
-            for sid, text in batch.screens:
+            for i, (sid, text) in enumerate(batch.screens):
                 if len(mine) < expectation.MAX_SCREENS and not any(
-                    (r, s) == (batch.run, sid) or x == text for r, s, x in mine
+                    (r, s) == (batch.run, sid) or x == text for r, s, x, *_ in mine
                 ):
-                    mine.append((batch.run, sid, text))
+                    shown = batch.shown[i] if i < len(batch.shown) else {}
+                    mine.append((batch.run, sid, text, shown, batch.directory))
     return out
 
 
-def _screens(screens: list[tuple]) -> list[dict]:
-    return [
-        _part(f"S{n}", "screen", text, ("run", f"events.jsonl#screen/{sid}"), run)
-        for n, (run, sid, text) in enumerate(screens, 1)
-    ]
+def _screens(screens: list[tuple], describer: str | None = None, notices: str | None = None) -> list[dict]:
+    """The screens as parts S<n>; with `describer`, each followed by its description by that model, never cited
+    (DESCRIBED_SINCE), none of a screen whose texts held a notice nor one that reads a notice."""
+    out = []
+    found: dict = {}
+    for n, (run, sid, text, *rest) in enumerate(screens, 1):
+        out.append(_part(f"S{n}", "screen", text, ("run", f"events.jsonl#screen/{sid}"), run))
+        shown, directory = (rest + [{}, None])[:2]
+        if not describer or not shown or shown.get("notice") or directory is None:
+            continue
+        if directory not in found:
+            found[directory] = expectation.descriptions(directory, describer)
+        d = expectation.description_of(shown, found[directory])
+        if d is None or expectation.classify([d["screen"], d.get("in_episode") or ""], notices or expectation.NOTICES):
+            continue
+        body = f"(about S{n}) {d['screen'].strip()} {(d.get('in_episode') or '').strip()}".strip()
+        record = f"{expectation.DESCRIPTIONS}#visit/{d.get('visit')}/{describer}"
+        out.append(_part(f"S{n}.d", "description", body, ("run", record), run))
+    return out
 
 
 def _passages(passages, prefix: str, folder: str = "", data: Vocabulary | None = None) -> list[dict]:
@@ -702,6 +724,7 @@ def questions(
     vague: frozenset = frozenset(),
     kinds: tuple[str, ...] = QUESTIONS,
     notices: str | None = None,
+    model: str | None = None,
 ) -> list[Question]:
     """The questions of the reasoning tier for an assessment, each with its context, of the `kinds` asked for; the
     declarations in `vague` specify no purpose for the compatibility questions. From minimisation prompt version
@@ -773,7 +796,8 @@ def questions(
         for k, h in enumerate(mine, 1):
             parts.append(_hypothesis(f"H{k}", _purpose_text(h["purpose"]), h))
             hyp[f"H{k}"] = h["id"]
-        parts += _screens(shown.get(p.id, []))
+        described = int(templates.version(MINIMISATION)) >= DESCRIBED_SINCE
+        parts += _screens(shown.get(p.id, []), expectation.describer(model) if described else None, notices)
         documentation = []
         for kind, value in expectation.components(p).values():
             for passage in corpus.about(value, None, data) if kind == "D" else corpus.about(None, value, data):
@@ -937,21 +961,44 @@ def judge(
     think = config.load()["assessment"].get("think")
     model = model or a.models.get("assessment") or a.models["expectation"]
     if gated(reading):
-        first = questions(a, subjects, corpus, norms, hypotheses, names, kinds=(SPECIFICITY,))
-        specific = _samples(
-            a, first, factors, seeds, think, model, api, offline or SPECIFICITY not in only, provider, corpus, norms
+        first = questions(a, subjects, corpus, norms, hypotheses, names, kinds=(SPECIFICITY,), model=model)
+        # minimisation reads no specificity answer: asked in the same round when both are asked (0.12.4, the rerun
+        # plan's throughput), so that the server is given both questions' requests at once
+        early = MINIMISATION in only and SPECIFICITY in only
+        alongside = (
+            questions(
+                a, subjects, corpus, norms, hypotheses, names, kinds=(MINIMISATION,), notices=notices, model=model
+            )
+            if early
+            else []
         )
+        asked = _samples(
+            a,
+            first + alongside,
+            factors,
+            seeds,
+            think,
+            model,
+            api,
+            offline or SPECIFICITY not in only,
+            provider,
+            corpus,
+            norms,
+        )
+        specific = [(q, x) for q, x in asked if q.question == SPECIFICITY]
+        minimised = [(q, x) for q, x in asked if q.question != SPECIFICITY]
         vague = vague_declarations(
             [j for q, sample in specific for j in specificity(_answer(sample), _name(a, sample), q) if sample.text]
         )
-        rest = questions(
-            a, subjects, corpus, norms, hypotheses, names, vague, tuple(q for q in only if q != SPECIFICITY), notices
-        )
-        out = (specific if SPECIFICITY in only else []) + _samples(
-            a, rest, factors, seeds, think, model, api, offline, provider, corpus, norms
+        later = tuple(q for q in only if q != SPECIFICITY and not (early and q == MINIMISATION))
+        rest = questions(a, subjects, corpus, norms, hypotheses, names, vague, later, notices, model=model)
+        out = (
+            (specific if SPECIFICITY in only else [])
+            + _samples(a, rest, factors, seeds, think, model, api, offline, provider, corpus, norms)
+            + minimised
         )
     else:
-        qs = questions(a, subjects, corpus, norms, hypotheses, names, kinds=only, notices=notices)
+        qs = questions(a, subjects, corpus, norms, hypotheses, names, kinds=only, notices=notices, model=model)
         out = _samples(a, qs, factors, seeds, think, model, api, offline, provider, corpus, norms)
     if not offline:
         current = {a.root / "assessment" / q.question / q.subject for q, _ in out}

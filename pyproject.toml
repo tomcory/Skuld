@@ -16,6 +16,8 @@ dependencies = [
     "ratatoskr[validate,client,openai] @ git+ssh://git@github.com/tomcory/Ratatoskr.git@0.42.0",
     # the named inputs of a case
     "pyyaml>=6",
+    # the screenshots a stage-1 request carries, shrunk (skuld/images.py, 0.12.4)
+    "pillow>=10",
 ]
 
 [project.scripts]

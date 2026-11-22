@@ -7,6 +7,8 @@ observation, not declared; the screens (ids starting with S) are texts the appli
 the practice occurred; the passages are documentation (ids starting with D) and norms (ids starting with N); the facts
 (ids starting with F) each state one property of a datum, quoted from the documentation passage they follow or from
 the passage they name; those after the documentation are of the data that could replace the practice's datum.
+Where the context gives descriptions of the screens, they are a model's reading of each screen in its flow, for
+orientation only: never cite a description; cite the screen it is about, and only for what the screen shows.
 
 For each purpose and component, state the less invasive alternatives that would still achieve the purpose. For each,
 give:

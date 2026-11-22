@@ -4,7 +4,7 @@
 > observed to do (O) and what its provider declares (D) to each other and to a normative frame, and reports concerns,
 > never verdicts, to the Investigator.
 
-**State: 0.12.3.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
+**State: 0.12.4.** Built: the assessment of an application version (`skuld assess`), with the rule tier, the
 expectation stage (`skuld expect`), the reasoning tier (`skuld judge`), qualification as its last stage (cases, their
 qualified results and next steps; [`plan/archive/QUALIFICATION_PLAN.md`](../plan/archive/QUALIFICATION_PLAN.md)), the aggregate of its concerns
 (`skuld aggregate`), experiments chosen by the assessment
@@ -261,6 +261,7 @@ skuld analyse ws/gemma
 | `expectation.think`, `assessment.think` | `xhigh` | the model's thinking (null: the model's default; a level: its effort). On the gateway a level is qwen3.8's effort (`low`, `medium`; `high` and `xhigh` both its top effort) but, since 20 Nov 2026 03:26, a cap on gemma4's thinking tokens (`low` 1,024, `medium` 4,096, `high` 16,384, `xhigh` none); `low` cuts most of gemma4's thinking short |
 | `expectation.traffic` | off | stage 1 sees excerpts of the practice's traffic |
 | `expectation.topup` | off | stage 1 asks again, alone, for the practices its batches left out |
+| `expectation.descriptions` | none | from stage-1 prompt 10 and minimisation prompt 7: whose screen descriptions (Loki 0.5.0's `descriptions.jsonl`) a context gives, `own` for the model asked or a model's name; given as parts of kind `description`, never cited (a model's reading of a screen), none of a screen that held a notice. Stage 1 also attaches screenshots of up to 8 of a batch's screens, never of a notice screen, named in the context by their files' digests (`skuld/images.py`: JPEG, at most 896 px) |
 | `expectation.batch_size` | none | at most this many practices per batch: an episode's practices are split, in order, into batches `e<episode>.<n>` with the same screens (one remedy, to be measured, for qwen3.8 answering only a batch's first practice) |
 | `assessment.known_data_only` | off | the practices whose datum O could not identify are left out |
 | `gaps.own_knowledge_exhausted` | off | a practice without a purpose whose recipient's or actor's documentation the corpus holds ends in an audit request to the controller (`held` organisation: the purposes it pursues, Arts. 13(1)(c), 30) instead of `extend_corpus`; the author's decision D4, adopted only after its effect is measured |
@@ -289,8 +290,8 @@ digest of the configuration in force (`configuration`), and `skuld config` shows
 | `study-2026-11-qwen-low-traffic-topup` | its final qwen3.8:27b run: temperature 0.4, reasoning low, `max_tokens` 32,768, traffic, top-up, known data only, the study's purpose map; timeout 1800 s, 128 requests at a time |
 | `gemma-xhigh` | gemma4:31b as in the study's final run for stages 1 and 2 (vendor sampling, `max_tokens` 32,768, traffic, top-up, known data only, the study's purpose map), with thinking `xhigh`; the generator's sampling and the client's timeout and limits from `config.json` |
 | `qwen-xhigh` | qwen3.8:27b with its recommended sampling for thinking (temperature 1.0, `top_p` 0.95, `top_k` 20, `min_p` 0) and thinking `xhigh`, otherwise as `gemma-xhigh` |
-| `rerun-2026-11-gemma` | the re-run of the Expectation paper's evaluation (`expectation-paper/rerun-2026-11/rerun-plan.md`), gemma4:31b: vendor sampling, `max_tokens` 32,768, thinking `high` (a cap of 16,384 thinking tokens; the plan's D-21), traffic, top-up, known data only, the study's purpose map, `dpv-purposes` 2.3.1 and the prompts of 0.12.1 pinned; 100 requests at a time per process (the gateway's rule; Ratatoskr's shared limit keeps the machine's processes together within it) |
-| `rerun-2026-11-qwen` | the same for qwen3.8:27b: its recommended sampling for thinking (temperature 1.0, `top_p` 0.95, `top_k` 20, `min_p` 0), thinking `xhigh`; 272 requests at a time per process (300 less Loki's 28 on catalyst) |
+| `rerun-2026-11-gemma` | the re-run of the Expectation paper's evaluation (`expectation-paper/rerun-2026-11/rerun-plan.md`), gemma4:31b: vendor sampling, `max_tokens` 32,768, thinking `high` (a cap of 16,384 thinking tokens; the plan's D-21), traffic, top-up, known data only, the study's purpose map, `dpv-purposes` 2.3.1 and the prompts of 0.12.4 pinned (stage 1 and minimisation with the screens' descriptions by the family's own model, stage 1 with screenshots; D-37); 100 requests at a time per process (the gateway's rule; Ratatoskr's shared limit keeps the machine's processes together within it) |
+| `rerun-2026-11-qwen` | the same for qwen3.8:27b: its recommended sampling for thinking (temperature 1.0, `top_p` 0.95, `top_k` 20, `min_p` 0), thinking `xhigh`; 272 requests at a time per process (catalyst's shared limit of 300 keeps every process, Loki's included, within the gateway's rule; D-38) |
 | `fixtures-2026-10` | the three fixtures in `workspaces/`: `config.json` until 20 Nov 2026 (temperature 0.4 for both stages, 0.2 for the generator, `max_tokens` 8192, the model's default thinking); their kept samples are found only under it |
 
 Every profile above but the two `xhigh` ones also names what its samples were asked with that has changed since:

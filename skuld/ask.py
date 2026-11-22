@@ -36,8 +36,10 @@ from pathlib import Path
 
 from ratatoskr.llm import Call, Client, Options, Provider
 from ratatoskr.llm.client import AnswerRejected, default_limit
+from ratatoskr.llm.content import image_part, text_part
 
 from skuld import config
+from skuld.images import MIME as IMAGE_MIME
 
 #: The token limit of every request; a thinking model's reasoning counts towards it
 MAX_TOKENS = 8192
@@ -167,6 +169,7 @@ def ask(
     provider: Provider | None = None,
     files: dict[str, str] | None = None,
     think: bool | str | None = None,
+    images: list[dict] | None = None,
 ) -> Sample:
     """
     The sample of a request in `folder`: kept, or asked now. `record` holds the request's identity under the keys
@@ -175,9 +178,13 @@ def ask(
     its level ("low", "xhigh": on the gateway an effort for Qwen, a cap on thinking tokens for Gemma); None leaves the
     model's default, which is not part of the options (so that samples asked before the setting existed stay kept) but
     is recorded as the model's `think`, "model default". The record also states what the server says it serves
-    (`served`); a kept sample that states it is reused only for the same backend and weights (`_kept`).
+    (`served`); a kept sample that states it is reused only for the same backend and weights (`_kept`). `images`
+    (0.12.4: each {path, sha256, data}) are sent after the prompt's text as image parts, and listed in the record by
+    path and digest; the context that names them carries their digests, so they are part of the sample's identity.
     """
     record = {**record, "model": {"api": api, "name": model}, "options": _options(options, think)}
+    if images:
+        record["images"] = [{"path": i["path"], "sha256": i["sha256"], "bytes": len(i["data"])} for i in images]
     now = None if offline else served(api, provider).get(model)
     text = _kept(folder, record, (*identity, "options"), now)
     if text is not None:
@@ -187,9 +194,12 @@ def ask(
         _count(missing=1)
         return Sample(folder, record, None, False)
     asking = client(api, provider)
+    content = prompt
+    if images:
+        content = [text_part(prompt), *(image_part(i["data"], IMAGE_MIME) for i in images)]
     call = Call(
         model=model,
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{"role": "user", "content": content}],
         json_schema=schema,
         options=options,
         think=think,
@@ -286,6 +296,7 @@ def ask_with_feedback(
     provider: Provider | None = None,
     files: dict[str, str] | None = None,
     think: bool | str | None = None,
+    images: list[dict] | None = None,
 ) -> tuple[Sample | None, list[str], int]:
     """
     Ask until `refuse` finds nothing wrong with an answer, at most `attempts` times: attempt n has its own folder
@@ -317,6 +328,7 @@ def ask_with_feedback(
             provider=provider,
             files=files,
             think=think,
+            images=images,
         )
         if sample.text is None:
             cut = _cut_off(sample, folders(attempt), offline)

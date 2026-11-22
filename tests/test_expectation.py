@@ -555,8 +555,8 @@ def test_the_stage_1_prompt_tells_the_keyed_shape_and_earlier_versions_are_kept(
     from skuld import templates
 
     for prompt in ("expectation", "expectation_traffic"):
-        assert templates.CURRENT[prompt] == "9"
-        for keyed in ("6", "7", "8", "9"):
+        assert templates.CURRENT[prompt] == "10"
+        for keyed in ("6", "7", "8", "9", "10"):
             assert "under the practice's id" in templates.text(prompt, keyed)
         for earlier in ("4", "5"):
             assert "under the practice's id" not in templates.text(prompt, earlier)
@@ -569,6 +569,9 @@ def test_the_stage_1_prompt_tells_the_keyed_shape_and_earlier_versions_are_kept(
         # version 9 says that a step may not cite only the traffic for a need; the earlier ones do not
         assert "cite only the observed traffic" in templates.text(prompt, "9")
         assert all("cite only the observed traffic" not in templates.text(prompt, v) for v in ("4", "5", "6", "7", "8"))
+        # version 10 tells of the screens' descriptions (never cited) and the attached screenshots; 9 does not
+        assert "never cite a description" in templates.text(prompt, "10")
+        assert "never cite a description" not in templates.text(prompt, "9")
 
 
 def test_each_passage_names_the_practices_it_was_retrieved_for_from_prompt_version_8(workspace, tmp_path):

@@ -12,6 +12,13 @@ class ContextError(Exception):
     """A context that holds a part the procedure may not give a model."""
 
 
+#: Kinds of part a model is given for orientation only, never to cite (0.12.4): a screen's description is a model's
+#: reading of the screen in its episode (Loki 0.5.0, the rerun plan's D-37), not something the screen shows; the list
+#: of the attached screenshots names screens, which are cited by their own ids. Such a part has no id among the
+#: context's `ids`, so a cite of it is refused like an unknown id, and it is rendered without one.
+NOT_CITABLE = frozenset({"description", "images"})
+
+
 @dataclass(frozen=True)
 class Context:
     """The parts given to a model, each {id, kind, text, provenance}."""
@@ -20,7 +27,8 @@ class Context:
 
     @property
     def ids(self) -> set[str]:
-        return {p["id"] for p in self.parts}
+        """The ids an answer may cite: every part's but those of kinds never cited (NOT_CITABLE)."""
+        return {p["id"] for p in self.parts if p["kind"] not in NOT_CITABLE}
 
     @property
     def sha256(self) -> str:
@@ -30,13 +38,14 @@ class Context:
         return {p["id"] for p in self.parts if p["kind"] == kind}
 
     def render(self, sections: list[tuple[str, str]]) -> str:
-        """The parts under their section titles, (title, kind) in order, each as `[id] text`."""
+        """The parts under their section titles, (title, kind) in order, each as `[id] text`; a part never cited
+        (NOT_CITABLE) as its text alone, without an id."""
         out = []
         for title, kind in sections:
             parts = [p for p in self.parts if p["kind"] == kind]
             if parts:
                 out.append(f"## {title}\n")
-                out += [f"[{p['id']}] {p['text']}\n" for p in parts]
+                out += [f"{p['text']}\n" if kind in NOT_CITABLE else f"[{p['id']}] {p['text']}\n" for p in parts]
         return "\n".join(out)
 
 

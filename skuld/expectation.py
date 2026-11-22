@@ -34,7 +34,7 @@ import json
 import re
 import urllib.parse
 import zlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from ratatoskr import notices as notice_rules
@@ -94,6 +94,10 @@ KINDS = {
     "practice": ("o_report",),
     "traffic": ("o_report",),
     "screen": ("run",),
+    # from prompt version 10 (DESCRIBED_SINCE): a model's description of a screen (Loki 0.5.0), never cited, and the
+    # list of the screenshots attached
+    "description": ("run",),
+    "images": ("run",),
     "passage": ("corpus",),
 }
 #: With `expectation.traffic` (a trial, 12 Nov 2026): per practice, up to this many of its messages as O annotated them
@@ -175,6 +179,13 @@ ACHIEVED_SINCE = 7
 #: retrieved for, and which says that a passage documents only those (21 Nov 2026: 78% of the passages a practice saw
 #: in its batch had been retrieved for other practices of the batch); an earlier version's contexts do not
 LABELED_SINCE = 8
+#: The first version of the stage-1 prompts whose context gives the screens' descriptions (Loki 0.5.0's
+#: descriptions.jsonl, by the model `expectation.descriptions` names: "own" for the model asked) as parts never cited,
+#: and attaches screenshots of up to 8 of the batch's screens (rerun plan D-37, author 22 Nov 2026); an earlier version's
+#: contexts are made as they were
+DESCRIBED_SINCE = 10
+#: Loki's file of screen descriptions, one line per visit and model
+DESCRIPTIONS = "descriptions.jsonl"
 #: Why a dependency step is dropped from reading 5: it cites the observed traffic only
 TRAFFIC_ONLY = "cites the observed traffic only, which shows that the processing happens, not that it is needed"
 #: Where a purpose is achieved, as the answer names it
@@ -210,6 +221,57 @@ def retrieved_for(text: str) -> tuple[list[str] | None, str]:
     if not found:
         return None, text
     return [x.strip() for x in found.group(1).split(",")], text[found.end() :]
+
+
+def described(prompt_version: str) -> bool:
+    """Whether a stage-1 context for a prompt version gives the screens' descriptions and screenshots."""
+    return str(prompt_version).isdigit() and int(prompt_version) >= DESCRIBED_SINCE
+
+
+def describer(model: str | None) -> str | None:
+    """The model whose screen descriptions a context gives: config `expectation.descriptions` ("own": the model asked;
+    a model's name; unset or null: none)."""
+    named = config.load()["expectation"].get("descriptions")
+    if not named:
+        return None
+    return model if named == "own" else str(named)
+
+
+def descriptions(directory: Path | None, model: str) -> list[dict]:
+    """The screen descriptions a run's describer wrote with `model` (Loki 0.5.0's descriptions.jsonl), those without
+    an error, in their order; [] where the run has none."""
+    path = Path(directory) / DESCRIPTIONS if directory else None
+    if path is None or not path.is_file():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if record.get("model") == model and not record.get("error") and (record.get("screen") or "").strip():
+            out.append(record)
+    return out
+
+
+def description_of(shown: dict, found: list[dict]) -> dict | None:
+    """The description of a shown screen: the one of its own visit (`screen_seq` the screen's `seq`), else the latest
+    earlier visit of the same screen in the same episode."""
+    exact = [d for d in found if d.get("screen_seq") == shown.get("seq")]
+    if exact:
+        return exact[0]
+    earlier = [
+        d
+        for d in found
+        if d.get("screen_id") == shown.get("sid")
+        and str(d.get("episode")) == str(shown.get("episode"))
+        and isinstance(d.get("screen_seq"), int)
+        and isinstance(shown.get("seq"), int)
+        and d["screen_seq"] < shown["seq"]
+    ]
+    return max(earlier, key=lambda d: d["screen_seq"]) if earlier else None
 
 
 def labeled(prompt_version: str) -> bool:
@@ -281,6 +343,9 @@ class Batch:
     run: str | None
     screens: list[tuple[str, str]] = field(default_factory=list)
     left_out: list[dict] = field(default_factory=list)  # notices, with their kind, terms and whether the whole screen
+    # 0.12.4: per screen of `screens`, its event's seq, episode and screenshot, and whether its texts held a notice
+    shown: list[dict] = field(default_factory=list)
+    directory: Path | None = None  # the run's folder, for its screenshots and descriptions
 
 
 def components(practice: Practice) -> dict[str, tuple[str, str]]:
@@ -310,8 +375,15 @@ def _runs(a: Assessment) -> list:
 
 
 def _screens(run, episode: str | None, first: int | None = None) -> list[tuple[str, str]]:
+    return [(s["sid"], s["text"]) for s in _shown(run, episode, first)]
+
+
+def _shown(run, episode: str | None, first: int | None = None) -> list[dict]:
+    """The screens of an episode (or the run's first ones) as shown: {sid, text, seq, episode, screenshot}; a screen
+    shown again in a row is shown once, with its first event's seq. The screenshot is the event's, else the one of the
+    screen in graph.json (the first time it was seen)."""
     graph = json.loads((run.directory / "graph.json").read_text(encoding="utf-8")).get("screens", {})
-    shown = []
+    shown: list[dict] = []
     for event in run.events:
         if event.get("type") != "screen":
             continue
@@ -320,8 +392,11 @@ def _screens(run, episode: str | None, first: int | None = None) -> list[tuple[s
         sid = event.get("screen_id")
         text = " | ".join(event["texts"]) if event.get("texts") else ctx.screen_text(graph.get(sid) or {})
         text = text[:SCREEN_TEXT] if text else text
-        if text and (not shown or shown[-1] != (sid, text)):  # a screen shown again in a row is shown once
-            shown.append((sid, text))
+        if text and (not shown or (shown[-1]["sid"], shown[-1]["text"]) != (sid, text)):
+            shot = event.get("screenshot") or (graph.get(sid) or {}).get("screenshot")
+            shown.append(
+                {"sid": sid, "text": text, "seq": event.get("seq"), "episode": event.get("episode"), "screenshot": shot}
+            )
         if first is not None and len(shown) >= first:
             break
     return shown
@@ -353,30 +428,34 @@ def batches(a: Assessment, subjects: Subjects, notices: str | None = None) -> li
     out = []
     for key in keys:
         practices = [p for p in subjects.practices if key in p.episodes]
-        screens, run_id = [], None
+        screens, run_id, directory = [], None, None
         for run in runs:
-            screens = _screens(run, None, LAUNCH_SCREENS) if key == "?" else _screens(run, key)
+            screens = _shown(run, None, LAUNCH_SCREENS) if key == "?" else _shown(run, key)
             if screens:
-                run_id = run.run_id
+                run_id, directory = run.run_id, run.directory
                 break
-        kept, left_out = [], []
-        for sid, text in screens:
+        kept, shown, left_out = [], [], []
+        for screen in screens:
+            sid, text = screen["sid"], screen["text"]
             texts = text.split(" | ")
             notice = classify(texts, notices)
             if not notice:
                 kept.append((sid, text))
+                shown.append({**screen, "notice": False})
                 continue
             declared = notice_texts(texts, notices)
             rest = [t for t in texts if t not in declared]
             left_out.append({"screen": sid, "kind": notice[0], "terms": notice[1], "whole": not rest})
             if rest:
                 kept.append((sid, " | ".join(rest)))
+                # its screenshot and description would show the notice: given its remaining texts only
+                shown.append({**screen, "text": " | ".join(rest), "notice": True})
         base = LAUNCH if key == "?" else f"e{key}"
         size = batch_size()
         chunks = [practices[i : i + size] for i in range(0, len(practices), size)] if size else [practices]
         for n, chunk in enumerate(chunks, 1):
             name = base if len(chunks) == 1 else f"{base}.{n}"
-            out.append(Batch(name, chunk, run_id, kept[:MAX_SCREENS], left_out))
+            out.append(Batch(name, chunk, run_id, kept[:MAX_SCREENS], left_out, shown[:MAX_SCREENS], directory))
     return out
 
 
@@ -418,11 +497,18 @@ def assemble(
     traffic: bool | None = None,
     notices: str | None = None,
     prompt_version: str | None = None,
+    model: str | None = None,
 ) -> Context:
     """The stage-1 context of a batch: the application, its practices as O states them, its screens, passages; with
     `traffic` (config `expectation.traffic`), also each practice's messages as O annotated them. From prompt version 8
     (LABELED_SINCE; `prompt_version`, default the one in force) each passage names the practices it was retrieved for
-    (`labeled`); an earlier version's contexts are made as they were, so that its kept samples are found again."""
+    (`labeled`); an earlier version's contexts are made as they were, so that its kept samples are found again.
+
+    From version 10 (DESCRIBED_SINCE) the screens come with their descriptions by `describer(model)` (parts of kind
+    `description`, never cited: a model's reading of the screen, not what it shows) and with screenshots of up to
+    `images.MAX_IMAGES` of them, spread over the batch's screens, never of a screen whose texts held a notice (gate 1):
+    each such screen's provenance names its screenshot and the file's digest, and a part of kind `images` lists the
+    screens the attached images show, in order (`images_of` reads them back for the request)."""
     names = names or {}
     traffic = traffic_enabled() if traffic is None else traffic
     version = prompt_version if prompt_version is not None else templates.version(prompt_id())
@@ -447,8 +533,13 @@ def assemble(
             for text, ref_ in shown.of(p, batch.key):
                 n += 1
                 parts.append(_part(f"T{n}", "traffic", f"{p.id}: {text}", ("o_report", ref_)))
+    screen_parts = []
     for n, (sid, text) in enumerate(batch.screens, 1):
-        parts.append(_part(f"S{n}", "screen", text, ("run", f"events.jsonl#screen/{sid}"), batch.run))
+        screen_parts.append(_part(f"S{n}", "screen", text, ("run", f"events.jsonl#screen/{sid}"), batch.run))
+    if described(version) and batch.shown and batch.directory is not None:
+        parts += _described(batch, screen_parts, describer(model), notices)
+    else:
+        parts += screen_parts
     for n, (p, retrieved_for) in enumerate(passages.values(), 1):
         text = f"{p.title} ({p.source}): {p.text}"
         if labeled(version):
@@ -581,13 +672,79 @@ def _message_text(rq: dict, evidence: dict) -> str:
     return f"{head} · {field_.split('#')[0]}: …{_printable(left)}«{_printable(value)}»{_printable(right)}… ({p.get('node')})"
 
 
+def _described(batch: Batch, screen_parts: list[dict], model: str | None, notices: str | None) -> list[dict]:
+    """The screen parts with their screenshots' digests, each followed by nothing; then the descriptions (never cited)
+    and the list of the attached images (DESCRIBED_SINCE)."""
+    from skuld import images
+
+    shown = batch.shown[: len(screen_parts)]
+    usable = [
+        i
+        for i, s in enumerate(shown)
+        if not s.get("notice") and s.get("screenshot") and (batch.directory / s["screenshot"]).is_file()
+    ]
+    chosen = [usable[j] for j in images.spread(len(usable))]
+    for i in chosen:
+        path = shown[i]["screenshot"]
+        screen_parts[i]["provenance"].append(
+            {"origin": "run", "record": path, "run": batch.run, "sha256": images.digest(batch.directory / path)}
+        )
+    out = list(screen_parts)
+    if model:
+        found = descriptions(batch.directory, model)
+        for i, s in enumerate(shown):
+            if s.get("notice"):
+                continue  # its description would read the notice (gate 1)
+            d = description_of(s, found)
+            if d is None:
+                continue
+            text = f"(about S{i + 1}) {d['screen'].strip()} {(d.get('in_episode') or '').strip()}".strip()
+            if classify([d["screen"], d.get("in_episode") or ""], notices or NOTICES):
+                continue
+            record = f"{DESCRIPTIONS}#visit/{d.get('visit')}/{model}"
+            out.append(_part(f"S{i + 1}.d", "description", text, ("run", record), batch.run))
+    if chosen:
+        ids = ", ".join(f"S{i + 1}" for i in chosen)
+        text = (
+            f"{len(chosen)} screenshot{'s are' if len(chosen) > 1 else ' is'} attached after this text, in this order: "
+            f"{ids}. A screenshot shows its screen as the user saw it; cite the screen's id."
+        )
+        out.append(_part("images", "images", text, ("run", "screenshots"), batch.run))
+    return out
+
+
+def images_of(given: Context, directory: Path | None) -> list[dict]:
+    """The screenshots a context names, in the order its screens list them: {path, sha256, data} with the data shrunk
+    for the request (skuld.images.prepare); [] for a context without any."""
+    from skuld import images
+
+    if directory is None:
+        return []
+    named = [
+        (pointer["record"], pointer["sha256"])
+        for p in given.parts
+        if p["kind"] == "screen"
+        for pointer in p["provenance"]
+        if pointer.get("sha256")
+    ]
+    if not named:
+        return []
+    for path, digest in named:
+        if images.digest(Path(directory) / path) != digest:
+            raise ContextError(f"{path}: the screenshot differs from the one its context names")
+    data = images.prepare([Path(directory) / path for path, _ in named])
+    return [{"path": path, "sha256": digest, "data": d} for (path, digest), d in zip(named, data, strict=True)]
+
+
 def check(given: Context, notices: str | None = None) -> None:
-    """Gate 1: refuses a part of a kind or origin stage 1 may not give a model, and a screen that is a notice (by the
-    notice definition in version `notices`, default NOTICES)."""
+    """Gate 1: refuses a part of a kind or origin stage 1 may not give a model, and a screen or a screen's description
+    that is a notice (by the notice definition in version `notices`, default NOTICES)."""
     ctx.check(given, KINDS, "stage 1")
     for p in given.parts:
         if p["kind"] == "screen" and classify(p["text"].split(" | "), notices or NOTICES):
             raise ContextError(f"{p['id']}: a notice screen is not given to stage 1")
+        if p["kind"] == "description" and classify([p["text"]], notices or NOTICES):
+            raise ContextError(f"{p['id']}: a description that reads a notice is not given to stage 1")
 
 
 SECTIONS = [
@@ -595,6 +752,12 @@ SECTIONS = [
     ("Practices observed", "practice"),
     ("Traffic of the practices (as captured; the data the observation found is marked «»)", "traffic"),
     ("Screens of this part of the application", "screen"),
+    (
+        "Descriptions of the screens (a model's reading of each screen in its flow, for orientation only: never cite "
+        "a description; cite the screen it is about)",
+        "description",
+    ),
+    ("Screenshots", "images"),
     ("Documentation", "passage"),
 ]
 
@@ -707,9 +870,10 @@ def expect(
     topups = []  # (batch, seed) of each job, in order, for the top-ups
     made = batches(a, subjects, notices)
     for batch in made:
-        context = assemble(batch, a, corpus, data, names, notices=notices)
+        context = assemble(batch, a, corpus, data, names, notices=notices, model=model)
         prompt = template.format(context=render(context), nodes=", ".join(n.id for n in purposes))
         ids = context.ids
+        shots = images_of(context, batch.directory) if not offline else _offline_images(context)
         for seed in seeds:
             record = {
                 "batch": batch.key,
@@ -722,7 +886,9 @@ def expect(
                 "context": {"sha256": context.sha256},
             }
 
-            def one(batch=batch, seed=seed, record=record, prompt=prompt, ids=ids, context=context) -> ask.Sample:
+            def one(
+                batch=batch, seed=seed, record=record, prompt=prompt, ids=ids, context=context, shots=shots
+            ) -> ask.Sample:
                 sample, refused, _ = ask.ask_with_feedback(
                     lambda attempt: sample_folder(a.root, batch, seed, attempt),
                     prompt,
@@ -739,6 +905,7 @@ def expect(
                     provider=provider,
                     files={"context.json": json.dumps({"parts": list(context.parts)}, indent=1, ensure_ascii=False)},
                     think=think,
+                    images=shots,
                 )
                 if sample.text is not None and refused:
                     sample.record["refused"] = refused
@@ -778,8 +945,9 @@ def _topups(
             continue
         given = answered(sample.text)
         for practice in (p for p in batch.practices if p.id not in given):
-            single = Batch(batch.key, [practice], batch.run, batch.screens, batch.left_out)
-            context = assemble(single, a, corpus, data, names, notices=notices)
+            single = replace(batch, practices=[practice])
+            context = assemble(single, a, corpus, data, names, notices=notices, model=model)
+            shots = images_of(context, single.directory) if not offline else _offline_images(context)
             prompt = template.format(context=render(context), nodes=", ".join(n.id for n in purposes))
             record = {
                 "batch": batch.key,
@@ -794,7 +962,7 @@ def _topups(
             }
 
             def one(
-                single=single, seed=seed, record=record, prompt=prompt, context=context, pid=practice.id
+                single=single, seed=seed, record=record, prompt=prompt, context=context, pid=practice.id, shots=shots
             ) -> ask.Sample:
                 sample, refused, _ = ask.ask_with_feedback(
                     lambda attempt: topup_folder(a.root, single, seed, pid, attempt),
@@ -812,6 +980,7 @@ def _topups(
                     provider=provider,
                     files={"context.json": json.dumps({"parts": list(context.parts)}, indent=1, ensure_ascii=False)},
                     think=think,
+                    images=shots,
                 )
                 if sample.text is not None and refused:
                     sample.record["refused"] = refused
@@ -819,6 +988,11 @@ def _topups(
 
             jobs.append(one)
     return ask.concurrently(jobs, model) if jobs else []
+
+
+def _offline_images(given: Context) -> list[dict]:
+    """Offline nothing is asked: the images are named (their digests are in the context) but not read."""
+    return []
 
 
 def _purpose_keys(purposes: list[dict]) -> dict[tuple[str, str], tuple[str, str]]:

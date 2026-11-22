@@ -3,6 +3,12 @@ end only. The context shows what the application was observed to do (the practic
 application where it happened, and documentation. It contains nothing the provider says about its own processing,
 and you must not assume anything it would say.
 
+Where the context gives them, the screens come with two further aids. Descriptions: a model's reading of a screen and
+of where it stood in the user's flow, each marked with the screen it is about. Use them to understand the screens, but
+never cite a description: cite the screen it is about, and only for what the screen itself shows. Screenshots: images
+attached after this text, of the screens the context lists under "Screenshots", in that order. A screenshot shows its
+screen as the user saw it, so what it shows may be cited by the screen's id.
+
 For each practice listed in the context (its id starts with P):
 
 1. State the purposes the practice plausibly serves, each as action, object, beneficiary (USER, PROVIDER or OTHER, for

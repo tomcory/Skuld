@@ -4,7 +4,10 @@ The prompts' texts by version. `prompts/<id>.md` is the current version (CURRENT
 names them (config.json's or a profile's `prompts`, e.g. `{"minimisation": "2"}` in the fixtures' profile). A prompt's
 version is part of every sample's identity, and so is the digest of its text.
 
-    expectation, expectation_traffic   9: a dependency step may not cite only the observed traffic (T), which shows that
+    expectation, expectation_traffic   10: the context gives the screens' descriptions (Loki 0.5.0, by the model
+                                          expectation.descriptions names; never cited) and screenshots of up to 8
+                                          screens are attached (expectation.DESCRIBED_SINCE; rerun plan D-37, 22 Nov
+                                          2026); 9: a dependency step may not cite only the observed traffic (T), which shows that
                                           the processing happens, not that it is needed (expectation reading 5; 21 Nov
                                           2026); 8: each passage of the context names the practices it was retrieved for, and
                                           the prompt says a passage documents only those (expectation.LABELED_SINCE;
@@ -17,7 +20,8 @@ version is part of every sample's identity, and so is the digest of its text.
                                           whether its action, object and outcome determine which processing it includes
                                           (P10, 21 Nov 2026); 2: the context last; 1 before
     compatibility                       2: the context last; 1 before
-    minimisation                        6: the practice lists the admissible replacements of its data component (the
+    minimisation                        7: the context gives the screens' descriptions after the screens, never cited
+                                          (judge.DESCRIBED_SINCE; rerun plan D-37, 22 Nov 2026); 6: the practice lists the admissible replacements of its data component (the
                                           nodes judge.replacements gives, or none), and a REPLACE must name one of
                                           them; where none is listed, only REMOVE, ON_DEVICE or NARROWER_RECIPIENT
                                           (judge.REPLACEMENTS_SINCE; P10 trial finding 3, 21 Nov 2026); 5: typed arguments (change, needs, gives, covers, judge.TYPED_SINCE), and the
@@ -37,11 +41,11 @@ from importlib import resources
 from ratatoskr.errors import ConfigError
 
 CURRENT = {
-    "expectation": "9",
-    "expectation_traffic": "9",
+    "expectation": "10",
+    "expectation_traffic": "10",
     "specificity": "3",
     "compatibility": "2",
-    "minimisation": "6",
+    "minimisation": "7",
     "propose": "3",
 }
 
