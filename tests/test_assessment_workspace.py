@@ -231,7 +231,14 @@ def test_a_run_under_an_intervention_is_no_subject_of_the_assessment(tmp_path, r
 
 
 def test_the_exploration_and_baseline_runs_are_subjects(tmp_path):
-    exploration = o_report(tmp_path / "e.json", "r0", frida=("location=pass", "clipboard=record"))
+    # the re-run's setup on every run (its plan, D-13 and D-29): the German SIM by the telephony hook, and QUIC refused
+    # by the capture's policy, which Verðandi 3.7.4 counts apart from blocked connections
+    exploration = o_report(
+        tmp_path / "e.json",
+        "r0",
+        frida=("location=pass", "clipboard=record", "telephony=replace:de,26201,Telekom.de"),
+        hosts={"api.maps.example": {"connections": 7, "blocked": 0, "quic_refused": 1}},
+    )
     baseline = o_report(tmp_path / "b.json", "r1", hosts={"api.example": {"connections": 3, "blocked": 0}})
     root = tmp_path / "ws"
     inputs.describe_assessment(root, "app.example", "1.0", [(exploration, "r0"), (baseline, "r1")], None, None, CORPUS)

@@ -677,13 +677,19 @@ def load_assessment(root: str | Path, check: bool = True) -> Assessment:
 #: Source settings that impose nothing: a source handed to the app unchanged, a sink recorded (`execute.configuration`)
 UNCHANGED = ("pass", "record")
 
+#: Sources whose setting is the device every run of a study is made on, not an intervention: Loki's telephony hook
+#: gives every run the study's SIM and network operator (the re-run's German SIM, D-13 of its plan), the exploration
+#: and baseline runs included; no family of the catalogue intervenes on it
+SETUP = ("telephony",)
+
 
 def interventions_in(report: dict) -> list[str]:
     """
     The interventions an O report records of its runs, from what Verðandi copies of the instruments' settings into
     each scope (`context.instruments`): a source setting other than `pass` or `record` (substituted, rounded, blocked,
-    …) and a blocked host, by the capture's settings (`blocked_hosts`) or by its connections (a host with connections
-    blocked). Empty for a run under no intervention: an exploration, a baseline run. The report's own record is read,
+    …), but for the device's setup (`SETUP`), and a blocked host, by the capture's settings (`blocked_hosts`) or by its
+    connections (a host with connections blocked; a QUIC connection the capture's policy refused is counted apart,
+    `quic_refused`, by Verðandi 3.7.4). Empty for a run under no intervention: an exploration, a baseline run. The report's own record is read,
     not the run folder it names, which describe need not find; the report is fixed by its digest, so what was checked
     stays what is assessed.
     """
@@ -698,7 +704,11 @@ def interventions_in(report: dict) -> list[str]:
                 continue
             settings = record.get("settings")
             if name == "frida" and isinstance(settings, list):
-                found += [f"{run}: {s}" for s in settings if str(s).partition("=")[2] not in UNCHANGED]
+                found += [
+                    f"{run}: {s}"
+                    for s in settings
+                    if str(s).partition("=")[2] not in UNCHANGED and str(s).partition("=")[0] not in SETUP
+                ]
             elif name.startswith("heimdall"):
                 hosts = list(settings.get("blocked_hosts") or ()) if isinstance(settings, dict) else []
                 hosts += [h for h, c in (record.get("hosts") or {}).items() if isinstance(c, dict) and c.get("blocked")]
