@@ -446,6 +446,9 @@ def test_e_decides_ds_conditions_that_os_practices_or_the_parties_settle_and_pas
     # whether AdCo acts as a service provider no register states; O saw no location: neither is decided
     assert passed == {"o3", "o4"} and not ({"o3", "o4"} & set(decided))
     assert check_assessment(a, report, report, members) == []
+    # written: the Markdown renders the run scope's settled limits, not these (a shadowed name, 0.12.5)
+    report, _ = build(a.root, registry, write=True)
+    assert "decided:D:" not in (a.root / "assessment.md").read_text(encoding="utf-8")
 
 
 def test_a_declared_necessity_is_refuted_by_a_run_never_supported_and_not_compared_for_no_data(tmp_path):

@@ -302,7 +302,8 @@ def build(
     claims = hypotheses + tier["alternatives"] + tested
     case_features = sorted({c.feature.id for c in a.cases.cases}) if a.cases else []
     open_ = relations.open_conditions(built, every, statuses, a.frame, stated, tested, case_features)
-    from_d, settled = relations.from_declaration(a.declaration, built, every, registry)
+    # its own name: `settled` is correspondence's (the run's scope), which the Markdown renders (22 Nov 2026)
+    from_d, decided_by_e = relations.from_declaration(a.declaration, built, every, registry)
     open_ += from_d
 
     report = {
@@ -385,7 +386,7 @@ def build(
         ),
         "cases": _cases(a),
         "open": open_,
-        "decided": settled,
+        "decided": decided_by_e,
         "gaps": _gaps(
             stated,
             claims,
