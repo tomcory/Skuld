@@ -43,9 +43,7 @@ REASON = "calibrate"
 def candidates(workspace: Path) -> list[dict]:
     """The selection's candidates of a workspace, as `skuld select --list` prints them."""
     skuld = Path(sys.executable).parent / "skuld"
-    out = subprocess.run(
-        [str(skuld), "select", str(workspace), "--list"], capture_output=True, text=True, check=False
-    )
+    out = subprocess.run([str(skuld), "select", str(workspace), "--list"], capture_output=True, text=True, check=False)
     if out.returncode != 0:
         raise SystemExit(f"{workspace}: skuld select --list failed: {out.stderr.strip()[-500:]}")
     return [json.loads(line) for line in out.stdout.splitlines() if line.strip()]
