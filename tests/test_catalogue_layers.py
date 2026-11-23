@@ -45,3 +45,22 @@ def test_select_observes_the_purposes_of_the_study_catalogue(tmp_path):
     found = select.observed_purposes(base, study=study)
     assert found and all(node for node, _ in found)
     assert select.observed_purposes(base, study=tmp_path / "absent") == []
+
+
+def test_processes_that_add_the_same_new_id_at_once_never_replace_each_others_family(tmp_path):
+    """23 Nov 2026 (the re-run's step 8): proposals running at once each read the study catalogue when they started;
+    two that described the same new id both wrote <id>@1, the later replacing the earlier, so the earlier's cases named
+    a family whose file had changed. The versions on disk now decide: another family is the next version, the same
+    family is the one there."""
+    study = tmp_path / "study"
+    first, second = catalogue.load(study), catalogue.load(study)  # both read before either adds
+    one = first.add({**copy.deepcopy(FORECAST), "id": "shared-new"})
+    other = {**copy.deepcopy(FORECAST), "id": "shared-new", "name": "described otherwise"}
+    two = second.add(other)
+    assert (one.key, two.key) == ("shared-new@1", "shared-new@2")
+    assert catalogue._digest((study / "families" / "shared-new@1.yaml").read_text()) == one.sha256
+    same = catalogue.load(study)
+    third = catalogue.load(study)
+    assert third.add({**copy.deepcopy(FORECAST), "id": "shared-new"}).key == "shared-new@1"
+    assert same.add(copy.deepcopy(other)).key == "shared-new@2"
+    assert sorted(p.name for p in (study / "families").glob("*.yaml")) == ["shared-new@1.yaml", "shared-new@2.yaml"]

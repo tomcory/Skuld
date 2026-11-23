@@ -100,6 +100,7 @@ purposes of the same path). Its next version is its last and says so, `supersede
 (`latest`) leave it out, and a proposal that names it is refused.
 """
 
+import fcntl
 import hashlib
 import re
 from dataclasses import dataclass, replace
@@ -226,16 +227,33 @@ class Catalogue:
     def add(self, data: dict) -> Family:
         """Writes a family as the next version of its id, or as version 1 of a new id; returns it. An empty `reviewed`
         field is dropped: the review is stored beside the family (`review`)."""
-        current = self.get(data["id"])
-        data = {**data, "version": current.version + 1 if current else 1}
         if "reviewed" in data and not data["reviewed"]:
-            del data["reviewed"]
-        check(data)
+            data = {k: v for k, v in data.items() if k != "reviewed"}
         folder = self.root / "families"
         folder.mkdir(parents=True, exist_ok=True)
-        path = folder / f"{data['id']}@{data['version']}.yaml"
-        text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True, width=120)
-        path.write_text(text, encoding="utf-8", newline="\n")
+        # 23 Nov 2026: processes proposing at once (the re-run's step 8) each read the catalogue when they started, so
+        # two that described the same new id both wrote <id>@1 and the later replaced the earlier. Under a lock, the
+        # versions on disk decide: a family identical to one there is that one, another is the next version.
+        with open(folder / ".lock", "w") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            current = self.get(data["id"])
+            versions = [current.version] if current else []
+            for path in folder.glob(f"{data['id']}@*.yaml"):
+                if path.stem.rsplit("@", 1)[1].isdigit():
+                    version = int(path.stem.rsplit("@", 1)[1])
+                    versions.append(version)
+                    text = yaml.safe_dump({**data, "version": version}, sort_keys=False, allow_unicode=True, width=120)
+                    if path.read_text(encoding="utf-8") == text:
+                        known = next((f for f in self.families if f.key == path.stem), None)
+                        if known is None:
+                            known = Family(data["id"], version, {**data, "version": version}, _digest(text), path)
+                            self.families.append(known)
+                        return known
+            data = {**data, "version": max(versions, default=0) + 1}
+            check(data)
+            path = folder / f"{data['id']}@{data['version']}.yaml"
+            text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True, width=120)
+            path.write_text(text, encoding="utf-8", newline="\n")
         family = Family(data["id"], data["version"], data, _digest(text), path)
         self.families.append(family)
         return family
