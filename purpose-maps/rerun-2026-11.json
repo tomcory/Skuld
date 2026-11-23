@@ -1,0 +1,30 @@
+{
+ "entries": {
+  "ImproveServiceRobustness": {
+   "node": "IncreaseServiceRobustness",
+   "similarity": 0.7228,
+   "runner_up": {
+    "node": "ImproveExistingProductsAndServices",
+    "similarity": 0.6211
+   },
+   "occurrences": 14
+  },
+  "TECHNICAL_SERVICE_PROVISION": {
+   "node": "TechnicalServiceProvision",
+   "similarity": 0.7571,
+   "runner_up": {
+    "node": "RequestedServiceProvision",
+    "similarity": 0.6371
+   },
+   "occurrences": 3
+  }
+ },
+ "method": "nearest dpv-purposes node by cosine similarity of embeddings (author, 11 Nov 2026)",
+ "embedding_model": "qwen3-embedding:8b-fp16",
+ "embedding_digest": "aa924958585e7b0268debccaf7138cd7e2475de0b2cc2e01c09cc347963ea203",
+ "instruction": "Instruct: Given the name of a purpose for processing personal data, retrieve the matching purpose category\nQuery: ",
+ "vocabulary": "dpv-purposes",
+ "vocabulary_version": "2.3.1",
+ "vocabulary_sha256": "26a43ae73f1d7799a51138b23ff7c4b632fadec2f646d0610022d91a0b1e20fb",
+ "built": "2026-11-23T06:27:58+00:00"
+}
