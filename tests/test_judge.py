@@ -2,6 +2,7 @@
 concerns (ii), (iv) and (v) and gate 3, end to end."""
 
 import json
+import os
 import re
 
 import pytest
@@ -684,3 +685,77 @@ def test_typed_alternatives_from_facts_end_to_end(tmp_path, capsys):
     code = cli.main(["check", str(a.root)])
     out = capsys.readouterr().out
     assert code == 0, out
+
+
+def test_check_rebuilds_under_the_profile_its_samples_were_asked_under(tmp_path, monkeypatch, capsys):
+    """23 Nov 2026: a sample's options are part of its identity, so that `skuld check` without the profile the samples
+    were asked under (the re-run's rerun-2026-11-gemma, say) found none of them kept, and reported every member a
+    combined claim cites (eN/sN:pN, eN/sN/aN:dN, …/topup/P-…:dN, launch/sN:dN, assessment/minimisation/P-…/sN:aN) as
+    no claim it could combine. It rebuilds under the profile their manifests name; another profile chosen is a
+    problem."""
+    from skuld import cli, config, manifest
+    from skuld.assess import build
+    from skuld.provenance import check_assessment
+
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    asked = {"expectation": {"think": "low", "topup": True}, "assessment": {"think": "low"}}
+    (profiles / "asked.json").write_text(json.dumps({"description": "the samples' own", **asked}))
+    (profiles / "other.json").write_text(json.dumps({"description": "another", "expectation": {"think": "high"}}))
+    monkeypatch.setattr(config, "PROFILES", profiles)
+    monkeypatch.setenv("SKULD_PROFILE", "asked")
+    config.load.cache_clear()
+    a, built = make_workspace(tmp_path)
+    batch_of = {p.id: b.key for b in expectation.batches(a, built) for p in b.practices}
+
+    class Retried(FakeModel):
+        """A second seed whose answers are retried (e1: first refused for citing D99) or topped up (launch: no
+        purpose on both attempts), as the real samples were."""
+
+        async def complete(self, model, prompt, *args, **kwargs):
+            text = prompt.messages[0]["content"]
+            practice = re.findall(r"\[(P-[0-9a-f]{10})\]", text)[0]
+            self.prompts.append(text)
+            before = sum(practice in t for t in self.prompts) - 1
+            if batch_of[practice] == "e1" and before == 0:
+                cites = {"purposes": [{"practice": practice, "id": "p1", "node": "Marketing", "cites": ["D99"]}]}
+                return LLMResponse(text=json.dumps({**cites, "dependencies": []}))
+            if batch_of[practice] == "launch" and before < 2:
+                return LLMResponse(text=json.dumps({"purposes": [], "dependencies": []}))
+            self.prompts.pop()
+            return await super().complete(model, prompt, *args, **kwargs)
+
+    expectation.expect(a, built, corpus.load(a.corpus), seeds=[2], provider=Retried())
+    found, norms, hypotheses = tools(a, built)
+    judge.judge(a, built, found, norms, hypotheses, FACTORS, seeds=[1], provider=FakeJudge())
+    for command in manifest.ASKED:
+        manifest.Run(command, {}, a.root).write(None)  # as `skuld expect` and `skuld judge` write them
+    report = assess(a.root)
+    cited = {re.sub(r"\d+", "N", re.sub(r"P-[0-9a-f]{10}", "P-x", m)) for c in report["claims"] for m in c["of"]}
+    # the member forms of the real failure: a batch's, a retry's (aN), a top-up's, the launch's, a minimisation's
+    forms = {"eN/sN:pN", "eN/sN:dN", "eN/sN/aN:pN", "eN/sN/aN:dN", "launch/sN:pN", "launch/sN/topup/P-x:dN"}
+    assert forms | {"assessment/minimisation/P-x/sN:aN"} <= cited
+
+    # what check did: under config.json alone, no sample is kept, and every member cited is none it could combine
+    monkeypatch.delenv("SKULD_PROFILE")
+    config.load.cache_clear()
+    rebuilt, members = build(a.root, write=False)
+    uncombined = [
+        p for p in check_assessment(a, report, rebuilt, members) if p.endswith("is no claim it could combine")
+    ]
+    assert len(uncombined) == sum(len(c["of"]) for c in report["claims"])
+
+    capsys.readouterr()
+    try:
+        code = cli.main(["check", str(a.root)])
+        out = capsys.readouterr().out
+        assert code == 0, out
+        assert "rebuilt under the profile asked, which its samples were asked under" in out
+        assert "could combine" not in out and "rebuilt identically" in out
+        code = cli.main(["--profile", "other", "check", str(a.root)])
+        out = capsys.readouterr().out
+        assert code == 1
+        assert "checked under the profile other, but its samples were asked under the profile asked" in out
+    finally:
+        os.environ.pop("SKULD_PROFILE", None)  # check and --profile set it themselves, outside monkeypatch
+        config.load.cache_clear()

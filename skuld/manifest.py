@@ -13,6 +13,7 @@ seconds) and Skuld's `missing` (offline, without a kept sample) and `thinking_ch
 manifest too, with what it had spent by then.
 """
 
+import json
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -56,6 +57,25 @@ class Run:
             path = path.with_name(f"{self.command}_{stamp}_{n}.json")
         self.path = self.manifest.write(path)
         return self.path
+
+
+#: The commands whose samples an assessment is built from (23 Nov 2026)
+ASKED = ("expect", "judge")
+
+
+def profiles(workspace: Path) -> set[str | None]:
+    """The profiles the latest manifest of each command in ASKED names (None: config.json alone); none for a workspace
+    whose manifests name no configuration (made before 20 Nov 2026). 23 Nov 2026: a sample's options (sampling,
+    thinking) are part of its identity, so that its samples are found kept only under the profile they were asked
+    under."""
+    out = set()
+    for command in ASKED:
+        for path in sorted((Path(workspace) / FOLDER).glob(f"{command}_*.json"), reverse=True):
+            named = json.loads(path.read_text(encoding="utf-8")).get("configuration")
+            if named is not None:
+                out.add(named.get("profile"))
+                break
+    return out
 
 
 @contextmanager

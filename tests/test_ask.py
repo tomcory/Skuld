@@ -190,3 +190,43 @@ def test_a_runaway_or_refused_answer_leaves_its_sample_missing_and_the_run_goes_
         # not kept: the next run asks again
         again = _ask(folder, Rejects(reason, heals=True))
         assert again.text == '{"a": 1}' and ask.usage().calls == 1
+
+
+def test_a_sample_whose_answer_was_rejected_when_asked_again_is_missing_by_design_not_a_problem(tmp_path):
+    """23 Nov 2026: asked again (its identity changed) and rejected, a sample's answer is removed but the record.json of
+    the answer before stays, naming it; `skuld check` took that for an answer missing (the re-run's gemma Adobe Scan,
+    assessment/minimisation/P-3fd565f146/s3/a2). The record kept aside beside it says it is missing by design (0.9.2);
+    an answer missing without one is still a problem."""
+    import hashlib
+    import json
+
+    from skuld.provenance import _samples
+
+    parts = [{"id": "Q1", "kind": "purpose", "text": "t"}]
+    digest = hashlib.sha256(json.dumps(parts, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    folder = tmp_path / "assessment" / "minimisation" / "P-x" / "s3" / "a2"
+
+    def asked(question, provider):
+        record = {"question": question, "context": {"sha256": digest}}
+        files = {"context.json": json.dumps({"parts": parts})}
+        options = Options(max_tokens=8192)
+        return ask.ask(
+            folder,
+            "p",
+            {},
+            record,
+            ("question",),
+            model="m",
+            api="fake",
+            options=options,
+            provider=provider,
+            files=files,
+        )
+
+    asked("q", Rejects("runaway", heals=True))
+    assert _samples(tmp_path)[1] == []
+    assert asked("q2", Rejects("runaway")).text is None
+    assert not (folder / "answer.json").exists() and json.loads((folder / "record.json").read_text())["answer"]
+    assert _samples(tmp_path)[1] == []
+    (folder / "record.rejected.json").unlink()
+    assert _samples(tmp_path)[1] == ["sample assessment/minimisation/P-x/s3/a2: its answer is missing"]

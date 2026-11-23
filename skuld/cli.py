@@ -928,6 +928,27 @@ def main(argv: list[str] | None = None) -> int:
                 reading = named[0] if named else judge.READING
                 notes: list[str] = []
                 rebuilt = members = None
+                # 23 Nov 2026: rebuilt under the profile its samples were asked under, as their manifests name it: a
+                # sample's options are part of its identity, so that under another profile (or none, config.json's
+                # since 20 Nov) no sample is found kept and every combined claim cites "no claim it could combine"
+                asked, chosen = manifest.profiles(root), config.profile_name()
+                mismatch = None
+
+                def under(name: str | None) -> str:
+                    return f"the profile {name}" if name else "config.json alone"
+
+                if len(asked) > 1:
+                    mismatch = f"its samples were asked under {' and '.join(sorted(map(under, asked)))}"
+                elif asked and (profile := next(iter(asked))) != chosen:
+                    if profile is None or chosen is not None:
+                        mismatch = f"checked under {under(chosen)}, but its samples were asked under {under(profile)}"
+                    else:
+                        os.environ["SKULD_PROFILE"] = profile
+                        config.load.cache_clear()
+                        from skuld.expectation import _purpose_map_file
+
+                        _purpose_map_file.cache_clear()
+                        print(f"{REPORT}: rebuilt under the profile {profile}, which its samples were asked under")
                 stage1_reading = reading_of(report)
                 if reading in judge.READINGS and stage1_reading in STAGE1_READINGS:
                     try:
@@ -942,6 +963,8 @@ def main(argv: list[str] | None = None) -> int:
                     except inputs.InputError:
                         pass  # a changed input refuses the rebuild; check_assessment names it by its digest
                 problems = check_assessment(inputs.load_assessment(root, check=False), report, rebuilt, members, notes)
+                if mismatch:
+                    problems.append(mismatch)
                 if reading not in judge.READINGS:
                     problems.append(f"names the reading {reading}, which this Skuld does not know {judge.READINGS}")
                 elif stage1_reading not in STAGE1_READINGS:

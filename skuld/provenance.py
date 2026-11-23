@@ -107,7 +107,7 @@ def _samples(root: Path) -> tuple[dict[str, list[dict]], list[str]]:
         answer = folder / "answer.json"
         named = (meta.get("answer") or {}).get("sha256")
         if not answer.is_file():
-            if named:
+            if named and not _kept_aside(folder, meta):
                 problems.append(f"sample {rel}: its answer is missing")
         # the bytes as written: reading text would turn a "\r" in the answer into "\n"
         elif named != hashlib.sha256(answer.read_bytes()).hexdigest():
@@ -115,6 +115,22 @@ def _samples(root: Path) -> tuple[dict[str, list[dict]], list[str]]:
         contexts[rel] = parts
         contexts[rel.removeprefix("expectation/")] = parts
     return contexts, problems
+
+
+#: The records `ask` keeps aside for an answer it did not keep: rejected (runaway, refused, withheld, over the context;
+#: since 0.9.2) or cut off at the token limit
+KEPT_ASIDE = ("record.rejected.json", "record.length.json")
+
+
+def _kept_aside(folder: Path, meta: dict) -> bool:
+    """Whether the sample's last asking was kept aside, its answer missing by design: 23 Nov 2026, the asking removes
+    the answer of the sample asked before in that folder but leaves its record.json, which still names that answer."""
+    for name in KEPT_ASIDE:
+        if (folder / name).is_file():
+            aside = json.loads((folder / name).read_text(encoding="utf-8"))
+            if str(aside.get("created", "")) >= str(meta.get("created", "")):
+                return True
+    return False
 
 
 def _o_ref(cid) -> dict | None:
