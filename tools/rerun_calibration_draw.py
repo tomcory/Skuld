@@ -85,10 +85,13 @@ def draw(workspaces: list[Path], seed: int, per_app: int, dry_run: bool = False)
         held = {str(e["id"]) for e in entries}
         written = []
         for c in cs:
-            if c["eligible"] and c["group"] in drawn and c["concern"] not in held:
-                entries.append({"id": c["concern"], "reason": REASON, "group": c["group"]})
-                held.add(c["concern"])
-                written.append(c["concern"])
+            # a candidate whose concern (v) is not stated has no concern id: it is named by its practice, which
+            # `skuld select` matches as well (23 Nov 2026: the re-run's Peacock Flashlight was written as `id: null`)
+            key = c["concern"] or c["practice"]
+            if c["eligible"] and c["group"] in drawn and key not in held:
+                entries.append({"id": key, "reason": REASON, "group": c["group"]})
+                held.add(key)
+                written.append(key)
         record["workspaces"][str(w)] = {
             "candidates": len(cs),
             "testable_groups": testable[w],
