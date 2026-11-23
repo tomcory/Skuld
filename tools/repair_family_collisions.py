@@ -37,6 +37,8 @@ def repair(workspace: Path, exploration: Path, study: Path, dry_run: bool) -> li
     application = f"{exp.package}@{exp.version}"
     catalogue = propose.load_catalogue((BASE, study))
     out = []
+    # a case that chose a family an earlier episode of the same proposal described follows that one (recorded digest)
+    rebuilt_by_digest: dict[str, object] = {}
     for path in sorted(workspace.glob("proposals/*/summary.json")):
         summary = json.loads(path.read_text(encoding="utf-8"))
         changed = False
@@ -54,6 +56,21 @@ def repair(workspace: Path, exploration: Path, study: Path, dry_run: bool) -> li
             prompt = json.loads((folder / "record.json").read_text(encoding="utf-8"))["prompt"]
             news = [x for x in answer.get("features", []) if x.get("family") == "new"
                     and (x.get("new_family") or {}).get("id") == fam["id"]]
+            if not news and fam["sha256"] in rebuilt_by_digest:
+                added = rebuilt_by_digest[fam["sha256"]]
+                if dry_run:
+                    out.append(f"{where}: chose {fam['id']}@{fam['version']} as an earlier episode described it; follows it")
+                    continue
+                case["family"] = added.key
+                generated["family"] = {**fam, "version": added.version, "sha256": added.sha256}
+                case.setdefault("repairs", []).append(
+                    {"what": "family", "was": f"{fam['id']}@{fam['version']}", "now": added.key,
+                     "why": "it chose the family an earlier episode of its proposal described, whose file was replaced",
+                     "tool": "tools/repair_family_collisions.py"}
+                )
+                changed = True
+                out.append(f"{where}: {fam['id']}@{fam['version']} -> {added.key} (as described earlier)")
+                continue
             if len(news) != 1:
                 out.append(f"{where}: {len(news)} new families {fam['id']} in the answer; not repaired")
                 continue
@@ -71,9 +88,11 @@ def repair(workspace: Path, exploration: Path, study: Path, dry_run: bool) -> li
                 out.append(f"{where}: the rebuilt {fam['id']} is {rebuilt[:12]}, not {fam['sha256'][:12]}; not repaired")
                 continue
             if dry_run:
+                rebuilt_by_digest[fam["sha256"]] = None
                 out.append(f"{where}: {fam['id']}@{fam['version']} rebuilds exactly; would be added")
                 continue
             added = catalogue.add(copy.deepcopy(data))
+            rebuilt_by_digest[fam["sha256"]] = added
             case["family"] = added.key
             generated["family"] = {**fam, "version": added.version, "sha256": added.sha256}
             case.setdefault("repairs", []).append(
