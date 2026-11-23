@@ -120,3 +120,18 @@ def test_recorded_sinks_do_not_keep_a_run_from_being_a_baseline(monkeypatch):
     assert verify.baseline_problem({"storage": "record", "advertising_id": "replace:0"}) == (
         "sources changed: advertising_id=replace:0"
     )
+
+
+def test_the_devices_telephony_setup_does_not_keep_a_run_from_being_a_baseline(monkeypatch):
+    """23 Nov 2026 (the re-run's step 8): Loki gives every run the study's German SIM through its telephony hook, and
+    Skuld 0.12.2 left that setup out of describe's interventions only: verify still excluded every baseline run for
+    'sources changed: telephony=replace:de,26201,Telekom.de', so no experiment had a baseline and every alternative was
+    precondition_failed."""
+    from skuld import verify
+
+    monkeypatch.setattr(verify, "blocked_hosts", lambda report: [])
+    monkeypatch.setattr(verify, "instrumented", lambda report: None)
+    monkeypatch.setattr(verify, "settings", lambda report: report)
+    setup = {"storage": "record", "telephony": "replace:de,26201,Telekom.de", "advertising_id": "pass"}
+    assert verify.baseline_problem(setup) is None
+    assert verify.baseline_problem({**setup, "android_id": "replace:0"}) == "sources changed: android_id=replace:0"

@@ -149,7 +149,11 @@ def baseline_problem(report: dict) -> str | None:
     """Why a run cannot serve as a baseline run: a source changed, a host blocked, or the instrumentation at fault."""
     # 'record' hands the value on unchanged and records it (the base configuration's sinks, storage and crypto, are
     # recorded in every condition, execute.configuration): no change of the source
-    changed = [f"{s}={v}" for s, v in settings(report).items() if v not in ("pass", "record")]
+    # the device's setup (inputs.SETUP: Loki's telephony hook, the study's SIM) is the same in every run and no change
+    # (23 Nov 2026: the re-run's experiments had no baseline run at all, as Skuld 0.12.2 left it out of describe only)
+    from skuld.inputs import SETUP
+
+    changed = [f"{s}={v}" for s, v in settings(report).items() if v not in ("pass", "record") and s not in SETUP]
     if changed:
         return f"sources changed: {', '.join(changed)}"
     if blocked_hosts(report):
