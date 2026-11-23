@@ -226,8 +226,12 @@ def test_a_sample_whose_answer_was_rejected_when_asked_again_is_missing_by_desig
 
     asked("q", Rejects("runaway", heals=True))
     assert _samples(tmp_path)[1] == []
+    before = (folder / "record.json").read_text()
     assert asked("q2", Rejects("runaway")).text is None
-    assert not (folder / "answer.json").exists() and json.loads((folder / "record.json").read_text())["answer"]
+    # since 0.12.18 the record goes with its answer; workspaces asked before keep it, as restored here
+    assert not (folder / "answer.json").exists() and not (folder / "record.json").exists()
+    (folder / "record.json").write_text(before)
+    assert json.loads((folder / "record.json").read_text())["answer"]
     assert _samples(tmp_path)[1] == []
     (folder / "record.rejected.json").unlink()
     assert _samples(tmp_path)[1] == ["sample assessment/minimisation/P-x/s3/a2: its answer is missing"]
@@ -236,3 +240,64 @@ def test_a_sample_whose_answer_was_rejected_when_asked_again_is_missing_by_desig
     assert asked("q3", CutOff(None), given=[{"id": "Q1", "kind": "purpose", "text": "changed"}]).text is None
     assert (folder / "record.length.json").is_file()
     assert _samples(tmp_path)[1] == []
+
+
+class RejectsFirst(Provider):
+    """A runaway answer while the prompt carries no refusal; answers once told the previous answer was refused."""
+
+    api = "fake"
+
+    async def complete(self, model, prompt, response_format="text", params=None, model_options=None, on_text=None):
+        if "refused" in str(prompt):
+            return LLMResponse(text='{"a": 1}', finish_reason="stop")
+        return LLMResponse(text='{"a": ' + " " * 50, finish_reason="runaway")
+
+
+def test_a_rejected_attempt_read_offline_leads_on_to_the_kept_next_one(tmp_path):
+    """24 Nov 2026: read offline (kept(), judge's and assess's reading), an attempt whose answer was rejected (a runaway,
+    record.rejected.json) ended the asking, so the kept answer of the next attempt was never read: 65 answered samples
+    of the re-run were left out of E. A rejected attempt is kept aside as a cut-off one is, and leads on likewise."""
+
+    def run(offline=False):
+        return ask.ask_with_feedback(
+            lambda n: tmp_path / "s1" if n == 1 else tmp_path / "s1" / f"a{n}",
+            "prompt",
+            {"type": "object"},
+            lambda asked: {"question": "q", "prompt": ask.sha256(asked)},
+            ("question", "prompt"),
+            lambda text: [],
+            attempts=2,
+            seed=1,
+            model="m",
+            api="fake",
+            options=Options(max_tokens=8192),
+            offline=offline,
+            provider=RejectsFirst(),
+        )
+
+    sample, refused, attempts = run()
+    assert sample.text == '{"a": 1}' and refused == [] and attempts == 2
+    assert (tmp_path / "s1" / "record.rejected.json").is_file()
+    sample, refused, attempts = run(offline=True)
+    assert sample.text == '{"a": 1}' and refused == [] and attempts == 2
+
+
+def test_a_rejected_or_cut_off_answer_removes_the_record_of_the_answer_before(tmp_path):
+    """24 Nov 2026: asked again under another identity (the re-run's qwen at think medium) and rejected, a sample kept
+    the record.json of its earlier answer (think xhigh) beside record.rejected.json, though that answer was removed; a
+    count of records by thinking level took 7 of them for answers still in use. The record goes with its answer."""
+    folder = tmp_path / "s1"
+    assert _ask(tmp_path, Rejects("runaway", heals=True)).text == '{"a": 1}'
+    ask.ask(
+        folder, "prompt", {"type": "object"}, {"question": "q2"}, ("question",),
+        model="m", api="fake", options=Options(max_tokens=8192), provider=Rejects("runaway"),
+    )
+    assert not (folder / "answer.json").exists() and not (folder / "record.json").exists()
+    assert (folder / "record.rejected.json").is_file()
+    assert _ask(tmp_path, Rejects("runaway", heals=True)).text == '{"a": 1}'
+    ask.ask(
+        folder, "prompt", {"type": "object"}, {"question": "q3"}, ("question",),
+        model="m", api="fake", options=Options(max_tokens=8192), provider=CutOff(None),
+    )
+    assert not (folder / "answer.json").exists() and not (folder / "record.json").exists()
+    assert (folder / "record.length.json").is_file()

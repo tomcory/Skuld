@@ -220,6 +220,7 @@ def ask(
             json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
         )
         (folder / "answer.json").unlink(missing_ok=True)
+        (folder / "record.json").unlink(missing_ok=True)  # the record of the answer before goes with it
         return Sample(folder, record, None, False)
     except Exception as e:
         _count(failed=1, retries=asking.stats.retries)
@@ -260,6 +261,7 @@ def ask(
             json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
         )
         (folder / "answer.json").unlink(missing_ok=True)
+        (folder / "record.json").unlink(missing_ok=True)  # the record of the answer before goes with it
         return Sample(folder, record, None, False)
     (folder / "answer.json").write_text(result.content, encoding="utf-8", newline="\n")
     (folder / "record.json").write_text(
@@ -349,15 +351,22 @@ def ask_with_feedback(
     return sample, refused, attempts
 
 
+#: The records an attempt without an answer is kept aside under: cut off at the token limit, or rejected by the client
+KEPT_ASIDE = ("record.length.json", "record.rejected.json")
+
+
 def _cut_off(sample: Sample, folder: Path, offline: bool) -> str | None:
-    """Why an attempt has no answer if the token limit cut it off: asked now, from its record; offline, from the
-    record kept aside beside it (record.length.json)."""
+    """Why an attempt has no answer if it was cut off at the token limit or its answer rejected (refused, withheld,
+    runaway): asked now, from its record; offline, from the record kept aside beside it (KEPT_ASIDE). Before 0.12.18,
+    offline read only record.length.json, so a rejected attempt ended the asking and the kept answer of the next
+    attempt was never read (24 Nov 2026: 65 answered samples of the re-run left out of E)."""
     if not offline:
         return sample.record.get("refused")
-    kept_aside = folder / "record.length.json"
-    if not kept_aside.is_file():
-        return None
-    return json.loads(kept_aside.read_text(encoding="utf-8")).get("refused")
+    for name in KEPT_ASIDE:
+        kept_aside = folder / name
+        if kept_aside.is_file():
+            return json.loads(kept_aside.read_text(encoding="utf-8")).get("refused")
+    return None
 
 
 def _drop_later(folders: Callable[[int], Path], accepted: int, attempts: int) -> None:
