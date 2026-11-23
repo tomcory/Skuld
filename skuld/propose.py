@@ -833,6 +833,9 @@ def propose_model(
             summary["episodes"]["launch"] = {"cases": [{"case": "launch", "family": launch.key}], "title": "launch"}
 
     sampling = config.options("propose")
+    # the thinking level of the proposer (`propose.think` in the configuration or its profile; 23 Nov 2026: unset, a
+    # model thought at the server's default, for qwen3.8:27b xhigh, which the re-run's D-49 left for medium)
+    think = (config.load().get("propose") or {}).get("think")
     shows_needs = int(templates.version(PROMPT)) >= NEEDS_SINCE
     for flow in exp.flows:
         key = f"e{flow.episode}"
@@ -877,6 +880,7 @@ def propose_model(
             options=sampling,
             offline=offline,
             provider=provider,
+            think=think,
         )
         if sample is not None and sample.text is None:
             refused, passing = problems(None, flow, catalogue, purposes, titles, shown_ids)

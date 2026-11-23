@@ -216,3 +216,21 @@ def test_select_writes_the_union_of_several_assessments_choices_into_chosen_yaml
     assert again == chosen
     with pytest.raises(select.SelectionError, match="no selection"):
         select.union(root, [tmp_path / "none"])
+
+
+
+def test_a_proposer_thinks_at_the_level_its_profile_gives_and_its_samples_record_it(tmp_path, monkeypatch):
+    """23 Nov 2026: propose passed no thinking level, so qwen3.8:27b proposed at the gateway's default (xhigh), which
+    the re-run had left for medium (D-49); `propose.think` in the configuration or its profile now sets it."""
+    from skuld import config
+
+    exp, root, catalogue = proposed(tmp_path)
+    propose.propose_model(exp, root, catalogue, "gemma4:31b", ["verdandi"], provider=FakeProvider(ANSWER))
+    record = json.loads((root / "proposals" / "gemma4-31b" / "e1" / "a1" / "record.json").read_text())
+    assert "think" not in record["options"] and record["model"]["think"] == "model default"
+    loaded = config.load()
+    monkeypatch.setattr(config, "load", lambda: {**loaded, "propose": {"think": "medium"}})
+    provider = FakeProvider(ANSWER)
+    propose.propose_model(exp, root, catalogue, "qwen3.8:27b", ["verdandi"], provider=provider)
+    record = json.loads((root / "proposals" / "qwen3.8-27b" / "e1" / "a1" / "record.json").read_text())
+    assert provider.calls and record["options"]["think"] == "medium" and record["model"]["think"] == "medium"

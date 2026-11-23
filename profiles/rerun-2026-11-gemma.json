@@ -1,5 +1,5 @@
 {
-  "description": "The re-run of the Expectation paper's evaluation (rerun-plan 2026-11), gemma4:31b: vendor sampling (temperature 1.0, top_p 0.95, top_k 64), max_tokens 32,768, thinking high (D-21: on the gateway a cap of 16,384 thinking tokens), traffic and top-up in stage 1, known data only. The prompts are pinned to the versions current at the re-run's start (Skuld 0.12.4: stage 1 and minimisation with Loki 0.5.0's screen descriptions by the family's own model, never cited, and stage 1 with up to 8 screenshots; D-37), dpv-purposes 2.3.1, the re-run's own purpose map for dpv-purposes 2.3.1 (`purpose-maps/rerun-2026-11.json`, built after the run by `skuld purposes map` over the 42 workspaces, rerun-plan §5 step 7; the study's map was built on an older dpv-purposes). client.limits is per process and as wide as the gateway's rule (100 gemma4:31b, 272 qwen3.8:27b: 300 less Loki's 28 on catalyst); Ratatoskr 0.42.0's shared limit (RATATOSKR_SHARED_LIMITS in the machine file) keeps every process of the machine together within it (D-22, D-36).",
+  "description": "The re-run of the Expectation paper's evaluation (rerun-plan 2026-11), gemma4:31b: vendor sampling (temperature 1.0, top_p 0.95, top_k 64), max_tokens 32,768, thinking high (D-21: on the gateway a cap of 16,384 thinking tokens), traffic and top-up in stage 1, known data only. The prompts are pinned to the versions current at the re-run's start (Skuld 0.12.4: stage 1 and minimisation with Loki 0.5.0's screen descriptions by the family's own model, never cited, and stage 1 with up to 8 screenshots; D-37), dpv-purposes 2.3.1, the re-run's own purpose map for dpv-purposes 2.3.1 (`purpose-maps/rerun-2026-11.json`, built after the run by `skuld purposes map` over the 42 workspaces, rerun-plan §5 step 7; the study's map was built on an older dpv-purposes). client.limits is per process and as wide as the gateway's rule (100 gemma4:31b, 272 qwen3.8:27b: 300 less Loki's 28 on catalyst); Ratatoskr 0.42.0's shared limit (RATATOSKR_SHARED_LIMITS in the machine file) keeps every process of the machine together within it (D-22, D-36). Experiments (step 8, 23 Nov 2026): the model proposes under its own family's profile, in either family's workspace, with its sampling and thinking high (Skuld 0.12.12; before, propose sent no thinking level).",
   "model": "gemma4:31b",
   "sampling": {
     "default": {
@@ -12,6 +12,11 @@
         "top_k": 64
       },
       "judge": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64
+      },
+      "propose": {
         "temperature": 1.0,
         "top_p": 0.95,
         "top_k": 64
@@ -37,6 +42,9 @@
   "assessment": {
     "think": "high",
     "known_data_only": true
+  },
+  "propose": {
+    "think": "high"
   },
   "purpose_map": {
     "path": "purpose-maps/rerun-2026-11.json",
