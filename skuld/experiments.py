@@ -380,7 +380,9 @@ class _Report:
             decided = {}
             judged = {s.id: s for s in [*baseline, *(r for runs in under.values() for r in runs), *controls]}
             for s in judged.values():
-                d = s.decisions[(case.id, purpose.id)] = oracles.decide(oracle, s.run, path)
+                d = s.decisions[(case.id, purpose.id)] = oracles.decide(
+                    oracle, s.run, path, oracles.screen_keys(ws.recording)
+                )
                 decided[s.id] = d
                 self._decision_evidence(case, purpose.id, oracle, s, d)
             valid_baseline = {s.id: decided[s.id] for s in baseline if decided[s.id].decision != "invalid"}

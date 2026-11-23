@@ -268,3 +268,39 @@ def test_a_qualifying_goal_run_that_missed_its_goal_leaves_the_alternatives_in_t
     case = report["cases"][0]
     assert not any(a.get("problems") for a in case["scope"]["search_space"])
     assert {u["reason"] for u in case["untested"] if u["purpose"] == "P1"} == {"requirements_not_reached"}
+
+
+def test_a_screen_reached_by_a_goal_run_with_other_texts_meets_the_oracle_by_its_content_key(tmp_path):
+    """23 Nov 2026 (the re-run's step 8): Weather's notification settings were reached with the system's banner and
+    other preferences chosen, so the exact key (a digest over the texts) differed from the recording's and the case did
+    not qualify, though Loki's content key (the screen's structure) was the recording's. Since oracles 0.5.0
+    `screen_reached` is met by the recorded screen's content key too, read from the workspace's recording."""
+    root = deep(ws.build(tmp_path / "ws", freeze=False))
+    folder = goal_run(root / "runs" / "run-01")
+    lines = (folder / "events.jsonl").read_text().splitlines()
+    shown = [json.loads(x) for x in lines]
+    for e in shown:
+        if e.get("type") == "screen" and e.get("exact_key") == "done":
+            e["exact_key"], e["content_key"] = "done-with-a-banner", "structure-of-done"
+    (folder / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in shown))
+    recording = tmp_path / "recording"
+    recording.mkdir()
+    recorded = [
+        {"type": "screen", "screen_id": "s2", "exact_key": "done", "content_key": "structure-of-done"},
+        {"type": "screen", "screen_id": "s3", "exact_key": "elsewhere", "content_key": "structure-elsewhere"},
+    ]
+    (recording / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in recorded))
+    run = load_run(folder)
+    oracle = replace(inputs.load(root).oracles["O@1"], success=({"screen_reached": {"exact_key": "done"}},))
+    assert oracles.decide(oracle, run, (0, 1)).decision == "unmet"  # by the exact key alone
+    keys = oracles.screen_keys(recording)
+    assert keys == {"done": "structure-of-done", "elsewhere": "structure-elsewhere"}
+    assert oracles.decide(oracle, run, (0, 1), keys).decision == "met"
+    other = replace(oracle, success=({"screen_reached": {"exact_key": "elsewhere"}},))
+    assert oracles.decide(other, run, (0, 1), keys).decision == "unmet"  # another screen's structure is not met
+    assert oracles.screen_keys(tmp_path / "none") == {}
+    # the workspace names its recording (workspace.yaml: runs, recording)
+    settings = yaml.safe_load((root / "workspace.yaml").read_text())
+    settings |= {"runs": "../recording-parent", "recording": "rec"}
+    (root / "workspace.yaml").write_text(yaml.safe_dump(settings))
+    assert inputs.load(root).recording == root / "../recording-parent" / "rec"

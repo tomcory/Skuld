@@ -489,7 +489,7 @@ def launch_invalid(workspace: Workspace, run_dir: Path, entry: dict) -> str | No
     """Why a run's launch is invalid (an oracle of a launch case, one without a path, decides `invalid`: the launcher
     first, a hold at start), or None; also None for a run that cannot be read."""
     from skuld.experiments import RunState, runs_of
-    from skuld.oracles import decide
+    from skuld.oracles import decide, screen_keys
     from skuld.runs import RunRefused, load
 
     try:
@@ -503,7 +503,7 @@ def launch_invalid(workspace: Workspace, run_dir: Path, entry: dict) -> str | No
         for purpose in case.purposes:
             if purpose.oracle is None:
                 continue
-            decision = decide(workspace.oracles[purpose.oracle], run)
+            decision = decide(workspace.oracles[purpose.oracle], run, screen_keys=screen_keys(workspace.recording))
             if decision.decision == "invalid":
                 return f"{case.id}: {purpose.oracle} decides invalid ({'; '.join(decision.reasons)})"
     return None
@@ -598,7 +598,7 @@ def qualification(workspace: Workspace, run_dir: Path, with_covered: bool = Fals
     which is a run of no case it could show).
     """
     from skuld.experiments import RunState, departed, runs_of, unreached
-    from skuld.oracles import decide
+    from skuld.oracles import decide, screen_keys
     from skuld.runs import RunRefused, load
 
     try:
@@ -620,7 +620,12 @@ def qualification(workspace: Workspace, run_dir: Path, with_covered: bool = Fals
             continue
         for purpose in case.purposes:
             if purpose.oracle is not None:
-                decision = decide(workspace.oracles[purpose.oracle], run, (case.feature.start, case.feature.actions))
+                decision = decide(
+                    workspace.oracles[purpose.oracle],
+                    run,
+                    (case.feature.start, case.feature.actions),
+                    screen_keys(workspace.recording),
+                )
                 if decision.decision != "met":
                     problems.setdefault(case.id, []).append(
                         f"{purpose.oracle} decides {decision.decision} ({'; '.join(decision.reasons)})"

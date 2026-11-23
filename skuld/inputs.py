@@ -205,6 +205,8 @@ class Workspace:
     #: a baseline and its replays are analysed alike
     verdandi_options: list[str] = field(default_factory=list)
     runs_base: Path | None = None  # what a relative run folder in runs.jsonl is relative to; the root if None
+    #: the recording's folder (workspace.yaml's `runs` and `recording`), whose screens `screen_reached` reads (0.12.16)
+    recording: Path | None = None
 
     def file(self, path: Path) -> str:
         return path.relative_to(self.root).as_posix()
@@ -243,6 +245,9 @@ def load(root: str | Path) -> Workspace:
         verdandi=list(settings.get("verdandi") or ["verdandi"]),
         verdandi_options=[str(o) for o in settings.get("verdandi_options") or []],
         runs_base=_runs_base(root, settings),
+        recording=(root / settings["runs"] / settings["recording"])
+        if settings.get("runs") and settings.get("recording")
+        else None,
     )
 
 

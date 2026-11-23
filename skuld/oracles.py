@@ -32,6 +32,13 @@ recording: its window is its goal episode (`runs.Window`), from the episode's st
 records as the episode closes. `decide` reads the oracle's window against the case's path there: a
 bound at or before the path's start is the episode's start, a bound at or after the path's end is the statement,
 and one between them widens to the episode (21 Nov 2026).
+
+`screen_reached` names the recorded screen by its exact key, a digest over every text on it. A goal-directed run
+reaches the feature by its own way, with live content, the system's banners and its own choices, so the same screen
+rarely recurs with the same texts (23 Nov 2026, the re-run: Weather's notification settings reached with a banner and
+other preferences chosen, rejected). Since 0.5.0 it is also met by a screen with the recorded screen's content key
+(Loki's key of the screen's structure, its texts aside), read from the workspace's recording (`screen_keys`); the
+outcome's texts stay with `text_shown`.
 """
 
 import builtins
@@ -43,9 +50,10 @@ from skuld.common import under
 from skuld.inputs import Oracle
 from skuld.runs import Run
 
-#: 0.4.0: launcher_first, and a goal-directed run's window is its goal episode; 0.3.0: first_screen_ready; 0.2.1:
-#: first_screen skips the system's screens (permission dialog, starting window)
-VERSION = "0.4.0"
+#: 0.5.0: screen_reached is also met by the recorded screen's content key; 0.4.0: launcher_first, and a goal-directed
+#: run's window is its goal episode; 0.3.0: first_screen_ready; 0.2.1: first_screen skips the system's screens
+#: (permission dialog, starting window)
+VERSION = "0.5.0"
 
 
 @dataclass(frozen=True)
@@ -152,13 +160,51 @@ def _within(after: int, after_action: int, until_action: int | None) -> bool:
     return after >= after_action and (until_action is None or after <= until_action)
 
 
-def _screen_reached(run: Run, exact_key: str, after_action: int = 0, until_action: int | None = None) -> bool:
-    """Whether a screen with the exact key was shown after the given action and, if given, up to the next one after
-    `until_action`."""
+def _screen_reached(
+    run: Run, exact_key: str, after_action: int = 0, until_action: int | None = None, content_key: str | None = None
+) -> bool:
+    """Whether a screen with the exact key, or with the recorded screen's content key (given by `decide` from the
+    recording), was shown after the given action and, if given, up to the next one after `until_action`."""
     return builtins.any(
-        s.get("exact_key") == exact_key and _within(after, after_action, until_action)
+        (s.get("exact_key") == exact_key or (content_key is not None and s.get("content_key") == content_key))
+        and _within(after, after_action, until_action)
         for after, s in after_actions(run)
     )
+
+
+_KEYS: dict = {}
+
+
+def screen_keys(recording) -> dict[str, str]:
+    """The content key of each exact key among a recording's screens (its events.jsonl); empty where it cannot be
+    read. Kept per folder."""
+    if recording is None:
+        return {}
+    folder = str(recording)
+    if folder not in _KEYS:
+        keys = {}
+        try:
+            with open(f"{folder}/events.jsonl", encoding="utf-8") as f:
+                for line in f:
+                    if '"screen"' not in line:
+                        continue
+                    e = json.loads(line)
+                    if e.get("type") == "screen" and e.get("exact_key") and e.get("content_key"):
+                        keys.setdefault(e["exact_key"], e["content_key"])
+        except OSError:
+            pass
+        _KEYS[folder] = keys
+    return _KEYS[folder]
+
+
+def _with_content_key(spec, keys: dict[str, str] | None):
+    if not keys or not isinstance(spec, dict) or len(spec) != 1:
+        return spec
+    (name, arguments), *_ = spec.items()
+    if name != "screen_reached" or not isinstance(arguments, dict) or "content_key" in arguments:
+        return spec
+    content = keys.get(arguments.get("exact_key"))
+    return {name: {**arguments, "content_key": content}} if content else spec
 
 
 def _text_shown(  # noqa: A002 (`any` is the oracle file's word)
@@ -228,17 +274,24 @@ def _call(table: dict, spec, run: Run):
     return table[name](run, arguments)
 
 
-def decide(oracle: Oracle, run: Run, path: tuple[int, int] | None = None) -> Decision:
+def decide(
+    oracle: Oracle, run: Run, path: tuple[int, int] | None = None, screen_keys: dict[str, str] | None = None
+) -> Decision:
     """
     The oracle's decision on a run, with its measurements. `path`: the case's path in actions of the recording (its
-    start and end), by which a goal-directed run's window is read (`rebased`).
+    start and end), by which a goal-directed run's window is read (`rebased`). `screen_keys`: the recording's content
+    key per exact key (`screen_keys`), by which `screen_reached` is met by the recorded screen's structure too.
     """
     window = getattr(run, "window", None)
     measurements = {m.name: _call(METRICS, m.metric, run) for m in oracle.measurements}
-    invalid = [str(spec) for spec in oracle.invalid if _call(PREDICATES, rebased(spec, window, path), run)]
+
+    def holds(spec) -> bool:
+        return _call(PREDICATES, _with_content_key(rebased(spec, window, path), screen_keys), run)
+
+    invalid = [str(spec) for spec in oracle.invalid if holds(spec)]
     if invalid:
         return Decision("invalid", measurements, tuple(invalid))
-    failed = [str(spec) for spec in oracle.success if not _call(PREDICATES, rebased(spec, window, path), run)]
+    failed = [str(spec) for spec in oracle.success if not holds(spec)]
     return Decision("unmet" if failed else "met", measurements, tuple(failed))
 
 
