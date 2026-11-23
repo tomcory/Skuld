@@ -206,9 +206,10 @@ def test_a_sample_whose_answer_was_rejected_when_asked_again_is_missing_by_desig
     digest = hashlib.sha256(json.dumps(parts, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     folder = tmp_path / "assessment" / "minimisation" / "P-x" / "s3" / "a2"
 
-    def asked(question, provider):
-        record = {"question": question, "context": {"sha256": digest}}
-        files = {"context.json": json.dumps({"parts": parts})}
+    def asked(question, provider, given=parts):
+        hashed = hashlib.sha256(json.dumps(given, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        record = {"question": question, "context": {"sha256": hashed}}
+        files = {"context.json": json.dumps({"parts": given})}
         options = Options(max_tokens=8192)
         return ask.ask(
             folder,
@@ -230,3 +231,8 @@ def test_a_sample_whose_answer_was_rejected_when_asked_again_is_missing_by_desig
     assert _samples(tmp_path)[1] == []
     (folder / "record.rejected.json").unlink()
     assert _samples(tmp_path)[1] == ["sample assessment/minimisation/P-x/s3/a2: its answer is missing"]
+    # asked again with another context and kept aside: the new context.json beside the earlier record.json is no
+    # context that fails to verify (the re-run's gemma OneNote, assessment/minimisation/P-6bebbaf545/s1, 23 Nov 2026)
+    assert asked("q3", CutOff(None), given=[{"id": "Q1", "kind": "purpose", "text": "changed"}]).text is None
+    assert (folder / "record.length.json").is_file()
+    assert _samples(tmp_path)[1] == []

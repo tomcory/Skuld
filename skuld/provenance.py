@@ -99,6 +99,10 @@ def _samples(root: Path) -> tuple[dict[str, list[dict]], list[str]]:
         if not (folder / "context.json").is_file():
             problems.append(f"sample {rel}: its context is missing")
             continue
+        if _kept_aside(folder, meta):
+            # 23 Nov 2026: asked again and kept aside (rejected or cut off), so its context.json is the new asking's
+            # while record.json still names the earlier one; its answer is missing by design, the sample is not kept
+            continue
         parts = json.loads((folder / "context.json").read_text(encoding="utf-8"))["parts"]
         if hashlib.sha256(json.dumps(parts, sort_keys=True, ensure_ascii=False).encode()).hexdigest() != (
             meta.get("context") or {}
