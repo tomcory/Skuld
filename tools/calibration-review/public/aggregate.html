@@ -88,6 +88,24 @@
         .reasons { padding-left: 13rem !important; margin: .1rem 0 .4rem; }
         .document { max-height: 82vh; }
         .passage { margin-bottom: .75rem; line-height: 1.55; }
+        /* an experiment's card (0.12.33): what the experiment did, its runs, where its check was met */
+        .xp { margin-top: .45rem; }
+        .xp-facts { display: grid; grid-template-columns: 7.5rem 1fr; gap: .25rem .6rem; margin: 0; }
+        .xp-facts dt { font-weight: 600; color: #6c757d; font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; padding-top: .1rem; }
+        .xp-facts dd { margin: 0; }
+        .xp-facts ul { margin: .15rem 0 0; padding-left: 1.1rem; }
+        .xp-target { display: flex; gap: .6rem; align-items: flex-start; margin-top: .35rem; }
+        .xp-target .shot { margin-top: 0; max-height: 12rem; }
+        .xp-texts { font-size: .74rem; color: #495057; max-height: 12rem; overflow-y: auto; }
+        .xp-sides { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .6rem; }
+        .xp-side { border: 1px solid #e9ecef; border-radius: .4rem; padding: .4rem .5rem; background: #fcfcfd; }
+        .xp-side-head { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #495057; font-weight: 700; }
+        .xp-run { display: inline-block; min-width: 1.4rem; text-align: center; border-radius: .25rem; font-size: .74rem; padding: 0 .2rem; margin: .15rem .15rem 0 0; border: 1px solid; }
+        .xp-run.met { color: #2b8a3e; border-color: #b2f2bb; background: #ebfbee; }
+        .xp-run.unmet { color: #c92a2a; border-color: #ffc9c9; background: #fff5f5; }
+        .xp-run.other { color: #868e96; border-color: #dee2e6; background: #f8f9fa; }
+        .xp-side .shot { max-height: 14rem; }
+        .xp-outcome { margin-top: .5rem; font-weight: 600; }
     </style>
 </head>
 <body>
@@ -120,11 +138,14 @@
                 <span style="color:#e8590c">●</span> an experiment, <span style="color:#868e96">●</span> a claim. A text several
                 members cite is shown once, with how many cite it; repeated traffic findings are folded.</li>
             <li>A screen may come with a screenshot and a <b>model's description</b>: for orientation, not evidence.</li>
-            <li>An <b>experiment</b> is a run of the app with one thing changed: a recipient blocked, an identifier replaced
-                by a fresh one, or the location made coarser, at the app's launch or in a feature (an episode). Each side
-                ran several times, and a check of the feature's purpose decided the outcome: <i>still worked</i> means the
-                feature worked with the change as without it, so the less invasive alternative is shown to serve that
-                purpose.</li>
+            <li>An <b>experiment</b> replays the app's launch or one of its features (as the exploration recorded it) with
+                one thing changed: a recipient blocked, an identifier replaced, or the location made coarser. Its card
+                shows the feature and the purpose tested, the change, and the <b>success check</b> (a screen to be
+                reached, shown with its screenshot; a text to appear; or the first screen ready after launch). Each side
+                ran several times: ✓ the check was met, ✗ it was not (hover for the run's traffic). <i>Still worked</i>
+                means the check was met with the change as without it. Judge whether the check fits the purpose and
+                whether the runs support the conclusion; few runs, or a check that only shows the app started, support
+                less. The screenshots show where a run met the check, for orientation.</li>
         </ul>
 
         <h6>The criteria</h6>
@@ -383,7 +404,47 @@
                                     <div :class="e.screenshot ? 'text-col' : ''">
                                         <div class="text-secondary"><b>{{ e.kind === 'run' ? 'an experiment' : (e.source || e.kind) }}</b><span v-if="item.members.length > 1"> · cited by {{ e.members.length }} of {{ item.members.length }} members</span></div>
                                         <traffic-list v-if="e.source === 'traffic as captured'" class="mt-1" :lines="[e.text]"></traffic-list>
-                                        <div v-else-if="e.kind === 'run'" class="text-break">{{ experiment(e) }}</div>
+                                        <div v-else-if="e.kind === 'run'" class="text-break">
+                                            <div>{{ experiment(e) }}</div>
+                                            <div v-for="x in (e.experiment ? [e.experiment] : [])" class="xp">
+                                                <dl class="xp-facts">
+                                                    <dt>Feature</dt>
+                                                    <dd><template v-if="x.feature.launch">The app's launch (a cold start, fresh data)</template><template v-else><b>{{ x.feature.name }}</b></template><span v-if="x.feature.outcome" class="text-secondary">{{ ' ' }}— intended outcome: {{ x.feature.outcome }}</span></dd>
+                                                    <dt>Purpose tested</dt>
+                                                    <dd>{{ x.purpose.text }}<span v-if="x.purpose.outcome" class="text-secondary">{{ ' ' }}(so that: {{ x.purpose.outcome }})</span>
+                                                        <ul v-if="x.purpose.requirements.length"><li v-for="r in x.purpose.requirements">{{ r }}</li></ul></dd>
+                                                    <dt>Changed</dt>
+                                                    <dd>{{ x.change.text }}</dd>
+                                                    <dt>Success check</dt>
+                                                    <dd><div v-for="c in x.checks">{{ c.text }}
+                                                        <div v-if="c.screen" class="xp-target">
+                                                            <img v-if="c.screen.screenshot" :src="'/' + c.screen.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen the check waits for" @click.stop="zoom = '/' + c.screen.screenshot">
+                                                            <div class="xp-texts"><div class="text-secondary">its texts:</div><div v-for="t in c.screen.texts">{{ t }}</div></div>
+                                                        </div></div></dd>
+                                                </dl>
+                                                <div class="xp-sides">
+                                                    <div v-for="[side, label] in [['baseline', 'Without the change'], ['alternative', 'With the change']]" class="xp-side">
+                                                        <div class="xp-side-head">{{ label }}</div>
+                                                        <div v-if="!x[side].runs.length" class="text-secondary">no run</div>
+                                                        <template v-else>
+                                                            <div>{{ x[side].runs.length }} {{ x[side].runs.length === 1 ? 'run' : 'runs' }}, the check
+                                                                met in {{ x[side].runs.filter(r => r.decision === 'met').length }}:</div>
+                                                            <span v-for="(r, i) in x[side].runs" class="xp-run" :class="runClass(r)" :title="runTitle(r, i)">{{ r.decision === 'met' ? '✓' : r.decision === 'unmet' ? '✗' : '–' }}</span>
+                                                            <div class="text-secondary mt-1">{{ runCosts(x[side].runs) }}</div>
+                                                            <div v-if="side === 'alternative' && x[side].runs.some(r => r.verified)" class="text-secondary">the change was confirmed in
+                                                                {{ x[side].runs.filter(r => r.verified === 'verified').length }} of {{ x[side].runs.length }} runs</div>
+                                                            <template v-if="x[side].met_at">
+                                                                <div class="text-secondary mt-1">where the first run that met it met it:</div>
+                                                                <img v-if="x[side].met_at.screenshot" :src="'/' + x[side].met_at.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen the check was met at" @click.stop="zoom = '/' + x[side].met_at.screenshot">
+                                                                <div v-else class="xp-texts"><div v-for="t in x[side].met_at.texts">{{ t }}</div></div>
+                                                            </template>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                                <div class="xp-outcome">Outcome: {{ outcomeText(x.outcome) }}<span v-if="x.departed" class="text-secondary fw-normal">{{ ' ' }}· in {{ x.departed }}
+                                                    {{ x.departed === 1 ? 'run' : 'runs' }} the replay did not follow the recorded steps exactly</span></div>
+                                            </div>
+                                        </div>
                                         <div v-else-if="kindOf(e) === 'document'" class="text-break doc-link" role="button" title="find it in the document (right)" @click="query = (e.text || '').slice(0, 60)" v-html="escapeHtml(e.text)"></div>
                                         <div v-else class="text-break" v-html="escapeHtml(e.text)"></div>
                                         <div v-if="e.description" class="described"><div class="described-label"><i class="bi bi-chat-square-text"></i> A model's description of the screen, for orientation; not evidence:</div>{{ e.description }}</div>
@@ -612,7 +673,7 @@ const app = createApp({
             const [, kase, change] = m;
             const where = kase === 'launch' ? "at the app's launch" : `in a feature (episode ${kase.replace(/^e/, '')})`;
             const a = /^R-(.+)$/.exec(change), d = /^D-(.+)$/.exec(change), g = /^G-round(\d+)$/.exec(change);
-            const what = a ? `every request to ${a[1]} blocked` : d ? `the ${d[1].replace(/_/g, ' ')} replaced by a fresh one`
+            const what = a ? `every request to ${a[1]} blocked` : d ? `the ${d[1].replace(/_/g, ' ')} replaced by a placeholder`
                 : g ? `the location rounded to ${g[1]} decimal${g[1] === '1' ? '' : 's'}` : change;
             return `${what}, ${where} (tested: ${alt})`;
         },
@@ -623,10 +684,24 @@ const app = createApp({
             const [, kase, alt, outcome] = m;
             const where = kase === 'launch' ? "at the app's launch" : `in a feature (episode ${kase.replace(/^e/, '')})`;
             const a = /^R-(.+)$/.exec(alt), d = /^D-(.+)$/.exec(alt), g = /^G-round(\d+)$/.exec(alt);
-            const change = a ? `every request to ${a[1]} blocked` : d ? `the ${d[1].replace(/_/g, ' ')} replaced by a fresh one`
+            const change = a ? `every request to ${a[1]} blocked` : d ? `the ${d[1].replace(/_/g, ' ')} replaced by a placeholder`
                 : g ? `the location rounded to ${g[1]} decimal${g[1] === '1' ? '' : 's'}` : alt;
             const result = {preserves: 'the feature still worked', breaks: 'the feature failed', undecided: 'undecided'}[outcome] || outcome;
             return `With ${change}, ${where}: ${result}.`;
+        },
+        outcomeText: o => ({preserves: 'the feature still worked with the change', breaks: 'the feature failed with the change', undecided: 'undecided'})[o] || o,
+        runClass: r => r.decision === 'met' ? 'met' : r.decision === 'unmet' ? 'unmet' : 'other',
+        runTitle(r, i) {
+            const d = {met: 'check met', unmet: 'check not met', invalid: 'run not counted (invalid)'}[r.decision] || (r.decision || 'no decision');
+            return `run ${i + 1}: ${d}` + (r.messages != null ? ` · ${r.messages} messages, ${r.connections} connections` : '')
+                + (r.blocked ? `, ${r.blocked} blocked` : '');
+        },
+        // a side's messages per run, as a range
+        runCosts(runs) {
+            const m = runs.map(r => r.messages).filter(v => v != null);
+            if (!m.length) return '';
+            const lo = Math.min(...m), hi = Math.max(...m);
+            return `messages per run: ${lo === hi ? lo : lo + '–' + hi}`;
         },
         // a criterion's answer; one that names no reasons drops those picked for another
         setCriterion(c, v) {

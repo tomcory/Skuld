@@ -79,7 +79,10 @@ from skuld.calibrate import (
 #: 3 since the criteria have `mostly` and an answer short of yes names its reasons (skuld.review_reasons.CONCERNS), the
 #: sample carries the criteria's values and the reasons (`questions`), and two reviewers' agreement on a criterion is also
 #: given as linearly weighted κ (author, 24 Nov 2026)
-VERSION = "3"
+#: 4 since an experiment among a unit's evidence is shown as what it did (skuld.review_experiments: the feature and
+#: purpose, the change, the success check, the runs per side, the screens the check was met at), and a unit's
+#: experiments are each shown, no longer merged into its first (author, 24 Nov 2026)
+VERSION = "4"
 KIND = "aggregate-review"
 MANIFEST, SAMPLE, KEY, REVIEWS, RECALL, SCORES, AGREEMENT = (
     "manifest.json",
@@ -175,9 +178,11 @@ def units(root: Path) -> tuple[list[dict], dict]:
     of its application (its practices and declared purposes). A screen among a unit's evidence comes with its
     description and screenshot as stage 1 was given them (review_screens), and `_screens` holds them, for D-45 and the
     copy."""
+    from skuld import review_experiments
     from skuld.review_screens import evidence_key, index, view
 
     screens = index(root)
+    experiments = review_experiments.index(root)
     report = read_json(root / REPORT)
     agg = read_json(root / AGGREGATE)
     frame = _frame(root)
@@ -251,8 +256,11 @@ def units(root: Path) -> tuple[list[dict], dict]:
             e = evidence.get(x)
             if not e or e.get("kind") == "claim" and not e.get("text"):
                 continue
-            # the same text under several items (cited in several samples) is shown once, citing all of them
-            key = (source(e), e.get("text"))
+            # the same text under several items (cited in several samples) is shown once, citing all of them; an
+            # experiment has no text: it is the same where it names the same comparison (before 0.12.33, every
+            # experiment of a unit was shown as its first)
+            compared = review_experiments.comparison_of(e)
+            key = (source(e), e.get("text"), compared or e.get("method") if e.get("kind") == "run" else None)
             if key in by_text:
                 by_text[key]["members"] = sorted(set(by_text[key]["members"]) | cited[x])
                 by_text[key]["items"].append(x)
@@ -268,6 +276,10 @@ def units(root: Path) -> tuple[list[dict], dict]:
                 "members": sorted(cited[x]),
                 **view(screens.get(evidence_key(e))),
             }
+            card = experiments.get(compared) if compared else None
+            if card is not None:
+                by_text[key]["experiment"] = review_experiments.view(card)
+                by_text[key]["_shots"] = review_experiments.shots(card)
             items.append(by_text[key])
         out.append(
             {
@@ -312,6 +324,8 @@ def units(root: Path) -> tuple[list[dict], dict]:
                 "_screens": [
                     screens[k] for k in {evidence_key(evidence[i]) for e in items for i in e["items"]} if k in screens
                 ],
+                # the screenshots of the experiments shown (copied, never counted for D-45: they are no stage-1 screens)
+                "_shots": [x for e in items for x in e.pop("_shots", [])],
             }
         )
     practices = [
@@ -516,7 +530,7 @@ def draw(
     anchored = {id(u) for u in rng.sample(supported, min(anchor, len(supported)))}
 
     folder.mkdir(parents=True)
-    screenshots = copy_screenshots(folder, [e for u in drawn for e in u["_screens"]])
+    screenshots = copy_screenshots(folder, [e for u in drawn for e in [*u["_screens"], *u.get("_shots", [])]])
     if steps:  # a supplementary sample shows only the applications it has units of
         apps = {app: x for app, x in apps.items() if any(u["application"] == app for u in drawn)}
     applications = {}
