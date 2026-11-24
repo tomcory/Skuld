@@ -360,7 +360,7 @@ def test_declared_purposes_carry_their_phrases_to_be_judged_blind_first(tmp_path
             assert not i.get("blind_first")  # judged blind phrase by phrase, not by an anchoring decision
         else:
             assert "blind_phrases" not in i
-    assert read(folder / review.MANIFEST)["method"]["version"] == "2"
+    assert read(folder / review.MANIFEST)["method"]["version"] == "3"
 
 
 def blind_reviews(items, blind, after):

@@ -149,7 +149,7 @@ def full_review(item, node="exact"):
     purposes = {p["key"]: {q: rx.PURPOSE_QUESTIONS[q][0] for q in rx.asked(p)} for p in item["purposes"]}
     purposes["p1"]["node"] = node
     deps = {
-        d["key"]: {"relationship": "yes", "steps": "partly"}
+        d["key"]: {"relationship": "yes", "steps": "partly", "steps_reasons": ["leap"]}
         for p in item["purposes"]
         for d in p["dependencies"]
         if d["asked"]

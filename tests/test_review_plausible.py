@@ -175,3 +175,104 @@ def test_the_tool_asks_for_the_text_of_other(drawn):
         proc.wait()
     page = (rex.TOOL / "public" / "expectation.html").read_text()
     assert "otherAsked" in page and "Your reason (required)" in page
+
+
+# -- mostly and reasons for every question with partly (24 Nov 2026) --------------------------------------------------
+
+
+def test_every_question_with_partly_offers_mostly_and_its_own_reasons():
+    from skuld import review
+    from skuld import review_reasons as rr
+
+    for q in ("plausible", "cites"):
+        assert "mostly" in rx.PURPOSE_QUESTIONS[q] and q in rx.REASONS
+    for q in ("relationship", "steps"):
+        assert "mostly" in rx.DEPENDENCY_QUESTIONS[q] and q in rx.REASONS
+    assert "mostly" in review.EVIDENCE and "mostly" in review.FOLLOWS
+    lists = {q: [o[0] for o in r["options"]] for q, r in {**rr.STAGE_ONE, **rr.CONCERNS}.items()}
+    assert all(ids[-1] == "other" and len(ids) >= 5 for ids in lists.values())
+    # tailored: no two questions share their list
+    assert len({tuple(ids) for ids in lists.values()}) == len(lists)
+
+
+def test_a_needs_mostly_names_its_reasons_and_they_are_counted(drawn):
+    folder, items = drawn
+    item = items[0]
+    r = full_review(item)
+    dep = next(iter(r["dependencies"]))
+    r["dependencies"][dep] = {"relationship": "mostly", "steps": "yes"}
+    assert f"{dep}: relationship reasons" in rx.problems(item, r)
+    r["dependencies"][dep]["relationship_reasons"] = ["overstated", "other"]
+    assert f"{dep}: relationship other reason" in rx.problems(item, r)
+    r["dependencies"][dep]["relationship_other"] = "the SDK works without it"
+    assert not rx.problems(item, r)
+    (folder / rx.REVIEWS).write_text(json.dumps({item["id"]: r}))
+    s = rx.score(folder)
+    rel = [e for e in s["estimates"] if e["question"] == "relationship" and e["role"] == "all"]
+    assert sum(e.get("reasons", {}).get("mostly:overstated", 0) for e in rel) == 1
+    assert any(o["text"] == "the SDK works without it" for e in rel for o in e.get("other_reasons", []))
+
+
+def test_a_concern_criterions_reasons_are_carried_scored_and_weighted(tmp_path, monkeypatch):
+    from skuld import review
+    from tests.test_review import FRAME, assessment
+    from tests.test_review import workspace as concern_workspace
+
+    monkeypatch.setattr(review, "_frame", lambda root: FRAME)
+    monkeypatch.setattr(review, "copy_documents", lambda root, target: [])
+    runs = [concern_workspace(tmp_path, "model-x", assessment()), concern_workspace(tmp_path, "model-y", assessment())]
+    folder = tmp_path / "c"
+    review.draw(folder, runs, per_stratum=5, seed=1)
+    sample = read(folder / review.SAMPLE)
+    assert sample["questions"]["criteria"]["follows"] == ["yes", "mostly", "partly", "no"]
+    assert [o["id"] for o in sample["questions"]["reasons"]["evidence"]["options"]][-1] == "other"
+    ids = [i["id"] for i in sample["items"]]
+    first = {
+        i: {"overall": "agree", "evidence": "mostly", "evidence_reasons": ["fragmented"], "follows": "yes"} for i in ids
+    }
+    second = {i: {"overall": "agree", "evidence": "yes", "follows": "yes"} for i in ids}
+    (folder / review.REVIEWS).write_text(json.dumps(first))
+    s = review.score(folder)
+    counted = [c for c in s["criteria"] if c.get("reasons")]
+    assert counted and all(c["reasons"] == {"evidence:mostly:fragmented": c["evidence"]["mostly"]} for c in counted)
+    (folder / review.REVIEWS).unlink()
+    a, b = tmp_path / "a.json", tmp_path / "b.json"
+    a.write_text(json.dumps(first))
+    b.write_text(json.dumps(second))
+    out = review.agree(folder, a, b)
+    assert "weighted_kappa" in out["overall"]["evidence"] and "weighted_kappa" in out["overall"]["follows"]
+    assert "weighted_kappa" not in out["overall"]["overall"]
+
+
+@pytest.mark.skipif(
+    not shutil.which("node") or not (rex.TOOL / "node_modules").is_dir(), reason="Node.js or the tool's modules missing"
+)
+def test_the_tool_checks_a_concern_criterions_reasons(tmp_path, monkeypatch):
+    from skuld import review
+    from tests.test_review import FRAME, assessment
+    from tests.test_review import workspace as concern_workspace
+    from tests.test_review_tool import call, serve
+
+    monkeypatch.setattr(review, "_frame", lambda root: FRAME)
+    monkeypatch.setattr(review, "copy_documents", lambda root, target: [])
+    runs = [concern_workspace(tmp_path, "model-x", assessment()), concern_workspace(tmp_path, "model-y", assessment())]
+    folder = tmp_path / "c"
+    review.draw(folder, runs, per_stratum=5, seed=1)
+    item = next(i for i in read(folder / review.SAMPLE)["items"] if not i.get("blind_phrases"))
+    proc, base = serve(folder)
+    try:
+        status, text = call(base, f"/reviews/{item['id']}", "PUT", {"evidence": "mostly", "evidence_reasons": ["nope"]})
+        assert status == 400 and "evidence_reasons" in text
+        status, _ = call(
+            base, f"/reviews/{item['id']}", "PUT", {"evidence": "mostly", "evidence_reasons": ["fragmented"]}
+        )
+        assert status == 200
+        status, _ = call(base, f"/reviews/{item['id']}", "PUT", {"evidence": "yes"})
+        assert "evidence_reasons" not in json.loads((folder / review.REVIEWS).read_text())[item["id"]]
+        status, shown = call(base, "/items/0")
+        assert shown["questions"]["criteria"]["evidence"][1] == "mostly"
+    finally:
+        proc.kill()
+        proc.wait()
+    page = (rex.TOOL / "public" / "aggregate.html").read_text()
+    assert "setCriterion" in page and "Why not a plain yes?" in page

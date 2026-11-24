@@ -58,7 +58,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import skuld
-from skuld import inputs
+from skuld import inputs, review_reasons
 from skuld.aggregate import REPORT as AGGREGATE
 from skuld.assess import REPORT
 from skuld.calibrate import (
@@ -76,7 +76,10 @@ from skuld.calibrate import (
 #: 2 since the drawn units are interleaved by stratum instead of shuffled (every prefix of the sample covers the strata
 #: in proportion), a unit of declared purposes carries its phrases to be judged blind first (`blind_phrases`) and is no
 #: longer drawn as an anchoring unit (20 Nov 2026)
-VERSION = "2"
+#: 3 since the criteria have `mostly` and an answer short of yes names its reasons (skuld.review_reasons.CONCERNS), the
+#: sample carries the criteria's values and the reasons (`questions`), and two reviewers' agreement on a criterion is also
+#: given as linearly weighted κ (author, 24 Nov 2026)
+VERSION = "3"
 KIND = "aggregate-review"
 MANIFEST, SAMPLE, KEY, REVIEWS, RECALL, SCORES, AGREEMENT = (
     "manifest.json",
@@ -90,8 +93,8 @@ MANIFEST, SAMPLE, KEY, REVIEWS, RECALL, SCORES, AGREEMENT = (
 DOCUMENTS = "documents"
 OVERALL = ("agree", "disagree", "partly", "unsure")  # partly: only derived from a unit's phrases
 DECIDED = ("agree", "disagree", "partly")  # the verdicts the rates count
-EVIDENCE = ("yes", "partly", "no", "none_cited")
-FOLLOWS = ("yes", "partly", "no")
+EVIDENCE = ("yes", "mostly", "partly", "no", "none_cited")
+FOLLOWS = ("yes", "mostly", "partly", "no")
 #: The phrases' answers that judge (the review tool also offers unsure, and fails, holds or unsure for a unit shown
 #: blind; tools/calibration-review/server.js checks them)
 JUDGED_PHRASE = ("specific", "not_specific")
@@ -544,7 +547,18 @@ def draw(
     from skuld.review_expectation import vocabularies  # the tool shows a unit's data types and purposes in them
 
     write_json(
-        folder / SAMPLE, {"kind": KIND, "items": items, "applications": applications, "vocabularies": vocabularies()}
+        folder / SAMPLE,
+        {
+            "kind": KIND,
+            "items": items,
+            "applications": applications,
+            "vocabularies": vocabularies(),
+            # the criteria's values and the reasons an answer short of yes names, as the tool shows and checks them
+            "questions": {
+                "criteria": {"evidence": list(EVIDENCE), "follows": list(FOLLOWS)},
+                "reasons": review_reasons.questions(review_reasons.CONCERNS),
+            },
+        },
     )
     write_json(folder / KEY, key)
     manifest = {
@@ -761,7 +775,9 @@ def score(folder: str | Path) -> dict:
     by_stratum = defaultdict(
         lambda: {"agree": 0, "disagree": 0, "partly": 0, "unsure": 0, "members_agree": 0.0, "members": 0.0}
     )
-    criteria = defaultdict(lambda: {"evidence": defaultdict(int), "follows": defaultdict(int)})
+    criteria = defaultdict(
+        lambda: {"evidence": defaultdict(int), "follows": defaultdict(int), "reasons": defaultdict(int), "other": []}
+    )
     totals = defaultdict(lambda: {"k": 0, "n": 0, "wk": 0.0, "wn": 0.0, "mk": 0.0, "mn": 0.0})
     for iid, entry in key.items():
         r = reviews.get(iid) or {}
@@ -771,7 +787,13 @@ def score(folder: str | Path) -> dict:
             by_stratum[sk][r["overall"]] += 1
         for c in ("evidence", "follows"):
             if r.get(c):
-                criteria[(s["run"], s["principle"], s["step"])][c][r[c]] += 1
+                t = criteria[(s["run"], s["principle"], s["step"])]
+                t[c][r[c]] += 1
+                # its reasons as <criterion>:<answer>:<reason>, the written ones listed
+                counts = defaultdict(int)
+                review_reasons.tally(c, r, review_reasons.CONCERNS, counts, t["other"], {"id": iid, "criterion": c})
+                for k, n in counts.items():
+                    t["reasons"][f"{c}:{k}"] += n
         m = _member_agreement(items[iid], r)
         if r.get("overall") in DECIDED:
             if m:
@@ -861,7 +883,14 @@ def score(folder: str | Path) -> dict:
             for (run, p, step, status), t in sorted(totals.items())
         ],
         "criteria": [
-            {"run": run, "principle": p, "step": step, **{c: dict(v[c]) for c in ("evidence", "follows")}}
+            {
+                "run": run,
+                "principle": p,
+                "step": step,
+                **{c: dict(v[c]) for c in ("evidence", "follows")},
+                **({"reasons": dict(sorted(v["reasons"].items()))} if v["reasons"] else {}),
+                **({"other_reasons": v["other"]} if v["other"] else {}),
+            }
             for (run, p, step), v in sorted(criteria.items())
         ],
         "anchoring": anchoring,
@@ -907,6 +936,11 @@ def agree(folder: str | Path, first: str | Path, second: str | Path) -> dict:
                 "agreed": sum(x == y for x, y in p),
                 "kappa": round(k, 3) if k is not None else None,
             }
+            if field in review_reasons.ORDERED:  # a criterion: also weighted over yes, mostly, partly, no
+                from skuld.review_expectation import weighted_kappa
+
+                w = weighted_kappa(p, review_reasons.ORDERED[field])
+                out[field]["weighted_kappa"] = round(w, 3) if w is not None else None
         binary = [x for x in pairs("overall", ids, OVERALL) if "unsure" not in x]
         k = kappa(binary)
         # agree, partly and disagree: the units neither reviewer was unsure of

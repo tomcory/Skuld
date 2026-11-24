@@ -34,6 +34,23 @@
         .shot-label { font-size: .68rem; color: #6c757d; margin-top: .15rem; text-align: center; }
         .zoom { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 1060; display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
         .zoom img { max-height: 95vh; max-width: 95vw; border-radius: .25rem; background: #fff; }
+        /* the layout of the stage-1 page (24 Nov 2026): calm, colour only where it means something, sources colour-coded */
+        body { background: #eef0f3; font-size: 15px; }
+        .card { border: 1px solid #dde1e6; box-shadow: none !important; border-radius: .6rem; }
+        .evidence { background: #f6f7f9; border-radius: .5rem; padding: .55rem; }
+        .evidence-card { background: #fff; border: 1px solid #e3e6ea; border-left: 4px solid #868e96; border-radius: .45rem; padding: .55rem .7rem; margin-bottom: .6rem; }
+        .evidence-card.kind-traffic { border-left-color: #12b886; }
+        .evidence-card.kind-screen { border-left-color: #4c6ef5; }
+        .evidence-card.kind-passage { border-left-color: #f59f00; }
+        .evidence-card.kind-document { border-left-color: #ae3ec9; }
+        .evidence-card .http { border-left: 1px solid #e3e6ea; margin-bottom: 0; margin-top: .3rem; }
+        .member { padding: .55rem 0; }
+        .described { background: transparent; border-left: 2px solid #ced4da; color: #495057; padding: .1rem .55rem; margin-top: .5rem; }
+        .described-label { color: #8a8fb8; text-transform: uppercase; font-size: .66rem; letter-spacing: .04em; }
+        .chip { display: inline-block; font-size: .76rem; border: 1px solid #ced4da; border-radius: 1rem; padding: .05rem .5rem; margin: .1rem .2rem 0 0; background: #fff; color: #495057; cursor: pointer; }
+        .chip.open { background: #e7f1ff; border-color: #0d6efd; color: #0d6efd; }
+        .reasons { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem; padding-left: 11.5rem; }
+        .other-reason { flex: 1 1 14rem; max-width: 26rem; margin-left: .2rem; }
         [v-cloak] { display: none; }
     </style>
 </head>
@@ -57,19 +74,25 @@
             processing contradicts, or a requirement on the documents). You see E's statement, its members, what it rests on and the provider's documents, and judge whether
             E is right <i>as it states it</i>. Which model produced the unit is not shown.</p>
         <ul class="mb-1">
-            <li><b>Evidence</b> (<kbd>1</kbd>–<kbd>4</kbd>): the evidence exists and is cited correctly: yes, partly, no, or none cited.
+            <li><b>Evidence</b> (<kbd>1</kbd>–<kbd>5</kbd>): the evidence exists and is cited correctly: yes, mostly, partly, no, or none cited.
                 Each evidence item names its source (the practice as observed, traffic as captured, a screen of the app, the
                 provider's documents, documentation or a legal norm from E's corpus, E's expectation stage); a text several
-                members cite is shown once, with how many cite it. A screen may come with a <b>description</b> written by
+                members cite is shown once, with how many cite it. The edge of each item shows its source: <span style="color:#12b886">●</span> traffic,
+                <span style="color:#4c6ef5">●</span> a screen, <span style="color:#ae3ec9">●</span> the provider's documents,
+                <span style="color:#f59f00">●</span> E's corpus, <span style="color:#868e96">●</span> a claim; findings in
+                traffic that repeat are folded under the first (<i>+N more like this</i>). A screen may come with a <b>description</b> written by
                 a model (purple box) and a <b>screenshot</b> (click to enlarge, <kbd>Esc</kbd> to close), as E's first stage
                 was given them: the description helps you find your way, but it is a model's reading, not evidence.
-                <i>Yes</i>: every item exists and says what E takes it to say. <i>Partly</i>: some items do not, or one
+                <i>Yes</i>: every item exists and says what E takes it to say. <i>Mostly</i>: every item exists, one is
+                cited a little loosely (it says almost what E takes it to say). <i>Partly</i>: some items do not, or one
                 sentence is cut into fragments that are counted as separate evidence. <i>No</i>: the items the conclusion
                 rests on do not exist or do not say it.</li>
-            <li><b>Follows</b> (<kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd>): E's conclusion follows from that evidence: yes, partly, no.
-                <i>Partly</i>: it follows for some members and not for others, or the conclusion is right but one step
+            <li><b>Follows</b> (<kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd>): E's conclusion follows from that evidence: yes,
+                mostly, partly, no. <i>Mostly</i>: it follows, slightly overstated or with a small gap. <i>Partly</i>: it follows for some members and not for others, or the conclusion is right but one step
                 to it is wrong. A proposed alternative (data minimisation) counts only if it would still serve the purpose
                 as stated: an identifier that cannot do what the purpose needs is no alternative, however narrow it is.</li>
+            <li>An answer short of a plain yes, <i>mostly</i> or <i>partly</i>, asks <b>why</b>: click one or more of the
+                reasons that open below it (hover a reason for its meaning), or <i>Other</i> and say it in a few words.</li>
             <li><b>Phrases</b>, for declared purposes: mark each phrase specific, not specific or unsure; <kbd>N</kbd> marks all not
                 specific. Where E holds the phrases not specific, your verdict is derived from them (all as E says: agree; none:
                 disagree; some: partly), and you save with <b>Save</b> (<kbd>S</kbd>).
@@ -314,7 +337,7 @@
                                 What E's members rest on: {{ item.evidence.length }} evidence {{ item.evidence.length === 1 ? 'item' : 'items' }} <kbd>V</kbd>
                             </button>
                             <div v-if="evidenceShown" class="evidence mt-2">
-                                <div v-for="e in item.evidence" class="border-start border-3 ps-2 mb-2 small" :class="{'screen-row': e.screenshot}">
+                                <div v-for="e in item.evidence" class="evidence-card small" :class="['kind-' + kindOf(e), {'screen-row': e.screenshot}]">
                                     <div v-if="e.screenshot" class="shot-col"><img :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot"><div v-if="e.before_change" class="shot-label">before the change</div></div>
                                     <div :class="e.screenshot ? 'text-col' : ''">
                                         <div class="text-secondary"><b>{{ e.source || e.kind }}</b><span v-if="item.members.length > 1"> · cited by {{ e.members.length }} of {{ item.members.length }} members</span></div>
@@ -331,14 +354,28 @@
                             <div class="d-flex align-items-center gap-2 mb-1">
                                 <span class="crit-label">Evidence exists, cited correctly</span>
                                 <div class="btn-group btn-group-sm">
-                                    <button v-for="(v, i) in EVIDENCE" class="btn" :class="evidence === v ? 'btn-primary' : 'btn-outline-primary'" @click="evidence = v">{{ v.replace('_', ' ') }} <kbd>{{ i + 1 }}</kbd></button>
+                                    <button v-for="(v, i) in evidenceValues" class="btn" :class="evidence === v ? 'btn-primary' : 'btn-outline-primary'" @click="setCriterion('evidence', v)">{{ v.replace('_', ' ') }} <kbd>{{ i + 1 }}</kbd></button>
                                 </div>
+                            </div>
+                            <div v-if="reasonsAsked('evidence')" class="reasons mb-2">
+                                <span class="small text-secondary">Why not a plain yes? (one or more)</span>
+                                <span v-for="o in reasonsOf('evidence').options" class="chip reason" :class="{open: hasReason('evidence', o.id)}" :title="o.hint"
+                                      @click="toggleReason('evidence', o.id)"><i class="bi" :class="hasReason('evidence', o.id) ? 'bi-check-square' : 'bi-square'"></i> {{ o.label }}</span>
+                                <input v-if="otherAsked('evidence')" id="other-evidence" class="form-control form-control-sm other-reason" placeholder="Your reason (required)"
+                                       v-model="crit.evidence_other" @keydown.stop>
                             </div>
                             <div class="d-flex align-items-center gap-2 mb-2">
                                 <span class="crit-label">E's conclusion follows from that evidence</span>
                                 <div class="btn-group btn-group-sm">
-                                    <button v-for="(v, i) in FOLLOWS" class="btn" :class="follows === v ? 'btn-primary' : 'btn-outline-primary'" @click="follows = v">{{ v }} <kbd>{{ 'QWE'[i] }}</kbd></button>
+                                    <button v-for="(v, i) in followsValues" class="btn" :class="follows === v ? 'btn-primary' : 'btn-outline-primary'" @click="setCriterion('follows', v)">{{ v }} <kbd>{{ followsKeys[i] }}</kbd></button>
                                 </div>
+                            </div>
+                            <div v-if="reasonsAsked('follows')" class="reasons mb-2">
+                                <span class="small text-secondary">Why not a plain yes? (one or more)</span>
+                                <span v-for="o in reasonsOf('follows').options" class="chip reason" :class="{open: hasReason('follows', o.id)}" :title="o.hint"
+                                      @click="toggleReason('follows', o.id)"><i class="bi" :class="hasReason('follows', o.id) ? 'bi-check-square' : 'bi-square'"></i> {{ o.label }}</span>
+                                <input v-if="otherAsked('follows')" id="other-follows" class="form-control form-control-sm other-reason" placeholder="Your reason (required)"
+                                       v-model="crit.follows_other" @keydown.stop>
                             </div>
                             <textarea class="form-control form-control-sm" rows="2" placeholder="Note (say why if you disagree or are unsure)" v-model="note" @keydown.stop></textarea>
                             <div v-if="derived" class="small text-secondary mt-2">For declared purposes your verdict is your judgment of the
@@ -418,15 +455,19 @@ import {createApp, nextTick} from '/vendor/vue.js';
 import {useVocabularies, loadVocabularies, TITLES} from '/vocab.js';
 import {useTraffic} from '/traffic.js';
 const titles = {policy: 'Privacy policy', data_safety: 'Data safety', listing: 'Store listing', in_app: 'In-app notices'};
+// the criteria of a sample drawn before skuld.review 3, which carries none; a newer sample's are in item.questions
 const EVIDENCE = ['yes', 'partly', 'no', 'none_cited'];
 const FOLLOWS = ['yes', 'partly', 'no'];
+const FOLLOWS_KEYS = 'qwet';
 const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 const app = createApp({
     provide() { return {openVocab: (kind, id) => this.openVocab(kind, id)}; },
-    data: () => ({zoom: null, vocabs: {purpose: [], data: []}, browser: null, progress: null, item: null, help: false, shown: null, document: {}, query: '', titles, EVIDENCE, FOLLOWS,
+    data: () => ({zoom: null, vocabs: {purpose: [], data: []}, browser: null, progress: null, item: null, help: false, shown: null, document: {}, query: '', titles, EVIDENCE, FOLLOWS, crit: {}, followsKeys: FOLLOWS_KEYS.toUpperCase(),
                   evidence: null, follows: null, phrases: {}, blindPhrases: {}, note: '', blindNote: '', evidenceShown: true,
                   recall: null, recallOpen: false, recallDue: false}),
     computed: {
+        evidenceValues() { return ((this.item && this.item.questions) || {}).criteria ? this.item.questions.criteria.evidence : EVIDENCE; },
+        followsValues() { return ((this.item && this.item.questions) || {}).criteria ? this.item.questions.criteria.follows : FOLLOWS; },
         kind() {
             if (this.document.passages) return 'passages';
             if ('collected' in this.document || 'provided' in this.document) return 'data_safety';
@@ -437,6 +478,10 @@ const app = createApp({
             if (!this.item || this.item.blind_now || this.item.blind_phrases_now) return '';
             const left = [];
             if (!this.evidence) left.push('evidence exists');
+            for (const [c, name] of [['evidence', 'evidence'], ['follows', 'conclusion follows']]) {
+                if (this.reasonsAsked(c) && !(this.crit[`${c}_reasons`] || []).length) left.push(`why ${name} is not a plain yes`);
+                else if (this.otherAsked(c) && !String(this.crit[`${c}_other`] || '').trim()) left.push(`your reason (${name})`);
+            }
             if (!this.follows) left.push("E's conclusion follows");
             if (this.item.kind === 'declared' && this.item.members.some(m => !this.phrases[m.concern])) left.push('each phrase');
             return left.length ? 'To decide, first answer: ' + left.join(', ') : '';
@@ -481,6 +526,8 @@ const app = createApp({
             const r = this.item.review || {};
             this.evidence = r.evidence || null;
             this.follows = r.follows || null;
+            this.crit = {};
+            for (const f of ['evidence_reasons', 'evidence_other', 'follows_reasons', 'follows_other']) if (r[f] !== undefined) this.crit[f] = r[f];
             // with E's output shown, the phrases start from the blind judgments until they are saved
             this.phrases = {...((r.blind_phrases && r.blind_phrases.phrases) || {}), ...(r.phrases || {})};
             this.blindPhrases = {};
@@ -510,6 +557,28 @@ const app = createApp({
             return html.replace(pattern, m => `<mark>${m}</mark>`);
         },
         escapeHtml: t => escape(t),
+        // a criterion's answer; one that names no reasons drops those picked for another
+        setCriterion(c, v) {
+            this[c] = v;
+            if (!this.reasonsAsked(c)) { const x = {...this.crit}; delete x[`${c}_reasons`]; delete x[`${c}_other`]; this.crit = x; }
+        },
+        reasonsOf(c) { return ((this.item && this.item.questions) || {}).reasons ? this.item.questions.reasons[c] : null; },
+        reasonsAsked(c) { const r = this.reasonsOf(c); return !!r && r.when.includes(this[c]); },
+        hasReason(c, id) { return (this.crit[`${c}_reasons`] || []).includes(id); },
+        toggleReason(c, id) {
+            const now = this.crit[`${c}_reasons`] || [], off = now.includes(id), x = {...this.crit};
+            x[`${c}_reasons`] = off ? now.filter(y => y !== id) : [...now, id];
+            if (id === this.reasonsOf(c).free && off) delete x[`${c}_other`];
+            this.crit = x;
+            if (id === this.reasonsOf(c).free && !off) this.$nextTick(() => { const f = document.getElementById('other-' + c); if (f) f.focus(); });
+        },
+        otherAsked(c) { const r = this.reasonsOf(c); return !!r && !!r.free && this.reasonsAsked(c) && this.hasReason(c, r.free); },
+        // what an evidence item is: traffic, a screen, the provider's documents, a passage of E's corpus, or a claim
+        kindOf(e) {
+            const s = e.source || '';
+            return s.startsWith('traffic') ? 'traffic' : s.startsWith('a screen') ? 'screen' : s.startsWith("the provider") ? 'document'
+                : /corpus|norm/.test(s) ? 'passage' : 'claim';
+        },
         traffic: t => escape(t).replace(/«([^»]*)»/g, '<mark class="datum">$1</mark>'),
         setPhrase(concern, value) { this.phrases = {...this.phrases, [concern]: value}; },
         setBlindPhrase(concern, value) { this.blindPhrases = {...this.blindPhrases, [concern]: value}; },
@@ -542,7 +611,7 @@ const app = createApp({
             if (!this.ready) return;
             if (this.derived) overall = undefined;  // the server derives it from the phrases
             else if (!overall) return;
-            const body = {overall, evidence: this.evidence, follows: this.follows, note: this.note};
+            const body = {overall, evidence: this.evidence, follows: this.follows, note: this.note, ...this.crit};
             if (this.item.kind === 'declared') body.phrases = this.phrases;
             this.progress = await this.api(`/reviews/${this.item.id}`, {
                 method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
@@ -600,10 +669,10 @@ const app = createApp({
             } else if (this.item.blind_phrases_now) {
                 action = {n: () => this.allNotSpecific(), s: () => this.saveBlindPhrases()}[k];
             } else {
-                const evidence = {1: 0, 2: 1, 3: 2, 4: 3}[k];
-                const follows = {q: 0, w: 1, e: 2}[k];
-                if (evidence !== undefined) action = () => (this.evidence = EVIDENCE[evidence]);
-                else if (follows !== undefined) action = () => (this.follows = FOLLOWS[follows]);
+                const evidence = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4}[k];
+                const follows = FOLLOWS_KEYS.indexOf(k);
+                if (evidence !== undefined && evidence < this.evidenceValues.length) action = () => this.setCriterion('evidence', this.evidenceValues[evidence]);
+                else if (follows >= 0 && follows < this.followsValues.length) action = () => this.setCriterion('follows', this.followsValues[follows]);
                 else if (this.derived) action = {s: () => this.save(null), n: () => this.allNotSpecific(),
                                v: () => (this.evidenceShown = !this.evidenceShown), r: () => this.openRecall(), o: () => this.nextOpen()}[k];
                 else action = {a: () => this.save('agree'), d: () => this.save('disagree'), u: () => this.save('unsure'),

@@ -51,6 +51,69 @@
         .cited-nav { position: sticky; top: 0; z-index: 2; background: #fff; padding: .25rem 0 .35rem; border-bottom: 1px solid #eee; }
         .zoom { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 1060; display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
         .zoom img { max-height: 95vh; max-width: 95vw; border-radius: .25rem; background: #fff; }
+
+        /* ---- the layout (24 Nov 2026): calm (colour only where it means something), one purpose at a time, sources
+           colour-coded (traffic green, screens blue, passages amber, E's claims grey) ---- */
+        body { background: #eef0f3; font-size: 15px; }
+        .card { border: 1px solid #dde1e6; box-shadow: none !important; border-radius: .6rem; }
+        /* the practice the purposes are of */
+        .subject { background: #fff; border: 1px solid #dde1e6; border-left: 5px solid #343a40; border-radius: .5rem; padding: .75rem .9rem; margin-top: .6rem; }
+        .subject-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: #6c757d; margin-bottom: .2rem; }
+        .subject-line { font-size: 1.15rem; line-height: 1.5; }
+        .subject-verb { font-weight: 700; }
+        .subject-line code { font-size: 1rem; }
+        .subject-told { margin-top: .6rem; padding: .5rem .7rem; background: #f6f7f9; border-radius: .4rem; font-size: .95rem; color: #212529; }
+        .subject-meta { margin-top: .4rem; font-size: .78rem; color: #6c757d; }
+        .ask { font-size: .95rem; color: #495057; margin-top: 1rem !important; }
+        /* the purposes: a sticky bar to move between them, one open at a time */
+        .purpose-bar { position: sticky; top: 0; z-index: 6; background: #fff; padding: .6rem 0 .5rem; margin-top: .6rem; border-bottom: 1px solid #e9ecef; }
+        .purpose-bar-head { display: flex; align-items: center; gap: .5rem; }
+        .purpose-bar-title { font-weight: 700; }
+        .purpose-pills { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .45rem; }
+        .purpose-pill { border: 1px solid #ced4da; background: #fff; color: #495057; border-radius: 1rem; font-size: .78rem; padding: .1rem .55rem; line-height: 1.5; }
+        .purpose-pill:hover { background: #f1f3f5; }
+        .purpose-pill.started { border-color: #868e96; }
+        .purpose-pill.complete { border-color: #198754; color: #198754; background: #f1faf5; }
+        .purpose-pill.active { background: #343a40; border-color: #343a40; color: #fff; }
+        .purpose { padding: 0; border-radius: .6rem; border: 1px solid #343a40; overflow: hidden; margin-top: .9rem !important; background: #fff; }
+        .purpose:not(.active) { display: none; }
+        .purpose > * { padding-left: .9rem; padding-right: .9rem; }
+        .purpose-head { background: #e9ecef; border-bottom: 1px solid #dee2e6; padding-top: .65rem; padding-bottom: .6rem; }
+        .purpose-meta { color: #6c757d; margin-top: .6rem !important; }
+        .why { margin-top: .3rem; }
+        .q { padding: .55rem .9rem; margin: 0; border-top: 1px solid #f1f3f5; }
+        .purpose > .q:first-of-type { margin-top: .6rem; }
+        .q-label { min-width: 11rem; text-transform: uppercase; font-size: .72rem; letter-spacing: .04em; color: #6c757d; font-weight: 600; }
+        .reasons { padding-left: 11.5rem; margin-top: .35rem; }
+        /* answer buttons grey until chosen: the chosen one carries the colour */
+        .btn-group .btn[class*="btn-outline-"] { color: #495057; border-color: #ced4da; background: #fff; }
+        .btn-group .btn[class*="btn-outline-"]:hover { background: #f1f3f5; }
+        .dependency { background: #fff; border: 1px solid #e9ecef; border-left: 3px solid #adb5bd; border-radius: .4rem; margin: .75rem .9rem; padding: .65rem .75rem; }
+        .dependency .q { padding-left: 0; padding-right: 0; }
+        .step { color: #495057; border-left-color: #dee2e6; margin-top: .45rem; }
+        .purpose-next { display: flex; justify-content: flex-end; gap: .5rem; padding-top: .6rem; padding-bottom: .75rem; border-top: 1px solid #f1f3f5; }
+        .open-link { color: #0d6efd; cursor: pointer; text-decoration: underline dotted; }
+        .decide { border-top: 1px solid #dde1e6; padding-top: .9rem; }
+        /* the context pane: one card per screen, passage, request, claim; a cited one marked by an edge, not a fill */
+        .context { background: #f6f7f9; border-radius: .5rem; padding: .6rem; }
+        .context .screen, .context .evidence-item { background: #fff; border: 1px solid #e3e6ea; border-left: 4px solid transparent; border-radius: .45rem; padding: .6rem .7rem; margin-bottom: .65rem; }
+        .context .screen.cited { background: #fff; box-shadow: inset 0 0 0 2px #ffe066; }
+        .context .screen-row.visit { background: #fbfbfc; }
+        .visit-screen.cited { padding-left: .4rem; box-shadow: inset 3px 0 0 #f0ad00; }
+        .described { background: transparent; border-left: 2px solid #ced4da; color: #495057; padding: .1rem .55rem; margin-top: .5rem; }
+        .described-label { color: #8a8fb8; text-transform: uppercase; font-size: .66rem; letter-spacing: .04em; }
+        .cited-nav { background: #f6f7f9; }
+        .context .kind-traffic, .context .http { border-left: 4px solid #12b886; }
+        .context .kind-screen { border-left-color: #4c6ef5; }
+        .context .kind-passage { border-left-color: #f59f00; }
+        .context .kind-claim { border-left-color: #868e96; }
+        .context .evidence-item.kind-traffic { border-left-color: #12b886; }
+        .context .evidence-item .http { border-left: 1px solid #e3e6ea; margin-bottom: 0; margin-top: .3rem; }
+        .nav-tabs .nav-link { font-size: .9rem; }
+        .nav-tabs .tab-traffic::before, .nav-tabs .tab-screens::before, .nav-tabs .tab-passages::before { content: "● "; }
+        .nav-tabs .tab-traffic::before { color: #12b886; }
+        .nav-tabs .tab-screens::before { color: #4c6ef5; }
+        .nav-tabs .tab-passages::before { color: #f59f00; }
         [v-cloak] { display: none; }
     </style>
 </head>
@@ -122,6 +185,8 @@
                 on the right) show what the purpose achieves.
                 <i>Yes</i>: they show that this purpose's outcome happens in this app, including what sets it apart (for
                 personalised ads, something showing personalisation, not just that ads appear).
+                <i>Mostly</i>: they show it, with a minor gap: one cited part is beside the point, or the distinguishing
+                detail is suggested rather than shown.
                 <i>Partly</i>: they show only the broader activity (ads appear), or only some of the cited parts show it.
                 <i>No</i>: none of them shows it, e.g. only a general guideline or documentation passage.</li>
             <li>Per <b>need</b> E stated (is the data, or the recipient, essential / quality-dependent / not needed for the
@@ -130,17 +195,22 @@
                 <i class="bi bi-book"></i> passage): click one to read the cited text, hover for a preview. A need E holds
                 not assessable is not asked; its reasoning can be shown.
                 <ul>
-                    <li><b>Stated need plausible</b>. <i>Yes</i>: it is the level you would choose. <i>Partly</i>: one level
+                    <li><b>Stated need plausible</b>. <i>Yes</i>: it is the level you would choose. <i>Mostly</i>: defensible,
+                        though you would lean to the neighbouring level (a borderline case). <i>Partly</i>: clearly one level
                         off (essential where quality-dependent fits, quality-dependent where not needed fits, or the reverse).
                         <i>No</i>: two levels off (essential against not needed).</li>
                     <li><b>Steps follow from what they cite</b>, whether or not you agree with the level (that is the
                         question above). A step counts as supported if what it cites shows it, or if it is general technical
                         knowledge you would accept without a source (e.g. that a WebView sends a User-Agent).
-                        <i>Yes</i>: every step the conclusion rests on is supported. <i>Partly</i>: at least one such step
+                        <i>Yes</i>: every step the conclusion rests on is supported. <i>Mostly</i>: a minor step is
+                        unsupported, but the conclusion does not rest on it. <i>Partly</i>: at least one such step
                         is an uncited claim about this app or recipient, or contradicts what it cites, but the other steps
                         still carry the conclusion. <i>No</i>: without the unsupported steps nothing carries the
                         conclusion.</li>
                 </ul></li>
+            <li>Every answer short of a plain yes, <i>mostly</i> or <i>partly</i>, asks <b>why</b>: click one or more of the
+                reasons that open below it (hover a reason for its meaning), or <i>Other</i> and say it in a few words. The
+                level says how far the answer is from a yes; the reasons say why.</li>
             <li><b>Missed</b>: a purpose E should have predicted and did not; tick functional if it is the feature's own.</li>
             <li><b>Values in <code>code type</code></b> (a data type, a purpose node) open their vocabulary when clicked: the tree
                 with the value selected (marked "shown in the unit"), its description, the broader node, the nodes alongside
@@ -148,6 +218,13 @@
             <li><b>DPV node fields</b> (a missed purpose, a better node): type part of a name for suggestions
                 (<kbd>↓</kbd> <kbd>↑</kbd> <kbd>Enter</kbd>), or click <i class="bi bi-diagram-3"></i> to browse the DPV purposes as a
                 tree, filter it, read each node's description and select one.</li>
+            <li>The purposes are shown <b>one at a time</b>: the bar above them shows which one (its number) and how many of
+                each one's questions are answered (a tick when all are); move with the numbers, the arrows, the button at
+                the end of each purpose, or <kbd>J</kbd> (next) and <kbd>K</kbd> (previous). On the right, <i>Cited for</i>
+                shows what E cites for the purpose you are on; the other tabs hold all the traffic, screens and passages
+                the stage was given, colour-coded: <span style="color:#12b886">●</span> traffic, <span style="color:#4c6ef5">●</span>
+                screens, <span style="color:#f59f00">●</span> passages. Findings that repeat (the same field, datum and data
+                type) are folded under the first: open them with <i>+N more like this</i>.</li>
             <li><kbd>←</kbd> <kbd>→</kbd> previous and next practice, <kbd>O</kbd> next open one, <kbd>S</kbd> save,
                 <kbd>Enter</kbd> save as done, <kbd>/</kbd> search the context.</li>
         </ul>
@@ -162,26 +239,42 @@
                         <span v-if="item.review && item.review.done" class="badge text-bg-success">done</span>
                         <span v-else-if="item.review" class="badge text-bg-warning">started</span>
                     </div>
-                    <div class="mt-2">
-                        <span class="badge text-bg-light border me-1">{{ item.practice.type }}</span>
-                        <vocab-term kind="data" :id="item.practice.data"></vocab-term>
-                        <span v-if="item.practice.recipient"> → <b>{{ item.practice.recipient }}</b>
-                            <span class="text-secondary small" v-if="item.practice.relation">({{ item.practice.relation }})</span></span>
-                        <span v-else class="text-secondary"> on the device</span>
+                    <div class="subject">
+                        <div class="subject-label">The practice the purposes below are about</div>
+                        <div class="subject-line">
+                            <span class="subject-verb">{{ verb(item.practice.type) }}</span>{{ ' ' }}
+                            <vocab-term kind="data" :id="item.practice.data"></vocab-term>
+                            <span v-if="item.practice.recipient"> → <b>{{ item.practice.recipient }}</b>
+                                <span class="text-secondary small" v-if="item.practice.relation">({{ item.practice.relation }})</span></span>
+                            <span v-else class="text-secondary"> on the device</span>
+                        </div>
+                        <div class="subject-told" v-if="item.told"><div class="subject-label">What stage 1 was told</div>{{ item.told }}</div>
+                        <div class="subject-meta">episodes {{ item.practice.episodes.join(', ') || '–' }}</div>
                     </div>
-                    <div class="small text-secondary">episodes {{ item.practice.episodes.join(', ') || '–' }}</div>
-                    <div class="told" v-if="item.told"><span class="text-secondary">What stage 1 was told:</span> {{ item.told }}</div>
                     <div class="ask mt-3">{{ item.ask }}</div>
-
+                    <div class="purpose-bar" ref="purposeBar">
+                        <div class="purpose-bar-head">
+                            <button class="btn btn-sm btn-outline-secondary" :disabled="focusIndex <= 0" @click="stepPurpose(-1)" title="Previous purpose (K)"><i class="bi bi-chevron-left"></i></button>
+                            <span class="purpose-bar-title">Purpose {{ focusIndex + 1 }} of {{ item.purposes.length }}</span>
+                            <button class="btn btn-sm btn-outline-secondary" :disabled="focusIndex >= item.purposes.length - 1" @click="stepPurpose(1)" title="Next purpose (J)"><i class="bi bi-chevron-right"></i></button>
+                            <span class="ms-auto small text-secondary">{{ purposesComplete }} of {{ item.purposes.length }} complete · <kbd>K</kbd> <kbd>J</kbd></span>
+                        </div>
+                        <div class="purpose-pills">
+                            <button v-for="(p, i) in item.purposes" :key="p.key" class="purpose-pill"
+                                    :class="{active: p.key === focus, complete: progressOf(p).done === progressOf(p).total, started: progressOf(p).done > 0}"
+                                    :title="`${label(p.key)}: ${p.action} ${p.object}${p.outcome ? ', ' + p.outcome : ''} (${progressOf(p).done}/${progressOf(p).total} answered)`"
+                                    @click="goPurpose(p.key)">{{ i + 1 }}<i v-if="progressOf(p).done === progressOf(p).total" class="bi bi-check ms-1"></i></button>
+                        </div>
+                    </div>
                     <div v-for="p in item.purposes" :key="p.key" class="purpose mt-2" :class="{active: p.key === focus}" @click="focus = p.key">
-                        <div class="d-flex justify-content-between flex-wrap gap-1">
+                        <div class="purpose-head d-flex justify-content-between flex-wrap gap-1">
                             <b>{{ label(p.key) }} · {{ p.action }} {{ p.object }}<span v-if="p.outcome">, {{ p.outcome }}</span></b>
                             <span>
                                 <span class="badge" :class="statusClass(p.status)" :title="statusTitle(p.status)">E: {{ p.status.replace('_', ' ') }}</span>
                                 <span class="badge text-bg-light border ms-1" title="how many of E's answers (per episode and seed) gave this purpose">{{ p.samples }} {{ p.samples === 1 ? 'answer' : 'answers' }}</span>
                             </span>
                         </div>
-                        <div class="small mt-1">
+                        <div class="purpose-meta small mt-1">
                             node <vocab-term kind="purpose" :id="p.node"></vocab-term> · beneficiary <b>{{ p.beneficiary }}</b> · role <b>{{ p.role }}</b>
                             · specificity {{ p.specificity }}<span v-if="p.context"> · context: {{ p.context }}</span>
                         </div>
@@ -239,8 +332,22 @@
                                         <button v-for="v in values" class="btn" :class="dependency(d.key, q) === v ? btnOn(v) : btnOff(v)"
                                                 @click.stop="setDependency(d.key, q, v)">{{ v }}</button>
                                     </div>
+                                    <div v-if="reasonsAsked(d.key, q, 'dependency')" class="reasons" @click.stop>
+                                        <span class="small text-secondary">Why not a plain yes? (one or more)</span>
+                                        <span v-for="o in reasonsOf(q).options" class="chip reason" :class="{open: hasReason(d.key, q, o.id, 'dependency')}"
+                                              :title="o.hint" @click.stop="toggleReason(d.key, q, o.id, 'dependency')"><i class="bi" :class="hasReason(d.key, q, o.id, 'dependency') ? 'bi-check-square' : 'bi-square'"></i> {{ o.label }}</span>
+                                        <input v-if="otherAsked(d.key, q, 'dependency')" :id="`other-${d.key}-${q}`" class="form-control form-control-sm other-reason"
+                                               placeholder="Your reason (required)" :value="dependency(d.key, `${q}_other`) || ''"
+                                               @input="setDependency(d.key, `${q}_other`, $event.target.value)" @keydown.stop @click.stop>
+                                    </div>
                                 </div>
                             </template>
+                        </div>
+                        <div class="purpose-next">
+                            <button class="btn btn-sm btn-outline-secondary" v-if="focusIndex > 0" @click.stop="stepPurpose(-1)"><i class="bi bi-chevron-left"></i> Previous</button>
+                            <button class="btn btn-sm" :class="progressOf(p).done === progressOf(p).total ? 'btn-primary' : 'btn-outline-primary'"
+                                    v-if="focusIndex < item.purposes.length - 1" @click.stop="stepPurpose(1)">Next purpose <i class="bi bi-chevron-right"></i> <kbd>J</kbd></button>
+                            <span v-else class="small text-secondary align-self-center">Last purpose: below, purposes E missed and Done</span>
                         </div>
                     </div>
 
@@ -262,7 +369,8 @@
                         <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
                             <button class="btn btn-success" :disabled="open.length > 0" @click="save(true)"><i class="bi bi-check-lg"></i> Done <kbd>Enter</kbd></button>
                             <button class="btn btn-outline-primary" @click="save(false)">Save <kbd>S</kbd></button>
-                            <span v-if="open.length" class="small text-secondary">Still to answer for <b>Done</b>: {{ open.slice(0, 3).map(o => label(o.split(' ')[0]) + ': ' + (labels[o.split(' ')[1]] || o.split(' ')[1])).join('; ') }}<span v-if="open.length > 3"> and {{ open.length - 3 }} more</span></span>
+                            <span v-if="open.length" class="small text-secondary">Still to answer for <b>Done</b>:
+                                <template v-for="(o, i) in open.slice(0, 3)"><span v-if="i">; </span><span class="open-link" @click="goPurpose(o.split(' ')[0].replace(/d\d+$/, ''))">{{ label(o.split(' ')[0]) }}: {{ labels[o.split(' ')[1]] || o.split(' ')[1] }}</span></template><span v-if="open.length > 3"> and {{ open.length - 3 }} more</span></span>
                             <button class="btn btn-outline-secondary ms-auto" v-if="item.review" @click="reset()" title="Remove the review"><i class="bi bi-arrow-counterclockwise"></i></button>
                         </div>
                         <div class="d-flex gap-2 mt-2">
@@ -278,10 +386,10 @@
             <div class="card shadow-sm">
                 <div class="card-body">
                     <ul class="nav nav-tabs mb-2">
-                        <li class="nav-item"><a class="nav-link" :class="{active: tab === 'traffic'}" href="#" @click.prevent="tab = 'traffic'">Traffic ({{ (item.context.traffic || []).length }})</a></li>
                         <li class="nav-item"><a class="nav-link" :class="{active: tab === 'evidence'}" href="#" @click.prevent="tab = 'evidence'">Cited for {{ label(focus) }} ({{ focusEvidence.length }})</a></li>
-                        <li class="nav-item"><a class="nav-link" :class="{active: tab === 'screens'}" href="#" @click.prevent="tab = 'screens'">Screens ({{ item.context.screens.length }})</a></li>
-                        <li class="nav-item"><a class="nav-link" :class="{active: tab === 'passages'}" href="#" @click.prevent="tab = 'passages'">Passages ({{ item.context.passages.length }})</a></li>
+                        <li class="nav-item"><a class="nav-link tab-traffic" :class="{active: tab === 'traffic'}" href="#" @click.prevent="tab = 'traffic'">Traffic ({{ (item.context.traffic || []).length }})</a></li>
+                        <li class="nav-item"><a class="nav-link tab-screens" :class="{active: tab === 'screens'}" href="#" @click.prevent="tab = 'screens'">Screens ({{ item.context.screens.length }})</a></li>
+                        <li class="nav-item"><a class="nav-link tab-passages" :class="{active: tab === 'passages'}" href="#" @click.prevent="tab = 'passages'">Passages ({{ item.context.passages.length }})</a></li>
                     </ul>
                     <input ref="search" class="form-control form-control-sm mb-2" placeholder="Search the context (/)" v-model="query" @keydown.esc="$event.target.blur()" @keydown.stop>
                     <div class="context" ref="pane">
@@ -291,7 +399,7 @@
                         </template>
                         <template v-else-if="tab === 'evidence'">
                             <div v-if="!focusEvidence.length" class="text-secondary small">E cites nothing for this purpose and its dependencies.</div>
-                            <div v-for="e in focusEvidence" class="evidence-item" :class="{'screen-row': e.screenshot}">
+                            <div v-for="e in focusEvidence" class="evidence-item" :class="['kind-' + kindOf(e), {'screen-row': e.screenshot}]">
                                 <div v-if="e.screenshot" class="shot-col"><img :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot"><div v-if="e.before_change" class="shot-label">before the change</div></div>
                                 <div :class="{'text-col': e.screenshot}">
                                     <div class="text-secondary">{{ e.source || e.kind }}</div>
@@ -307,7 +415,7 @@
                                 <a v-for="n in citedScreens" href="#" class="chip" @click.prevent="scrollToScreen(n)">screen {{ n }}</a>
                             </div>
                             <!-- a visit's screens in one block: one screenshot, one description, their texts in order -->
-                            <div v-for="g in screenGroups" :key="g.key" class="screen screen-row" :class="{visit: g.screens.length > 1}">
+                            <div v-for="g in screenGroups" :key="g.key" class="screen screen-row kind-screen" :class="{visit: g.screens.length > 1}">
                                 <div class="shot-col">
                                     <template v-if="g.screenshot">
                                         <img :src="'/' + g.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + g.screenshot">
@@ -328,7 +436,7 @@
                             <div v-if="!shownScreens.length" class="text-secondary small">No screen matches.</div>
                         </template>
                         <template v-else>
-                            <div v-for="s in item.context.passages" class="screen" :class="{cited: citedTexts.has(s)}" v-html="mark(s)"></div>
+                            <div v-for="s in item.context.passages" class="screen kind-passage" :class="{cited: citedTexts.has(s)}" v-html="mark(s)"></div>
                             <div v-if="!item.context.passages.length" class="text-secondary small">No passages.</div>
                         </template>
                     </div>
@@ -368,10 +476,16 @@ const app = createApp({
                     else if (this.otherAsked(p.key, q) && !String(this.answer(p.key, `${q}_other`) || '').trim()) out.push(`${p.key} ${q} other reason`);
                 }
                 for (const d of p.dependencies.filter(d => d.asked))
-                    for (const q of Object.keys(this.item.questions.dependency)) if (!this.item.questions.dependency[q].includes(this.dependency(d.key, q))) out.push(`${d.key} ${q}`);
+                    for (const q of Object.keys(this.item.questions.dependency)) {
+                        if (!this.item.questions.dependency[q].includes(this.dependency(d.key, q))) out.push(`${d.key} ${q}`);
+                        else if (this.reasonsAsked(d.key, q, 'dependency') && !(this.dependency(d.key, `${q}_reasons`) || []).length) out.push(`${d.key} ${q} reasons`);
+                        else if (this.otherAsked(d.key, q, 'dependency') && !String(this.dependency(d.key, `${q}_other`) || '').trim()) out.push(`${d.key} ${q} other reason`);
+                    }
             }
             return out;
         },
+        focusIndex() { return this.item ? this.item.purposes.findIndex(p => p.key === this.focus) : -1; },
+        purposesComplete() { return this.item ? this.item.purposes.filter(p => { const x = this.progressOf(p); return x.done === x.total; }).length : 0; },
         focusPurpose() { return this.item && this.item.purposes.find(p => p.key === this.focus); },
         focusEvidence() {
             const p = this.focusPurpose;
@@ -464,24 +578,62 @@ const app = createApp({
             });
         },
         reasonsOf(q) { return ((this.item.questions || {}).reasons || {})[q]; },
-        reasonsAsked(key, q) { const r = this.reasonsOf(q); return !!r && r.when.includes(this.answer(key, q)); },
-        hasReason(key, q, id) { return (this.answer(key, `${q}_reasons`) || []).includes(id); },
-        toggleReason(key, q, id) {
-            const now = this.answer(key, `${q}_reasons`) || [];
+        // a purpose's answers or a need's (level 'dependency'): the reasons below work on either
+        answerAt(level, key, q) { return level === 'dependency' ? this.dependency(key, q) : this.answer(key, q); },
+        setAt(level, key, q, v) { return level === 'dependency' ? this.setDependency(key, q, v) : this.setPurpose(key, q, v); },
+        reasonsAsked(key, q, level = 'purpose') { const r = this.reasonsOf(q); return !!r && r.when.includes(this.answerAt(level, key, q)); },
+        hasReason(key, q, id, level = 'purpose') { return (this.answerAt(level, key, `${q}_reasons`) || []).includes(id); },
+        verb: t => ({transmits: 'Transmits', reads: 'Reads', accesses: 'Accesses', stores: 'Stores', collects: 'Collects'})[t] || (t ? t[0].toUpperCase() + t.slice(1) : 'Processes'),
+        // to a purpose: it opens, and the left pane scrolls to its top below the purpose bar
+        goPurpose(key) {
+            if (!this.item.purposes.some(p => p.key === key)) return;
+            this.focus = key;
+            this.$nextTick(() => {
+                const pane = document.querySelector('.left'), card = document.querySelector('.purpose.active'), bar = this.$refs.purposeBar;
+                if (pane && card) pane.scrollTop = card.offsetTop - pane.offsetTop - (bar ? bar.offsetHeight : 0) - 8;
+            });
+        },
+        stepPurpose(d) {
+            const i = this.focusIndex + d;
+            if (i >= 0 && i < this.item.purposes.length) this.goPurpose(this.item.purposes[i].key);
+        },
+        // a purpose's questions answered and asked, its needs' included (the focus style's progress)
+        progressOf(p) {
+            let done = 0, total = 0;
+            for (const q of this.asked(p)) { total++; if (this.item.questions.purpose[q].includes(this.answer(p.key, q))) done++; }
+            for (const d of p.dependencies.filter(d => d.asked))
+                for (const q of Object.keys(this.item.questions.dependency)) { total++; if (this.item.questions.dependency[q].includes(this.dependency(d.key, q))) done++; }
+            return {done, total};
+        },
+        toggleReason(key, q, id, level = 'purpose') {
+            const now = this.answerAt(level, key, `${q}_reasons`) || [];
             const off = now.includes(id);
-            this.setPurpose(key, `${q}_reasons`, off ? now.filter(x => x !== id) : [...now, id]);
+            this.setAt(level, key, `${q}_reasons`, off ? now.filter(x => x !== id) : [...now, id]);
             const free = this.reasonsOf(q).free;
-            if (id === free && off) { const a = {...this.purposes[key]}; delete a[`${q}_other`]; this.purposes = {...this.purposes, [key]: a}; }
+            if (id === free && off) {
+                const store = level === 'dependency' ? 'dependencies' : 'purposes';
+                const a = {...this[store][key]}; delete a[`${q}_other`]; this[store] = {...this[store], [key]: a};
+            }
             // Other picked: its field takes the cursor
             if (id === free && !off) this.$nextTick(() => { const f = document.getElementById(`other-${key}-${q}`); if (f) f.focus(); });
         },
         // Other is picked among a question's reasons: its written reason is asked
-        otherAsked(key, q) { const r = this.reasonsOf(q); return !!r && !!r.free && this.reasonsAsked(key, q) && this.hasReason(key, q, r.free); },
-        setDependency(key, q, v) { this.dependencies = {...this.dependencies, [key]: {...(this.dependencies[key] || {}), [q]: v}}; },
+        otherAsked(key, q, level = 'purpose') { const r = this.reasonsOf(q); return !!r && !!r.free && this.reasonsAsked(key, q, level) && this.hasReason(key, q, r.free, level); },
+        setDependency(key, q, v) {
+            const b = {...(this.dependencies[key] || {}), [q]: v};
+            // an answer that names no reasons drops those picked for another
+            if (this.reasonsOf(q) && !this.reasonsOf(q).when.includes(v)) { delete b[`${q}_reasons`]; delete b[`${q}_other`]; }
+            this.dependencies = {...this.dependencies, [key]: b};
+        },
         btnOn: v => (GOOD.includes(v) ? 'btn-success' : BAD.includes(v) ? 'btn-danger' : v === 'unsure' ? 'btn-secondary' : v === 'mostly' ? 'btn-info' : 'btn-warning'),
         btnOff: v => (GOOD.includes(v) ? 'btn-outline-success' : BAD.includes(v) ? 'btn-outline-danger' : v === 'unsure' ? 'btn-outline-secondary' : v === 'mostly' ? 'btn-outline-info' : 'btn-outline-warning'),
         statusTitle: s => STATUS[s] || s,
         kindIcon: k => ICON[k] || 'bi-dot',
+        // what an evidence item is, for the coded style: traffic, screen, passage or a claim
+        kindOf(e) {
+            const s = e.source || '';
+            return s.startsWith('traffic') ? 'traffic' : s.startsWith('a screen') ? 'screen' : /corpus|norm/.test(s) ? 'passage' : 'claim';
+        },
         citeKey: (d, si, c) => `${d.key}/${si}/${c.id}`,
         toggle(key) { const x = new Set(this.expanded); x.has(key) ? x.delete(key) : x.add(key); this.expanded = x; },
         statusClass: s => ({supported: 'text-bg-primary', not_established: 'text-bg-warning', not_assessable: 'text-bg-secondary', conflicted: 'text-bg-danger'})[s] || 'text-bg-secondary',
@@ -509,7 +661,7 @@ const app = createApp({
             this.missed = JSON.parse(JSON.stringify(r.missed || []));
             this.note = r.note || '';
             this.focus = this.item.purposes.length ? this.item.purposes[0].key : null;
-            this.tab = (this.item.context.traffic || []).length ? 'traffic' : 'evidence';
+            this.tab = 'evidence';
             this.query = '';
             this.expanded = new Set();
             this.zoom = null;
@@ -539,6 +691,7 @@ const app = createApp({
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || !this.item) return;
             const action = {ArrowLeft: () => this.go(this.item.index - 1), ArrowRight: () => this.go(this.item.index + 1),
                             o: () => this.nextOpen(), s: () => this.save(false), Enter: () => this.save(true),
+                            j: () => this.stepPurpose(1), k: () => this.stepPurpose(-1),
                             '/': () => { this.tab = 'screens'; this.$refs.search && this.$refs.search.focus(); }}[event.key];
             if (action) { event.preventDefault(); action(); }
         },

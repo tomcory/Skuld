@@ -45,6 +45,27 @@ function field(name) {
     return {kind: 'other', label: base, name: ''};
 }
 
+// what makes two findings alike: the same field, datum and data type, and the same surroundings of the datum (the
+// 24 characters on each side) but for numbers (timestamps, counters, ids made of digits), which also shift where an
+// excerpt begins
+const NEAR = 24;
+function likeness(f) {
+    const digits = t => String(t || '').replace(/\d+/g, '#');
+    const before = digits(f.before), after = digits(f.after);
+    return [f.note, f.field && f.field.label, f.field && f.field.name, f.node, f.datum, before.slice(-NEAR), after.slice(0, NEAR)].join('\u0001');
+}
+
+// a request's findings, each alike run folded under its first: [{finding, more: [alike findings]}]
+export function foldFindings(findings) {
+    const folds = [], at = new Map();
+    for (const f of findings) {
+        const k = likeness(f);
+        if (at.has(k)) folds[at.get(k)].more.push(f);
+        else { at.set(k, folds.length); folds.push({finding: f, more: []}); }
+    }
+    return folds;
+}
+
 // the lines of one method and URL as one request, in the order first met
 export function groupTraffic(lines) {
     const groups = [];
@@ -55,6 +76,7 @@ export function groupTraffic(lines) {
         if (last && p) last.findings.push(p);
         else groups.push({key, request: p, raw: p ? null : line, findings: p ? [p] : []});
     }
+    for (const g of groups) g.folds = foldFindings(g.findings);
     return groups;
 }
 
@@ -74,13 +96,17 @@ const STYLE = `
 .http-part-head b { color: #212529; }
 .http-excerpt { margin: 0; white-space: pre-wrap; word-break: break-all; font-family: ui-monospace, Menlo, monospace; font-size: .76rem; background: #f8f9fa; border-radius: .2rem; padding: .25rem .4rem; }
 .http-excerpt mark.datum { background: #ffd166; font-weight: 600; padding: 0 .15em; }
+.http-more { font-size: .74rem; margin-top: .3rem; text-decoration: none; }
+.http-alike { font-size: .68rem; color: #adb5bd; margin: .35rem 0 .1rem; }
 .http-note { padding: .35rem .5rem; color: #6c757d; font-style: italic; }
 `;
 
 // one request: its method, host, path and parameters once, then each finding: field, excerpt, data type
 export const TrafficRequest = {
     props: {group: {type: Object, required: true}, query: {type: String, default: ''}},
+    data: () => ({unfolded: {}}),
     methods: {
+        toggle(i) { this.unfolded = {...this.unfolded, [i]: !this.unfolded[i]}; },
         hi(text) {
             const html = escape(text);
             const q = (this.query || '').trim();
@@ -97,15 +123,21 @@ export const TrafficRequest = {
         <summary>{{ group.request.params.length }} query {{ group.request.params.length === 1 ? 'parameter' : 'parameters' }}</summary>
         <div v-for="([k, v], i) in group.request.params" :key="i" class="http-param"><b v-html="hi(k)"></b><span v-if="v"> = </span><span v-html="hi(v)"></span></div>
     </details>
-    <div v-for="(f, i) in group.findings" :key="i" class="http-part">
-        <template v-if="f.note"><div class="http-note">{{ f.note }}</div></template>
-        <template v-else>
-            <div class="http-part-head">
-                <span>found in <b>{{ f.field ? f.field.label : '?' }}</b><span v-if="f.field && f.field.name"> <b v-html="hi(f.field.name)"></b></span></span>
-                <span v-if="f.node">data type <vocab-term kind="data" :id="f.node"></vocab-term></span>
-            </div>
-            <pre v-if="f.before || f.datum || f.after" class="http-excerpt">…<span v-html="hi(f.before)"></span><mark class="datum" v-html="hi(f.datum)"></mark><span v-html="hi(f.after)"></span>…</pre>
+    <div v-for="(fold, i) in group.folds" :key="i" class="http-part">
+        <template v-for="(f, j) in [fold.finding, ...(unfolded[i] ? fold.more : [])]" :key="j">
+            <div v-if="j" class="http-alike">alike {{ j }} of {{ fold.more.length }}</div>
+            <template v-if="f.note"><div class="http-note">{{ f.note }}</div></template>
+            <template v-else>
+                <div v-if="!j" class="http-part-head">
+                    <span>found in <b>{{ f.field ? f.field.label : '?' }}</b><span v-if="f.field && f.field.name">{{ ' ' }}<b v-html="hi(f.field.name)"></b></span></span>
+                    <span v-if="f.node">data type <vocab-term kind="data" :id="f.node"></vocab-term></span>
+                </div>
+                <pre v-if="f.before || f.datum || f.after" class="http-excerpt">…<span v-html="hi(f.before)"></span><mark class="datum" v-html="hi(f.datum)"></mark><span v-html="hi(f.after)"></span>…</pre>
+            </template>
         </template>
+        <button v-if="fold.more.length" class="btn btn-link btn-sm p-0 http-more" @click.stop="toggle(i)">
+            <i class="bi" :class="unfolded[i] ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+            {{ unfolded[i] ? 'fold' : '+' + fold.more.length + ' more like this' }} <span class="text-secondary">(same field, datum and data type, alike around the datum)</span></button>
     </div>
 </div>
 <div v-else class="http"><div class="http-note" style="font-style: normal" v-html="hi(group.raw)"></div></div>`,

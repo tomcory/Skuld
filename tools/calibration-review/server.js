@@ -27,8 +27,8 @@ const RECALL = path.join(FOLDER, 'recall.json');
 const OVERALL = ['agree', 'disagree', 'unsure'];
 // a verdict derived from the phrases (declared purposes E holds not specific) may also be partly: some phrases as E says
 const DERIVED = [...OVERALL, 'partly'];
-const EVIDENCE = ['yes', 'partly', 'no', 'none_cited'];
-const FOLLOWS = ['yes', 'partly', 'no'];
+// the criteria's values: the sample's (since skuld.review 3, with mostly), else those of a sample drawn before
+const criteria = () => ((sample().questions || {}).criteria) || {evidence: ['yes', 'partly', 'no', 'none_cited'], follows: ['yes', 'partly', 'no']};
 const PHRASE = ['specific', 'not_specific', 'unsure'];
 
 if (!fs.existsSync(SAMPLE)) {
@@ -161,7 +161,7 @@ app.get('/api/items/:index', (req, res) => {
         const blindNow = item.blind_first && !(review && review.blind && DECISIONS.includes(review.blind.decision));
         const phrasesNow = !blindNow && item.blind_phrases && !blindPhrasesDone(item, review);
         const shown = blindNow ? blindView(item) : phrasesNow ? phrasesView(item) : item;
-        return res.send({...shown, index, total: all.length, review, documents: app_.documents || [],
+        return res.send({...shown, index, total: all.length, review, documents: app_.documents || [], questions: sample().questions || null,
                          application_units: all.filter(i => i.application === item.application).map(i => i.id)});
     }
     res.send({...item, index, total: all.length, review, prior_review: priorReview(item.id)});
@@ -214,6 +214,17 @@ function aggregateReview(req, res) {
     const done = reviews();
     const prior = done[req.params.id] || {};
     const {blind, blind_phrases: blindPhrases, evidence, follows, phrases, overall, note} = req.body;
+    const EVIDENCE = criteria().evidence, FOLLOWS = criteria().follows;
+    // the criteria's reasons (mostly, partly): `<criterion>_reasons`, `<criterion>_other`, checked against the sample's lists
+    const reasonFields = {};
+    for (const c of ['evidence', 'follows']) {
+        for (const f of [`${c}_reasons`, `${c}_other`]) {
+            if (req.body[f] === undefined) continue;
+            const e = reasonField(req.params.id, f, req.body[f], sample().questions || {});
+            if (e) return res.status(400).send(e);
+            reasonFields[f] = req.body[f];
+        }
+    }
     const bad = (value, allowed) => value !== undefined && value !== null && !allowed.includes(value);
     if (blind !== undefined && (!blind || !DECISIONS.includes(blind.decision))) return res.status(400).send(`blind decision must be one of ${DECISIONS}`);
     if (bad(evidence, EVIDENCE)) return res.status(400).send(`evidence must be one of ${EVIDENCE}`);
@@ -250,7 +261,12 @@ function aggregateReview(req, res) {
     if (blindPhrases !== undefined && !blindPhrasesDone(item, prior)) {
         next.blind_phrases = {phrases: {...blindPhrases.phrases}, note: blindPhrases.note || '', reviewed: next.reviewed};
     }
-    for (const [k, v] of Object.entries({evidence, follows, overall})) if (v !== undefined) next[k] = v;
+    for (const [k, v] of Object.entries({evidence, follows, overall, ...reasonFields})) if (v !== undefined) next[k] = v;
+    // a criterion answered with no reasons asked drops those given for another answer
+    for (const c of ['evidence', 'follows']) {
+        const reasons = ((sample().questions || {}).reasons || {})[c];
+        if (reasons && !reasons.when.includes(next[c])) { delete next[`${c}_reasons`]; delete next[`${c}_other`]; }
+    }
     if (phrases !== undefined) next.phrases = phrases;
     if (derivedUnit(item)) {
         const verdict = derive(item, next.phrases);
@@ -266,6 +282,25 @@ function aggregateReview(req, res) {
 // the questions a purpose asks: `cites` only for a supported one
 const askedOf = (p, questions) => Object.keys(questions.purpose).filter(q => q !== 'cites' || p.status === 'supported');
 
+// a question's reasons (mostly, partly) not complete: none named, or Other without its text; null where complete
+function reasonsOpen(q, a, questions) {
+    const reasons = (questions.reasons || {})[q];
+    if (!reasons || !reasons.when.includes(a[q])) return null;
+    if (!(a[`${q}_reasons`] || []).length) return 'reasons';
+    if (reasons.free && a[`${q}_reasons`].includes(reasons.free) && !String(a[`${q}_other`] || '').trim()) return 'other reason';
+    return null;
+}
+
+// an answer's reason fields (`<question>_reasons`, `<question>_other`) checked against the sample's lists: an error or null
+function reasonField(k, q, v, questions) {
+    const base = q.replace(/_(reasons|other)$/, '');
+    const reasons = (questions.reasons || {})[base];
+    if (!reasons) return `${k}: ${q} is not asked`;
+    if (q.endsWith('_other')) return !reasons.free ? `${k}: ${q} is not asked` : typeof v !== 'string' ? `${k} ${q} must be text` : null;
+    const known = reasons.options.map(o => o.id);
+    return !Array.isArray(v) || v.some(x => !known.includes(x)) ? `${k} ${q} must be a list of ${known}` : null;
+}
+
 // what keeps an expectation review from being done: the questions asked and not answered
 function expectationOpen(item, review, questions) {
     const open = [];
@@ -273,15 +308,14 @@ function expectationOpen(item, review, questions) {
         const a = (review.purposes || {})[p.key] || {};
         for (const q of askedOf(p, questions)) {
             if (!questions.purpose[q].includes(a[q])) open.push(`${p.key} ${q}`);
-            // a mostly or partly names at least one reason
-            const reasons = (questions.reasons || {})[q];
-            if (reasons && reasons.when.includes(a[q]) && !(a[`${q}_reasons`] || []).length) open.push(`${p.key} ${q} reasons`);
-            else if (reasons && reasons.free && reasons.when.includes(a[q]) && (a[`${q}_reasons`] || []).includes(reasons.free)
-                     && !String(a[`${q}_other`] || '').trim()) open.push(`${p.key} ${q} other reason`);
+            else { const r = reasonsOpen(q, a, questions); if (r) open.push(`${p.key} ${q} ${r}`); }
         }
         for (const d of p.dependencies.filter(d => d.asked)) {
             const b = (review.dependencies || {})[d.key] || {};
-            for (const q of Object.keys(questions.dependency)) if (!questions.dependency[q].includes(b[q])) open.push(`${d.key} ${q}`);
+            for (const q of Object.keys(questions.dependency)) {
+                if (!questions.dependency[q].includes(b[q])) open.push(`${d.key} ${q}`);
+                else { const r = reasonsOpen(q, b, questions); if (r) open.push(`${d.key} ${q} ${r}`); }
+            }
         }
     }
     return open;
@@ -298,17 +332,7 @@ function expectationReview(req, res) {
         if (!purposeKeys.has(k) || typeof a !== 'object') return res.status(400).send(`no purpose ${k} in this unit`);
         for (const [q, v] of Object.entries(a)) {
             if (q === 'better_node') { if (typeof v !== 'string') return res.status(400).send('better_node must be text'); continue; }
-            if (q.endsWith('_other')) {  // the written reason of a question whose reasons offer Other
-                if (!((questions.reasons || {})[q.slice(0, -'_other'.length)] || {}).free) return res.status(400).send(`${k}: ${q} is not asked`);
-                if (typeof v !== 'string') return res.status(400).send(`${k} ${q} must be text`);
-                continue;
-            }
-            if (q.endsWith('_reasons')) {  // the reasons of a mostly or partly, from the sample's list
-                const known = (((questions.reasons || {})[q.slice(0, -'_reasons'.length)] || {}).options || []).map(o => o.id);
-                if (!known.length) return res.status(400).send(`${k}: ${q} is not asked`);
-                if (!Array.isArray(v) || v.some(x => !known.includes(x))) return res.status(400).send(`${k} ${q} must be a list of ${known}`);
-                continue;
-            }
+            if (/_(reasons|other)$/.test(q)) { const e = reasonField(k, q, v, questions); if (e) return res.status(400).send(e); continue; }
             if (!askedOf(purposeKeys.get(k), questions).includes(q)) return res.status(400).send(`${k}: ${q} is not asked`);
             if (v !== null && !questions.purpose[q].includes(v)) return res.status(400).send(`${k} ${q} must be one of ${questions.purpose[q]}`);
         }
@@ -316,6 +340,7 @@ function expectationReview(req, res) {
     for (const [k, b] of Object.entries(dependencies)) {
         if (!dependencyKeys.has(k) || typeof b !== 'object') return res.status(400).send(`no dependency ${k} asked in this unit`);
         for (const [q, v] of Object.entries(b)) {
+            if (/_(reasons|other)$/.test(q)) { const e = reasonField(k, q, v, questions); if (e) return res.status(400).send(e); continue; }
             if (!(q in questions.dependency)) return res.status(400).send(`${k}: ${q} is not asked`);
             if (v !== null && !questions.dependency[q].includes(v)) return res.status(400).send(`${k} ${q} must be one of ${questions.dependency[q]}`);
         }

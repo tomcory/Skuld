@@ -56,7 +56,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import skuld
-from skuld import inputs
+from skuld import inputs, review_reasons
 from skuld.assess import REPORT
 from skuld.calibrate import decisions, file_sha256, kappa, model_identity, read_json, stage_one, wilson, write_json
 from skuld.expectation import listed
@@ -87,36 +87,16 @@ PURPOSE_QUESTIONS = {
     "node": ("exact", "too_broad", "too_narrow", "wrong", "unsure"),
     "beneficiary": ("right", "wrong", "unsure"),
     "role": ("right", "wrong", "unsure"),
-    "cites": ("yes", "partly", "no"),
+    "cites": ("yes", "mostly", "partly", "no"),
 }
 DEPENDENCY_QUESTIONS = {
-    "relationship": ("yes", "partly", "no", "unsure"),
-    "steps": ("yes", "partly", "no"),
+    "relationship": ("yes", "mostly", "partly", "no", "unsure"),
+    "steps": ("yes", "mostly", "partly", "no"),
 }
-#: Per question, the answers that name their reasons, and the reasons a reviewer picks from (one or more; never typed):
-#: what keeps a purpose from a plain yes
-REASONS = {
-    "plausible": {
-        "when": ("mostly", "partly"),
-        "options": (
-            (
-                "overstates",
-                "Overstates",
-                "asserts a detail the context does not show (personalised ads where only ad delivery is shown)",
-            ),
-            ("vague", "Too vague", "too broad or too generic to say what the recipient does"),
-            ("bundles", "Bundles purposes", "puts two or more purposes into one (analytics and advertising)"),
-            ("part_of_flow", "Part of the flow", "explains only part of what the flow sends or to whom"),
-            ("loose_fit", "Loose fit", "the recipient could do this, but the flow gives little sign of it"),
-            ("other", "Other", "another reason: say which in the field that opens"),
-        ),
-        # the reason that is written, not picked: its text is required
-        "free": "other",
-    },
-}
-#: The questions whose answers are ordered, best first (unsure left out): their agreement is also weighted, and their
-#: rate also given leniently, counting the first two as agreeing
-ORDERED = {"plausible": ("yes", "mostly", "partly", "no")}
+#: Per question, the answers that name their reasons and the reasons a reviewer picks from (skuld.review_reasons)
+REASONS = review_reasons.STAGE_ONE
+#: The questions whose answers are ordered, best first: their agreement is also weighted, their rate also lenient
+ORDERED = {q: v for q, v in review_reasons.ORDERED.items() if q in REASONS}
 #: The dependency claims a reviewer judges: those that state a relationship
 STATED = ("supported", "not_established", "conflicted")
 ASK = (
@@ -615,25 +595,8 @@ def _questions() -> dict:
     return {
         "purpose": {k: list(v) for k, v in PURPOSE_QUESTIONS.items()},
         "dependency": {k: list(v) for k, v in DEPENDENCY_QUESTIONS.items()},
-        "reasons": {
-            q: {
-                "when": list(r["when"]),
-                "options": [{"id": i, "label": label, "hint": hint} for i, label, hint in r["options"]],
-                **({"free": r["free"]} if r.get("free") else {}),
-            }
-            for q, r in REASONS.items()
-        },
+        "reasons": review_reasons.questions(REASONS),
     }
-
-
-def reasons_key(question: str) -> str:
-    """Where a purpose's answers keep the reasons of a question: `<question>_reasons`."""
-    return f"{question}_reasons"
-
-
-def other_key(question: str) -> str:
-    """Where a purpose's answers keep the text of a question's written reason (Other): `<question>_other`."""
-    return f"{question}_other"
 
 
 # -- checking a review ------------------------------------------------------------------------------------------------
@@ -648,13 +611,8 @@ def problems(item: dict, review: dict) -> list[str]:
         for q in asked(p):
             if a.get(q) not in PURPOSE_QUESTIONS[q]:
                 out.append(f"{p['key']}: {q}")
-            elif q in REASONS and a[q] in REASONS[q]["when"]:
-                named = a.get(reasons_key(q)) or []
-                known = {i for i, *_ in REASONS[q]["options"]}
-                if not named or not set(named) <= known:
-                    out.append(f"{p['key']}: {q} reasons")
-                elif REASONS[q].get("free") in named and not str(a.get(other_key(q)) or "").strip():
-                    out.append(f"{p['key']}: {q} other reason")
+            elif missing := review_reasons.problem(q, a, REASONS):
+                out.append(f"{p['key']}: {q} {missing}")
         for d in p["dependencies"]:
             if not d["asked"]:
                 continue
@@ -662,6 +620,8 @@ def problems(item: dict, review: dict) -> list[str]:
             for q, values in DEPENDENCY_QUESTIONS.items():
                 if b.get(q) not in values:
                     out.append(f"{d['key']}: {q}")
+                elif missing := review_reasons.problem(q, b, REASONS):
+                    out.append(f"{d['key']}: {q} {missing}")
     return out
 
 
@@ -791,19 +751,8 @@ def score(folder: str | Path) -> dict:
                     t["lenient"] += fair
                     t["lenient_by"][sk][0] += fair
                     t["lenient_by"][sk][1] += 1
-                if level == "purpose" and q in REASONS and answer in REASONS[q]["when"]:
-                    given = (r.get("purposes") or {}).get(part["key"]) or {}
-                    for reason in given.get(reasons_key(q)) or []:
-                        t["reasons"][f"{answer}:{reason}"] += 1
-                        if reason == REASONS[q].get("free") and str(given.get(other_key(q)) or "").strip():
-                            t["other"].append(
-                                {
-                                    "id": iid,
-                                    "purpose": part["key"],
-                                    "answer": answer,
-                                    "text": given[other_key(q)].strip(),
-                                }
-                            )
+                given = (r.get("purposes" if level == "purpose" else "dependencies") or {}).get(part["key"]) or {}
+                review_reasons.tally(q, given, REASONS, t["reasons"], t["other"], {"id": iid, level: part["key"]})
         for m in r.get("missed") or []:
             missed.append({"run": s["run"], "practice": entry["practice"], **m})
     # per estimate, the strata whose drawn units ask its question: the population a weighted rate could stand for
