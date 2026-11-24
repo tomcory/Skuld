@@ -333,6 +333,14 @@ function expectationReview(req, res) {
         for (const [q, v] of Object.entries(a)) {
             if (q === 'better_node') { if (typeof v !== 'string') return res.status(400).send('better_node must be text'); continue; }
             if (/_(reasons|other)$/.test(q)) { const e = reasonField(k, q, v, questions); if (e) return res.status(400).send(e); continue; }
+            if (q === 'overlaps') {  // the other purposes of the practice this one overlaps: [{with, relation}], optional
+                const relations = questions.overlaps || [];
+                if (!relations.length) return res.status(400).send(`${k}: overlaps is not asked`);
+                if (!Array.isArray(v) || v.some(o => !o || o.with === k || !purposeKeys.has(o.with) || !relations.includes(o.relation))) {
+                    return res.status(400).send(`${k} overlaps must be a list of {with: another purpose of the unit, relation: one of ${relations}}`);
+                }
+                continue;
+            }
             if (!askedOf(purposeKeys.get(k), questions).includes(q)) return res.status(400).send(`${k}: ${q} is not asked`);
             if (v !== null && !questions.purpose[q].includes(v)) return res.status(400).send(`${k} ${q} must be one of ${questions.purpose[q]}`);
         }

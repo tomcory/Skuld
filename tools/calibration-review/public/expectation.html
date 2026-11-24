@@ -85,6 +85,9 @@
         .purpose > .q:first-of-type { margin-top: .6rem; }
         .q-label { min-width: 11rem; text-transform: uppercase; font-size: .72rem; letter-spacing: .04em; color: #6c757d; font-weight: 600; }
         .reasons { padding-left: 11.5rem; margin-top: .35rem; }
+        .overlap-pick { width: auto; max-width: 18rem; }
+        .optional { text-transform: none; font-weight: 400; letter-spacing: 0; color: #adb5bd; margin-left: .2rem; }
+        .overlap-hint { flex-basis: 100%; padding-left: 11.5rem; font-size: .76rem; color: #6c757d; margin-top: .2rem; }
         /* answer buttons grey until chosen: the chosen one carries the colour */
         .btn-group .btn[class*="btn-outline-"] { color: #495057; border-color: #ced4da; background: #fff; }
         .btn-group .btn[class*="btn-outline-"]:hover { background: #f1f3f5; }
@@ -150,7 +153,7 @@
         <p class="mb-1"><b>Each question on its own.</b> A flaw counts once, in the question it belongs to: an implausible
             purpose is a <i>no</i> on Plausible, not also on its node, need or steps. Judge the node, the need and the steps
             for the purpose <i>as E states it</i>, even where you find the purpose itself implausible. A purpose that repeats
-            another is judged on its own; mention the repetition in the note. Answer <i>unsure</i> only where the context
+            another is judged on its own; mark the repetition under <i>Overlaps</i>. Answer <i>unsure</i> only where the context
             does not let you decide, and say why in the note.</p>
         <ul class="mb-1">
             <li><b>Plausible</b>: a plausible purpose for this flow, given the context. Ask yourself how much you would have
@@ -175,7 +178,14 @@
                 not a plain yes; the level says how far it is from one: an overstated detail is usually <i>mostly</i>,
                 a loose fit usually <i>partly</i>.</li>
             <li><b>Node</b>: the DPV purpose node: exact, too broad, too narrow, wrong (name a better one if you can), for the
-                purpose as E words it.</li>
+                purpose as E words it. A purpose whose node is broader or narrower than another purpose's node of the same
+                practice (e.g. <code>Advertising</code> and <code>TargetedAdvertising</code>) is judged on its <b>own</b> wording: do
+                not mark it too broad or too narrow because of the other, and do not mark it down on Plausible for it.</li>
+            <li><b>Overlaps</b> (optional): if a purpose is the same as another purpose of the practice, or a broader or
+                narrower form of it, say so here (pick the other purpose, then <i>same</i>, <i>broader</i> or
+                <i>narrower</i>: this purpose is a broader form of the other, or a narrower one). The DPV tree and a grey hint
+                under the row show where the nodes overlap, but judge the purposes, not only their nodes. Overlaps are
+                counted apart; they change no other answer.</li>
             <li><b>Beneficiary</b> (user, provider, other) and <b>role</b> (functional: the feature the user uses; ancillary:
                 anything else): right or wrong. Functional means the feature the user is using needs this processing;
                 ads, consent dialogs, analytics, and fonts or resources loaded for an ad are ancillary even when they appear
@@ -300,6 +310,22 @@
                                              @update:model-value="v => setPurpose(p.key, 'better_node', v)"
                                              @browse="openBrowser(id => setPurpose(p.key, 'better_node', id), answer(p.key, 'better_node') || p.node)"></node-picker>
                             </div>
+                        </div>
+
+                        <div class="q overlap-row" v-if="(item.questions.overlaps || []).length && item.purposes.length > 1" @click.stop>
+                            <span class="q-label">Overlaps <span class="optional">optional</span></span>
+                            <div class="d-flex flex-wrap gap-1 align-items-center">
+                                <span v-for="(o, i) in overlapsOf(p.key)" :key="o.with" class="chip open">{{ relationText(o.relation) }} {{ label(o.with) }}
+                                    <i class="bi bi-x" role="button" title="remove" @click.stop="removeOverlap(p.key, i)"></i></span>
+                                <select class="form-select form-select-sm overlap-pick" v-model="overlapWith" @keydown.stop>
+                                    <option value="">another purpose…</option>
+                                    <option v-for="x in item.purposes.filter(x => x.key !== p.key)" :key="x.key" :value="x.key">{{ label(x.key) }}: {{ x.action }} {{ x.object }}</option>
+                                </select>
+                                <div class="btn-group btn-group-sm">
+                                    <button v-for="r in item.questions.overlaps" :key="r" class="btn btn-outline-secondary" :disabled="!overlapWith" @click.stop="addOverlap(p.key, r)">{{ r }}</button>
+                                </div>
+                            </div>
+                            <div v-if="nodeHints(p).length" class="overlap-hint">DPV: {{ nodeHints(p).join('; ') }}</div>
                         </div>
 
                         <div v-for="d in p.dependencies" :key="d.key" class="dependency small">
@@ -463,7 +489,7 @@ const GOOD = ['yes', 'exact', 'right'];
 const BAD = ['no', 'wrong'];
 const app = createApp({
     data: () => ({progress: null, item: null, help: false, labels, purposes: {}, dependencies: {}, missed: [], note: '',
-                  focus: null, tab: 'evidence', query: '', vocabs: {purpose: [], data: []}, browser: null, expanded: new Set(), zoom: null}),
+                  focus: null, tab: 'evidence', query: '', vocabs: {purpose: [], data: []}, browser: null, expanded: new Set(), zoom: null, overlapWith: ''}),
     provide() { return {openVocab: (kind, id) => this.openVocab(kind, id)}; },
     computed: {
         open() {
@@ -541,7 +567,7 @@ const app = createApp({
     // first screen cited for it
     watch: {
         tab() { this.scrollToCited(); },
-        focus() { this.scrollToCited(); },
+        focus() { this.scrollToCited(); this.overlapWith = ''; },
         item() { this.scrollToCited(); },
     },
     methods: {
@@ -609,6 +635,30 @@ const app = createApp({
         stepPurpose(d) {
             const i = this.focusIndex + d;
             if (i >= 0 && i < this.item.purposes.length) this.goPurpose(this.item.purposes[i].key);
+        },
+        // the other purposes of the practice a purpose overlaps (optional; counted apart from the rates)
+        overlapsOf(key) { return this.answer(key, 'overlaps') || []; },
+        relationText: r => ({same: 'the same purpose as', broader: 'a broader form of', narrower: 'a narrower form of'})[r] || r,
+        addOverlap(key, relation) {
+            if (!this.overlapWith) return;
+            const list = this.overlapsOf(key).filter(o => o.with !== this.overlapWith);
+            this.setPurpose(key, 'overlaps', [...list, {with: this.overlapWith, relation}]);
+            this.overlapWith = '';
+        },
+        removeOverlap(key, i) { const list = [...this.overlapsOf(key)]; list.splice(i, 1); this.setPurpose(key, 'overlaps', list); },
+        // where another purpose's DPV node is this one's, or broader or narrower than it: a hint where overlaps hide
+        nodeHints(p) {
+            const parents = {};
+            for (const n of this.vocabs.purpose || []) parents[n.id] = n.parents || [];
+            const above = id => { const out = new Set(), walk = x => (parents[x] || []).forEach(y => { if (!out.has(y)) { out.add(y); walk(y); } }); walk(id); return out; };
+            const mine = above(p.node), hints = [];
+            for (const x of this.item.purposes) {
+                if (x.key === p.key || !x.node || !p.node) continue;
+                if (x.node === p.node) hints.push(`${this.label(x.key)} has the same node`);
+                else if (mine.has(x.node)) hints.push(`${this.label(x.key)}'s node is broader`);
+                else if (above(x.node).has(p.node)) hints.push(`${this.label(x.key)}'s node is narrower`);
+            }
+            return hints;
         },
         // a purpose's questions answered and asked, its needs' included (the focus style's progress)
         progressOf(p) {

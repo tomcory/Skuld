@@ -27,7 +27,10 @@ too vague to judge one):
     relationship essential or quality_dependent is plausible: yes, partly, no, unsure
     steps        the steps follow from what they cite: yes, partly, no
 
-Per practice: the purposes E missed (a note each; a functional one marked so), a note, and `done`.
+Per practice: the purposes E missed (a note each; a functional one marked so), a note, and `done`. Per purpose,
+optionally, the other purposes of the practice it overlaps (`overlaps`: [{with, relation}], relation the same purpose,
+a broader or a narrower form of it): E predicting one purpose at two levels of detail is counted apart from the rates,
+and a purpose is judged on its own wording, never marked too broad or too narrow because of another (24 Nov 2026).
 
 Units are drawn per run, stratified by run, role (functional if any of the practice's purposes is) and status
 (supported if any is), up to `per_stratum` per stratum, independently of the review of concerns, practices without a
@@ -69,7 +72,9 @@ from skuld.review_screens import context_keys, copy_screenshots, empty, evidence
 #: 3 since Plausible has five values (yes, mostly, partly, no, unsure) and a purpose judged mostly or partly names its
 #: reasons (`REASONS`), the rates are given strict (yes) and lenient (yes or mostly), and two reviewers' agreement on an
 #: ordered question also as linearly weighted κ (author, 24 Nov 2026: "partly" was too broad in the study's review)
-VERSION = "3"
+#: 4 since a purpose may be marked as overlapping another purpose of the same practice (`overlaps`: the same purpose, a
+#: broader or a narrower form of it), counted apart from the rates (author, 24 Nov 2026)
+VERSION = "4"
 #: What a unit's stratum is made of
 STRATUM = ("run", "role", "status")
 KIND = "expectation-review"
@@ -97,6 +102,9 @@ DEPENDENCY_QUESTIONS = {
 REASONS = review_reasons.STAGE_ONE
 #: The questions whose answers are ordered, best first: their agreement is also weighted, their rate also lenient
 ORDERED = {q: v for q, v in review_reasons.ORDERED.items() if q in REASONS}
+#: How a purpose may overlap another of the same practice, as the reviewer marks it (`overlaps`, optional): the same
+#: purpose, a broader form of it, a narrower form of it
+OVERLAPS = ("same", "broader", "narrower")
 #: The dependency claims a reviewer judges: those that state a relationship
 STATED = ("supported", "not_established", "conflicted")
 ASK = (
@@ -596,6 +604,7 @@ def _questions() -> dict:
         "purpose": {k: list(v) for k, v in PURPOSE_QUESTIONS.items()},
         "dependency": {k: list(v) for k, v in DEPENDENCY_QUESTIONS.items()},
         "reasons": review_reasons.questions(REASONS),
+        "overlaps": list(OVERLAPS),
     }
 
 
@@ -613,6 +622,10 @@ def problems(item: dict, review: dict) -> list[str]:
                 out.append(f"{p['key']}: {q}")
             elif missing := review_reasons.problem(q, a, REASONS):
                 out.append(f"{p['key']}: {q} {missing}")
+        others = {x["key"] for x in item["purposes"]} - {p["key"]}
+        for o in a.get("overlaps") or []:
+            if not isinstance(o, dict) or o.get("with") not in others or o.get("relation") not in OVERLAPS:
+                out.append(f"{p['key']}: overlaps")
         for d in p["dependencies"]:
             if not d["asked"]:
                 continue
@@ -725,6 +738,7 @@ def score(folder: str | Path) -> dict:
         }
     )
     missed, done, done_in, judged_in = [], 0, defaultdict(int), defaultdict(int)
+    overlaps, overlap_list = defaultdict(lambda: dict.fromkeys(OVERLAPS, 0)), []  # per run, apart from the rates
     for iid, entry in key.items():
         r = reviews.get(iid) or {}
         if not r.get("done"):
@@ -753,6 +767,11 @@ def score(folder: str | Path) -> dict:
                     t["lenient_by"][sk][1] += 1
                 given = (r.get("purposes" if level == "purpose" else "dependencies") or {}).get(part["key"]) or {}
                 review_reasons.tally(q, given, REASONS, t["reasons"], t["other"], {"id": iid, level: part["key"]})
+        for pk, a in (r.get("purposes") or {}).items():
+            for o in a.get("overlaps") or []:
+                if isinstance(o, dict) and o.get("relation") in OVERLAPS:
+                    overlaps[s["run"]][o["relation"]] += 1
+                    overlap_list.append({"run": s["run"], "id": iid, "purpose": pk, **o})
         for m in r.get("missed") or []:
             missed.append({"run": s["run"], "practice": entry["practice"], **m})
     # per estimate, the strata whose drawn units ask its question: the population a weighted rate could stand for
@@ -807,6 +826,9 @@ def score(folder: str | Path) -> dict:
         "coverage": coverage(strata, STRATUM, len(key), done),
         "missed": missed,
         "missed_functional": sum(1 for m in missed if m.get("functional")),
+        # the purposes a reviewer marked as overlapping another of the same practice, per run and relation, and each mark
+        "overlaps": {run: dict(v) for run, v in sorted(overlaps.items())},
+        "overlap_marks": overlap_list,
     }
     write_json(folder / SCORES, out)
     return out

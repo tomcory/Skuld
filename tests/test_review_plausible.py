@@ -43,7 +43,7 @@ def test_the_sample_carries_the_scale_and_the_reasons_to_pick_from(drawn):
     ]
     assert all(o["label"] and o["hint"] for o in reasons["options"])
     assert reasons["free"] == "other"
-    assert read(folder / rx.MANIFEST)["method"]["version"] == "3"
+    assert read(folder / rx.MANIFEST)["method"]["version"] == "4"
 
 
 def test_mostly_and_partly_need_a_known_reason_yes_and_no_none(drawn):
@@ -288,3 +288,57 @@ def test_the_dpv_tree_marks_the_practices_other_purposes():
     page = (rex.TOOL / "public" / "expectation.html").read_text()
     assert "other-mark" in vocab and "marks: {type: Object" in vocab and "this.open(id)" in vocab
     assert "otherPurposeMarks()" in page and ':marks="browser.marks || {}"' in page
+
+
+# -- overlapping purposes (24 Nov 2026) --------------------------------------------------------------------------------
+
+
+def test_a_purpose_may_be_marked_as_overlapping_another_counted_apart(drawn):
+    folder, items = drawn
+    item = next(i for i in items if len(i["purposes"]) > 1)
+    assert read(folder / rx.SAMPLE)["questions"]["overlaps"] == ["same", "broader", "narrower"]
+    first, second = item["purposes"][0]["key"], item["purposes"][1]["key"]
+    r = full_review(item)
+    r["purposes"][first]["overlaps"] = [{"with": first, "relation": "same"}]  # not itself
+    assert f"{first}: overlaps" in rx.problems(item, r)
+    r["purposes"][first]["overlaps"] = [{"with": second, "relation": "closely"}]
+    assert f"{first}: overlaps" in rx.problems(item, r)
+    r["purposes"][first]["overlaps"] = [{"with": second, "relation": "broader"}]
+    assert not rx.problems(item, r)
+    before = rx.score(folder) if (folder / rx.REVIEWS).exists() else None
+    (folder / rx.REVIEWS).write_text(json.dumps({item["id"]: r}))
+    s = rx.score(folder)
+    assert sum(v["broader"] for v in s["overlaps"].values()) == 1
+    assert s["overlap_marks"][0]["with"] == second and s["overlap_marks"][0]["relation"] == "broader"
+    # the rates are those of the same review without the mark
+    plain = {
+        **r,
+        "purposes": {**r["purposes"], first: {k: v for k, v in r["purposes"][first].items() if k != "overlaps"}},
+    }
+    (folder / rx.REVIEWS).write_text(json.dumps({item["id"]: plain}))
+    assert [e["rate"] for e in rx.score(folder)["estimates"]] == [e["rate"] for e in s["estimates"]]
+    assert before is None
+
+
+@pytest.mark.skipif(
+    not shutil.which("node") or not (rex.TOOL / "node_modules").is_dir(), reason="Node.js or the tool's modules missing"
+)
+def test_the_tool_checks_an_overlap_mark(drawn):
+    from tests.test_review_tool import call, serve
+
+    folder, items = drawn
+    item = next(i for i in items if len(i["purposes"]) > 1)
+    first, second = item["purposes"][0]["key"], item["purposes"][1]["key"]
+    proc, base = serve(folder)
+    try:
+        body = {"purposes": {first: {"overlaps": [{"with": first, "relation": "same"}]}}}
+        status, text = call(base, f"/reviews/{item['id']}", "PUT", body)
+        assert status == 400 and "overlaps" in text
+        body = {"purposes": {first: {"overlaps": [{"with": second, "relation": "narrower"}]}}}
+        status, _ = call(base, f"/reviews/{item['id']}", "PUT", body)
+        assert status == 200
+    finally:
+        proc.kill()
+        proc.wait()
+    page = (rex.TOOL / "public" / "expectation.html").read_text()
+    assert "addOverlap" in page and "nodeHints(p)" in page and "judged on its <b>own</b> wording" in page
