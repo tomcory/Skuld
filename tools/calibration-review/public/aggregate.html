@@ -24,6 +24,7 @@
         mark.datum { background: #ffd166; font-weight: 600; padding: 0 .15em; }
         .crit-label { font-size: .85rem; color: #495057; min-width: 11rem; }
         kbd { font-size: .72rem; }
+        .described-label { color: #6c757d; font-size: .74rem; margin-bottom: .15rem; }
         .described { color: #495057; font-size: .8rem; background: #f3f0ff; border-left: 3px solid #8c7ae6; padding: .25rem .5rem; margin-top: .3rem; }
         .shot { display: block; max-height: 16rem; max-width: 100%; margin-top: .35rem; border: 1px solid #dee2e6; border-radius: .25rem; cursor: zoom-in; }
         .screen-row { display: flex; gap: .75rem; align-items: flex-start; }
@@ -317,8 +318,9 @@
                                     <div v-if="e.screenshot" class="shot-col"><img :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot"><div v-if="e.before_change" class="shot-label">before the change</div></div>
                                     <div :class="e.screenshot ? 'text-col' : ''">
                                         <div class="text-secondary"><b>{{ e.source || e.kind }}</b><span v-if="item.members.length > 1"> · cited by {{ e.members.length }} of {{ item.members.length }} members</span></div>
-                                        <div class="text-break" v-html="e.source === 'traffic as captured' ? traffic(e.text) : escapeHtml(e.text)"></div>
-                                        <div v-if="e.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> {{ e.description }}</div>
+                                        <traffic-list v-if="e.source === 'traffic as captured'" class="mt-1" :lines="[e.text]"></traffic-list>
+                                        <div v-else class="text-break" v-html="escapeHtml(e.text)"></div>
+                                        <div v-if="e.description" class="described"><div class="described-label"><i class="bi bi-chat-square-text"></i> A model's description of the screen, for orientation; not evidence:</div>{{ e.description }}</div>
                                     </div>
                                 </div>
                             </div>
@@ -414,6 +416,7 @@
 <script type="module">
 import {createApp, nextTick} from '/vendor/vue.js';
 import {useVocabularies, loadVocabularies, TITLES} from '/vocab.js';
+import {useTraffic} from '/traffic.js';
 const titles = {policy: 'Privacy policy', data_safety: 'Data safety', listing: 'Store listing', in_app: 'In-app notices'};
 const EVIDENCE = ['yes', 'partly', 'no', 'none_cited'];
 const FOLLOWS = ['yes', 'partly', 'no'];
@@ -622,6 +625,7 @@ const app = createApp({
     },
 });
 useVocabularies(app);
+useTraffic(app);
 app.mount('#app');
 </script>
 </body>

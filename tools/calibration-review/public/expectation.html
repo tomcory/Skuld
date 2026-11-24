@@ -34,6 +34,7 @@
         .decide { position: sticky; bottom: 0; background: #fff; margin-top: 1rem; padding: .75rem 0 .25rem; border-top: 1px solid #dee2e6; z-index: 5; }
         .left { max-height: 86vh; overflow-y: auto; }
         kbd { font-size: .72rem; }
+        .described-label { color: #6c757d; font-size: .74rem; margin-bottom: .15rem; }
         .described { color: #495057; font-size: .8rem; background: #f3f0ff; border-left: 3px solid #8c7ae6; padding: .25rem .5rem; margin-top: .3rem; }
         .shot { display: block; max-height: 16rem; max-width: 100%; margin-top: .35rem; border: 1px solid #dee2e6; border-radius: .25rem; cursor: zoom-in; }
         .screen-row { display: flex; gap: .75rem; align-items: flex-start; }
@@ -226,7 +227,7 @@
                                         <span v-for="c in s.cites" class="chip" :class="{open: expanded.has(citeKey(d, si, c))}" :title="c.text"
                                               @click.stop="toggle(citeKey(d, si, c))"><i class="bi" :class="kindIcon(c.kind)"></i> {{ c.id }} · {{ c.kind }}</span>
                                     </div>
-                                    <template v-for="c in s.cites"><div v-if="expanded.has(citeKey(d, si, c))" class="cite"><b>{{ c.id }}</b> ({{ c.kind }}): <span v-html="c.kind === 'traffic' ? traffic(c.text) : mark(c.text)"></span><div v-if="c.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> <span v-html="mark(c.description)"></span></div><img v-if="c.screenshot" :src="'/' + c.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + c.screenshot"><div v-if="c.screenshot && c.before_change" class="shot-label text-start">before the change</div></div></template>
+                                    <template v-for="c in s.cites"><div v-if="expanded.has(citeKey(d, si, c))" class="cite"><b>{{ c.id }}</b> ({{ c.kind }}): <traffic-list v-if="c.kind === 'traffic'" class="mt-1" :lines="[c.text]" :query="query"></traffic-list><span v-else v-html="mark(c.text)"></span><div v-if="c.description" class="described"><div class="described-label"><i class="bi bi-chat-square-text"></i> A model's description of the screen, for orientation; not evidence:</div><span v-html="mark(c.description)"></span></div><img v-if="c.screenshot" :src="'/' + c.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + c.screenshot"><div v-if="c.screenshot && c.before_change" class="shot-label text-start">before the change</div></div></template>
                                 </div>
                                 <div v-if="!d.steps.length" class="text-secondary">no steps recorded</div>
                             </template>
@@ -285,7 +286,7 @@
                     <div class="context" ref="pane">
                         <template v-if="tab === 'traffic'">
                             <div v-if="!(item.context.traffic || []).length" class="text-secondary small">The stage was shown no traffic for this practice.</div>
-                            <div v-for="t in item.context.traffic" class="traffic" v-html="traffic(t)"></div>
+                            <traffic-list :lines="item.context.traffic" :query="query"></traffic-list>
                         </template>
                         <template v-else-if="tab === 'evidence'">
                             <div v-if="!focusEvidence.length" class="text-secondary small">E cites nothing for this purpose and its dependencies.</div>
@@ -293,8 +294,9 @@
                                 <div v-if="e.screenshot" class="shot-col"><img :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot"><div v-if="e.before_change" class="shot-label">before the change</div></div>
                                 <div :class="{'text-col': e.screenshot}">
                                     <div class="text-secondary">{{ e.source || e.kind }}</div>
-                                    <div v-html="e.source === 'traffic as captured' ? traffic(e.text) : mark(e.text)"></div>
-                                    <div v-if="e.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> <span v-html="mark(e.description)"></span></div>
+                                    <traffic-list v-if="e.source === 'traffic as captured'" :lines="[e.text]" :query="query"></traffic-list>
+                                    <div v-else v-html="mark(e.text)"></div>
+                                    <div v-if="e.description" class="described"><div class="described-label"><i class="bi bi-chat-square-text"></i> A model's description of the screen, for orientation; not evidence:</div><span v-html="mark(e.description)"></span></div>
                                 </div>
                             </div>
                         </template>
@@ -319,7 +321,7 @@
                                         <span v-if="x.before_change" class="badge text-bg-light border ms-1" title="Loki took no screenshot of this state; the picture shows the screen before it changed">before the change</span>
                                         · <span v-html="mark(x.text)"></span>
                                     </div>
-                                    <div v-for="d in g.descriptions" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen{{ g.screens.length > 1 ? ' (one for the visit)' : '' }}, for orientation; not evidence:</span> <span v-html="mark(d)"></span></div>
+                                    <div v-for="d in g.descriptions" class="described"><div class="described-label"><i class="bi bi-chat-square-text"></i> A model's description of the screen{{ g.screens.length > 1 ? ' (one for the visit)' : '' }}, for orientation; not evidence:</div><span v-html="mark(d)"></span></div>
                                 </div>
                             </div>
                             <div v-if="!shownScreens.length" class="text-secondary small">No screen matches.</div>
@@ -341,6 +343,7 @@
 <script type="module">
 import {createApp} from '/vendor/vue.js';
 import {useVocabularies, loadVocabularies, TITLES} from '/vocab.js';
+import {useTraffic} from '/traffic.js';
 const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 const labels = {plausible: 'Plausible purpose', node: 'DPV node', beneficiary: 'Beneficiary', role: 'Role',
                 cites: 'Cited parts show its outcome', relationship: 'Stated need plausible', steps: 'Steps follow from what they cite'};
@@ -549,6 +552,7 @@ const app = createApp({
     },
 });
 useVocabularies(app);
+useTraffic(app);
 app.mount('#app');
 </script>
 </body>

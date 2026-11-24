@@ -12,7 +12,10 @@ screen, which must have the same screen id.
 
 **D-45:** a screen whose description in descriptions.jsonl is empty, by either model, at the visit the screen joins on
 (expectation.description_of: its own visit, else the latest earlier visit of the same screen in the episode) is
-`empty` here, and is never shown with a description, in either family's items (`view`). A draw that excludes them
+`empty` here, and is never shown with a description, in either family's items (`view`). Per visit (author, 24 Nov
+2026): a screen shown in several batches (the same text, at several visits) is shown as one of them, the first whose
+visit both models described (else the first), with that occurrence's description and emptiness; before 0.12.25 an
+empty description at any of its visits hid the description and counted for D-45. A draw that excludes them
 (`exclude_empty_descriptions`) passes over an item for the stratum's next eligible item in the seed's order, and its
 manifest lists the items passed over: a review of concerns, an item that shows such a screen among its evidence; a
 review of stage 1, whose item shows every screen of its practice's batches, an item that cites one (a screen among
@@ -121,7 +124,7 @@ def index(root: Path) -> dict[tuple, dict]:
     made = {b.key: b for b in expectation.batches(a, assessment.build(a, load_registry(None)), notices)}
     raw: dict[Path, dict] = {}
     visits: dict[Path, dict] = {}
-    out: dict[tuple, dict] = {}
+    seen: dict[tuple, list[dict]] = {}  # per key, its occurrences in the contexts, in order
     for path in paths:
         name = path.relative_to(root / "expectation").parts[0]
         batch = made.get(name)
@@ -135,33 +138,30 @@ def index(root: Path) -> dict[tuple, dict]:
             if batch is None or n > len(batch.shown) or batch.shown[n - 1].get("sid") != key[1]:
                 raise ScreenError(f"{path.relative_to(root)}: {part['id']} is not its batch's screen {n}")
             shown = batch.shown[n - 1]
-            entry = out.setdefault(
-                key,
-                {
-                    "description": None,
-                    "screenshot": None,
-                    "directory": batch.directory,
-                    "empty": set(),
-                    "visit": None,
-                    "before": None,
-                },
-            )
+            entry = {
+                "description": None,
+                "screenshot": None,
+                "directory": batch.directory,
+                "empty": set(),
+                "visit": None,
+                "before": None,
+            }
+            seen.setdefault(key, []).append(entry)
             described = by_id.get(f"{part['id']}.d")
-            if described and entry["description"] is None:
+            if described:
                 entry["description"] = _description_text(described["text"])
             shot = next((x for x in part.get("provenance", []) if x.get("sha256")), None)
-            if shot and entry["screenshot"] is None:
+            if shot:
                 entry["screenshot"] = (shot["record"], shot["sha256"])
             if batch.directory is not None and (batch.directory / "events.jsonl").is_file():
                 if batch.directory not in visits:
                     visits[batch.directory] = _visits(batch.directory)
                 first = visits[batch.directory].get(shown.get("seq"))
-                if first is not None and entry["visit"] is None:
+                if first is not None:
                     entry["visit"] = first["seq"]
                 noticed = shown.get("noticed") or frozenset()
                 if (
                     first is not None
-                    and entry["before"] is None
                     and not shown.get("screenshot")  # Loki took none of this state (not: one stage 1 was not sent)
                     and not shown.get("notice")
                     and shown.get("seq") not in noticed
@@ -177,6 +177,19 @@ def index(root: Path) -> dict[tuple, dict]:
                     d = expectation.description_of(shown, found)
                     if d is not None and not (d.get("screen") or "").strip():
                         entry["empty"].add(model)
+    out = {}
+    for key, occurrences in seen.items():
+        # the occurrence shown: the first whose visit both models described and the stage was given a description of,
+        # else the first described by both, else the first; its screenshot, or the first given of another occurrence
+        chosen = next(
+            (o for o in occurrences if not o["empty"] and o["description"]),
+            next((o for o in occurrences if not o["empty"]), occurrences[0]),
+        )
+        out[key] = {
+            **chosen,
+            "screenshot": chosen["screenshot"] or next((o["screenshot"] for o in occurrences if o["screenshot"]), None),
+            "occurrences": len(occurrences),
+        }
     return out
 
 

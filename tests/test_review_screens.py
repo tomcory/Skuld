@@ -2,6 +2,7 @@
 
 import json
 import random
+import shutil
 import zipfile
 
 import pytest
@@ -295,3 +296,72 @@ def test_a_screen_changed_in_place_shows_its_visits_first_screenshot_before_the_
     assert "before_change" not in review_screens.view(first)
     out = tmp_path / "copied"
     assert review_screens.copy_screenshots(out, [changed]) == 1 and (out / shown["screenshot"]).is_file()
+
+
+def test_a_screen_at_several_visits_is_shown_as_one_both_models_described(tmp_path, monkeypatch):
+    """D-45 per visit: the same screen (text) at a later visit whose gemma description is empty neither hides the
+    description of the earlier visit nor makes the screen ineligible; if every visit's is empty, it is."""
+    from tests.test_described import described_run, workspace_of
+
+    monkeypatch.setattr(expectation, "describer", lambda model: model)
+    run = described_run(tmp_path)
+    events = [json.loads(x) for x in (run / "events.jsonl").read_text().splitlines()]
+    plan = next(e for e in events if e["screen_id"] == "s-plan")
+    home = next(e for e in events if e["screen_id"] == "s-home")
+    events += [{**home, "seq": 4, "episode": "1"}, {**plan, "seq": 5}]
+    (run / "events.jsonl").write_text("\n".join(json.dumps(e) for e in events) + "\n")
+    lines = [json.loads(x) for x in (run / "descriptions.jsonl").read_text().splitlines()]
+    lines.append({"visit": 5, "screen_seq": 5, "screen_id": "s-plan", "episode": "1", "model": GEMMA, "screen": ""})
+    (run / "descriptions.jsonl").write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+    a, built = workspace_of(tmp_path, run)
+    write_contexts(a, built, a.root)
+    found = review_screens.index(a.root)
+    key = next(k for k in found if k[1] == "s-plan")
+    assert found[key]["occurrences"] >= 2
+    assert found[key]["empty"] == set() and review_screens.view(found[key])["description"]
+    # every visit's description empty: the screen is empty, its description hidden
+    for x in lines:
+        if x.get("screen_id") == "s-plan" and x.get("model") == GEMMA:
+            x["screen"] = ""
+    (run / "descriptions.jsonl").write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+    found = review_screens.index(a.root)
+    assert found[key]["empty"] == {GEMMA} and "description" not in review_screens.view(found[key])
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node.js is not installed")
+def test_a_traffic_line_is_split_into_request_field_excerpt_and_data_type():
+    import subprocess
+
+    script = """
+import(process.argv[1]).then(m => {
+  const g = m.groupTraffic([
+    'P-1a2b: POST https://h.example/v1/x?a=1&b=two · header:9:User-Agent: …Android 14; «sdk_gphone64» Build… (app-info.device)',
+    'POST https://h.example/v1/x?a=1&b=two · body: …"model":"«sdk_gphone64»","hw"… (app-info.device)',
+    'POST https://other.example/p · content encrypted by the application',
+    'not a traffic line',
+  ]);
+  console.log(JSON.stringify(g));
+});"""
+    out = subprocess.run(
+        ["node", "--input-type=module", "-e", script, (rex.TOOL / "public" / "traffic.js").as_uri()],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    groups = json.loads(out.stdout)
+    assert [len(g["findings"]) for g in groups] == [2, 1, 0]
+    request = groups[0]["request"]
+    assert (request["method"], request["host"], request["path"]) == ("POST", "h.example", "/v1/x")
+    assert request["params"] == [["a", "1"], ["b", "two"]]
+    header, body = groups[0]["findings"]
+    assert (header["field"]["label"], header["field"]["name"], header["datum"]) == (
+        "Header",
+        "User-Agent",
+        "sdk_gphone64",
+    )
+    assert (body["field"]["label"], body["node"]) == ("Body", "app-info.device")
+    assert groups[1]["findings"][0]["note"] == "content encrypted by the application"
+    assert groups[2]["raw"] == "not a traffic line"
+    for page in ("expectation.html", "aggregate.html"):
+        text = (rex.TOOL / "public" / page).read_text()
+        assert "traffic-list" in text and "useTraffic(app)" in text and "described-label" in text
