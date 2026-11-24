@@ -341,4 +341,23 @@ def test_the_tool_checks_an_overlap_mark(drawn):
         proc.kill()
         proc.wait()
     page = (rex.TOOL / "public" / "expectation.html").read_text()
-    assert "addOverlap" in page and "nodeHints(p)" in page and "judged on its <b>own</b> wording" in page
+    assert "addOverlap" in page and "nodeHints(p)" in page and "Each purpose on its own wording." in page
+
+
+def test_the_codebooks_cover_what_the_first_run_and_this_rerun_raised():
+    stage1 = (rex.TOOL / "public" / "expectation.html").read_text()
+    for point in (
+        "against what the stage saw",  # not against the provider's documents
+        "One flaw, one question.",
+        "Each purpose on its own wording.",  # nested nodes, overlaps
+        "<i>mostly</i> one detail off",  # the scale: partly was too broad
+        "the level says how far, the reasons\n                say why",
+        "it is not evidence",  # descriptions
+        "before the change",
+        "ancillary",  # role
+        "general technical knowledge",  # steps
+    ):
+        assert point in stage1, point
+    concerns = (rex.TOOL / "public" / "aggregate.html").read_text()
+    for point in ("An <b>experiment</b>", "Not established", "Several members", "Contradicted declarations", "experiment(e)"):
+        assert point in concerns, point

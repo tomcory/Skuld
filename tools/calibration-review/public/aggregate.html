@@ -51,6 +51,13 @@
         .chip.open { background: #e7f1ff; border-color: #0d6efd; color: #0d6efd; }
         .reasons { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem; padding-left: 11.5rem; }
         .other-reason { flex: 1 1 14rem; max-width: 26rem; margin-left: .2rem; }
+        .codebook h6 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; margin: .9rem 0 .35rem; color: #343a40; }
+        .codebook h6:first-child { margin-top: 0; }
+        .codebook ul, .codebook dl, .codebook p { margin-bottom: .4rem; }
+        .codebook li { margin-bottom: .2rem; }
+        .codebook dt { margin-top: .45rem; }
+        .codebook dd { margin-bottom: 0; margin-left: 1rem; }
+        .evidence-card.kind-experiment { border-left-color: #e8590c; }
         [v-cloak] { display: none; }
     </style>
 </head>
@@ -68,76 +75,78 @@
         <button class="btn btn-sm btn-outline-secondary" @click="help = !help"><i class="bi bi-question-circle"></i> Help</button>
     </nav>
 
-    <div class="alert alert-info small" v-if="help">
-        <p class="mb-1"><b>What you judge.</b> Each unit is one <i>aggregated concern</i>: concerns E raised that share a
-            requirement, a step, a status and a key (a data type and purpose, a declared purpose, a declaration the
-            processing contradicts, or a requirement on the documents). You see E's statement, its members, what it rests on and the provider's documents, and judge whether
-            E is right <i>as it states it</i>. Which model produced the unit is not shown.</p>
-        <ul class="mb-1">
-            <li><b>Evidence</b> (<kbd>1</kbd>–<kbd>5</kbd>): the evidence exists and is cited correctly: yes, mostly, partly, no, or none cited.
-                Each evidence item names its source (the practice as observed, traffic as captured, a screen of the app, the
-                provider's documents, documentation or a legal norm from E's corpus, E's expectation stage); a text several
-                members cite is shown once, with how many cite it. The edge of each item shows its source: <span style="color:#12b886">●</span> traffic,
+    <div class="alert alert-info small codebook" v-if="help">
+        <h6>What you judge</h6>
+        <p>Each unit is one <b>aggregated concern</b>: concerns the analysis (E) raised that share a requirement, a step, a
+            status and a subject. You see E's statement and status, its members (each with its reason), the evidence it rests
+            on and, on the right, the provider's documents. Judge whether E is right <b>as it states it</b>, in this order:
+            the evidence, whether the conclusion follows, then your verdict. Which model produced the unit is not shown.
+            Work on your own.</p>
+
+        <h6>The evidence</h6>
+        <ul>
+            <li>Each item's edge shows its source: <span style="color:#12b886">●</span> traffic,
                 <span style="color:#4c6ef5">●</span> a screen, <span style="color:#ae3ec9">●</span> the provider's documents,
-                <span style="color:#f59f00">●</span> E's corpus, <span style="color:#868e96">●</span> a claim; findings in
-                traffic that repeat are folded under the first (<i>+N more like this</i>). A screen may come with a <b>description</b> written by
-                a model (purple box) and a <b>screenshot</b> (click to enlarge, <kbd>Esc</kbd> to close), as E's first stage
-                was given them: the description helps you find your way, but it is a model's reading, not evidence.
-                <i>Yes</i>: every item exists and says what E takes it to say. <i>Mostly</i>: every item exists, one is
-                cited a little loosely (it says almost what E takes it to say). <i>Partly</i>: some items do not, or one
-                sentence is cut into fragments that are counted as separate evidence. <i>No</i>: the items the conclusion
-                rests on do not exist or do not say it.</li>
-            <li><b>Follows</b> (<kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd>): E's conclusion follows from that evidence: yes,
-                mostly, partly, no. <i>Mostly</i>: it follows, slightly overstated or with a small gap. <i>Partly</i>: it follows for some members and not for others, or the conclusion is right but one step
-                to it is wrong. A proposed alternative (data minimisation) counts only if it would still serve the purpose
-                as stated: an identifier that cannot do what the purpose needs is no alternative, however narrow it is.</li>
-            <li>An answer short of a plain yes, <i>mostly</i> or <i>partly</i>, asks <b>why</b>: click one or more of the
-                reasons that open below it (hover a reason for its meaning), or <i>Other</i> and say it in a few words.</li>
-            <li><b>Phrases</b>, for declared purposes: mark each phrase specific, not specific or unsure; <kbd>N</kbd> marks all not
-                specific. Where E holds the phrases not specific, your verdict is derived from them (all as E says: agree; none:
-                disagree; some: partly), and you save with <b>Save</b> (<kbd>S</kbd>).
-                Read a phrase with the sentence or table row it stands in, and with what that sentence directly introduces
-                or illustrates (the list after it, the example that follows) or explicitly refers to; not with explanations
-                found elsewhere in the policy. Fragments of one sentence get the same answer as the sentence. A phrase that
-                is not a purpose at all (a heading, a feature name, a negation, a definition): <i>unsure</i>, and say so in
-                the note.</li>
-            <li><b>Your verdict</b> on the concern as stated (every unit but declared purposes E holds not specific), after the
-                criteria, which explain it: <b>Agree</b> (<kbd>A</kbd>), <b>Disagree</b> (<kbd>D</kbd>), <b>Unsure</b>
-                (<kbd>U</kbd>, left out of the rates; say why in the note). A status "not established" is E saying it could not
-                establish the concern: agree if that is the right call.
-                <ul>
-                    <li><b>Several members</b>: agree if the concern holds for at least half of them; name the others in the
-                        note.</li>
-                    <li><b>Not established</b> is the right call unless the unit itself shows what E needed (e.g. a cited
-                        passage that documents the alternative). If other units seem to decide the same question
-                        differently, say so in the note; do not let it change this verdict.</li>
-                    <li><b>Conditional concerns</b> (e.g. "if a DPO is designated", "if automated decisions are made"): take
-                        the condition as given and judge whether the documents lack what the concern says. If you think the
-                        condition does not apply to this app, say so in the note.</li>
-                    <li><b>Contradicted declarations</b> (a declaration in which the provider denies something, and practices
-                        observed that E holds contradict it): agree if at least one practice listed is something the
-                        declaration, read with its own sentence, denies. Judge the provider's sentence, not the label D
-                        gave it (its data type or recipient may be wrong): if the sentence denies nothing the practices
-                        do, disagree, and say so in the note. A denial of collecting or sharing is not contradicted by
-                        processing that stays on the device. Under a condition (e.g. "the recipient is not a service
-                        provider"), take it as given.</li>
-                    <li><b>Incomplete documents</b>: where a document is visibly incomplete (e.g. a policy captured only as its
-                        headings) and the concern rests on what it does not say, answer <i>unsure</i>.</li>
-                </ul></li>
-            <li>Units of declared purposes show their <b>phrases blind first</b>: judge each phrase specific, not specific or
-                unsure (<kbd>N</kbd>: all not specific) and save (<kbd>S</kbd>) before E's output is revealed; these blind
-                judgments cannot be changed afterwards. With E's output shown, the phrases start from your blind judgments:
-                change any that you now judge differently.</li>
-            <li>Some units are shown <b>blind first</b>: subject and question only. Decide <b>Fails</b> (<kbd>F</kbd>),
-                <b>Holds</b> (<kbd>H</kbd>) or <b>Unsure</b> (<kbd>U</kbd>) before E's output is revealed; the blind decision
-                cannot be changed afterwards.</li>
-            <li><b>Recall pass</b> (<kbd>R</kbd>): once every unit of an application is judged, note what E should have raised
-                for it and did not.</li>
-            <li><kbd>←</kbd> <kbd>→</kbd> previous and next unit, <kbd>O</kbd> next open unit, <kbd>V</kbd> show or hide the
-                evidence, <kbd>/</kbd> search the document.</li>
-            <li>Values in <code>code type</code> (a data type, a purpose node) open their vocabulary when clicked: the tree with
-                the value selected, its description, the broader node, the nodes alongside it and the narrower ones.</li>
+                <span style="color:#f59f00">●</span> E's corpus (documentation, norms),
+                <span style="color:#e8590c">●</span> an experiment, <span style="color:#868e96">●</span> a claim. A text several
+                members cite is shown once, with how many cite it; repeated traffic findings are folded.</li>
+            <li>A screen may come with a screenshot and a <b>model's description</b>: for orientation, not evidence.</li>
+            <li>An <b>experiment</b> is a run of the app with one thing changed: a recipient blocked, an identifier replaced
+                by a fresh one, or the location made coarser, at the app's launch or in a feature (an episode). Each side
+                ran several times, and a check of the feature's purpose decided the outcome: <i>still worked</i> means the
+                feature worked with the change as without it, so the less invasive alternative is shown to serve that
+                purpose.</li>
         </ul>
+
+        <h6>The criteria</h6>
+        <dl>
+            <dt>Evidence exists, cited correctly <span class="text-secondary">(<kbd>1</kbd>–<kbd>5</kbd>)</span></dt>
+            <dd><i>Yes</i>: every item exists and says what E takes it to say. <i>Mostly</i>: one is cited a little loosely.
+                <i>Partly</i>: some items do not say it, or one sentence is cut into fragments counted as separate evidence.
+                <i>No</i>: the items the conclusion rests on do not exist or do not say it. <i>None cited</i>: E cites
+                nothing (the concern rests on what the documents do not say).</dd>
+            <dt>E's conclusion follows <span class="text-secondary">(<kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd>)</span></dt>
+            <dd><i>Yes</i>: it follows. <i>Mostly</i>: slightly overstated, or a small gap. <i>Partly</i>: it follows for
+                some members only, or the conclusion is right but a step to it is wrong. <i>No</i>: it does not follow.
+                A less invasive alternative counts only if it would still serve the purpose as stated: an identifier that
+                cannot do what the purpose needs is no alternative, however narrow.</dd>
+            <dd class="mt-1">For <i>mostly</i> and <i>partly</i>, pick one or more <b>reasons</b> (hover one for its
+                meaning), or <i>Other</i> and say it in a few words: the level says how far, the reasons say why.</dd>
+        </dl>
+
+        <h6>Your verdict</h6>
+        <p><b>Agree</b> (<kbd>A</kbd>), <b>Disagree</b> (<kbd>D</kbd>) or <b>Unsure</b> (<kbd>U</kbd>, left out of the rates;
+            say why in the note), on the concern as stated; the criteria explain it, they do not replace it.</p>
+        <ul>
+            <li><b>Not established</b> is E saying it could not establish the concern: agree if that is the right call, which
+                it is unless the unit itself shows what E needed (e.g. a cited passage documenting the alternative). If
+                other units seem to decide the same question differently, say so in the note; it does not change this
+                verdict.</li>
+            <li><b>Several members</b>: agree if the concern holds for at least half of them; name the others in the
+                note.</li>
+            <li><b>Conditional concerns</b> ("if a DPO is designated"): take the condition as given; if you think it does not
+                apply to this app, say so in the note.</li>
+            <li><b>Contradicted declarations</b>: agree if at least one listed practice is something the declaration, read
+                with its own sentence, denies. Judge the provider's sentence, not the label D gave it. A denial of
+                collecting or sharing is not contradicted by processing that stays on the device.</li>
+            <li><b>Incomplete documents</b> (e.g. a policy captured only as headings), where the concern rests on what they
+                do not say: <i>unsure</i>.</li>
+        </ul>
+
+        <h6>Declared purposes (phrases)</h6>
+        <p>Mark each phrase <i>specific</i>, <i>not specific</i> or <i>unsure</i> (<kbd>N</kbd>: all not specific), first
+            blind, then with E's output (your blind judgments are kept). Read a phrase with its own sentence or table row
+            and what that sentence directly introduces or refers to, not with explanations elsewhere in the policy;
+            fragments of one sentence get the sentence's answer; a phrase that is no purpose (a heading, a feature name, a
+            negation): <i>unsure</i>, with a note. Where E holds the phrases not specific, your verdict is derived from
+            them; save with <kbd>S</kbd>.</p>
+
+        <h6>Also</h6>
+        <p>Some units are shown <b>blind first</b> (subject and question only): decide <b>Fails</b> (<kbd>F</kbd>),
+            <b>Holds</b> (<kbd>H</kbd>) or <b>Unsure</b> (<kbd>U</kbd>); it cannot be changed afterwards. <b>Recall pass</b>
+            (<kbd>R</kbd>), once an app's units are judged: what E should have raised for it and did not. <kbd>←</kbd>
+            <kbd>→</kbd> units, <kbd>O</kbd> next open unit, <kbd>V</kbd> show or hide the evidence, <kbd>/</kbd> search
+            the document. Values in <code>code type</code> open their vocabulary.</p>
     </div>
 
     <div class="alert alert-warning d-flex align-items-center gap-2 small" v-if="recallDue && !recallOpen">
@@ -340,8 +349,9 @@
                                 <div v-for="e in item.evidence" class="evidence-card small" :class="['kind-' + kindOf(e), {'screen-row': e.screenshot}]">
                                     <div v-if="e.screenshot" class="shot-col"><img :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot"><div v-if="e.before_change" class="shot-label">before the change</div></div>
                                     <div :class="e.screenshot ? 'text-col' : ''">
-                                        <div class="text-secondary"><b>{{ e.source || e.kind }}</b><span v-if="item.members.length > 1"> · cited by {{ e.members.length }} of {{ item.members.length }} members</span></div>
+                                        <div class="text-secondary"><b>{{ e.kind === 'run' ? 'an experiment' : (e.source || e.kind) }}</b><span v-if="item.members.length > 1"> · cited by {{ e.members.length }} of {{ item.members.length }} members</span></div>
                                         <traffic-list v-if="e.source === 'traffic as captured'" class="mt-1" :lines="[e.text]"></traffic-list>
+                                        <div v-else-if="e.kind === 'run'" class="text-break">{{ experiment(e) }}</div>
                                         <div v-else class="text-break" v-html="escapeHtml(e.text)"></div>
                                         <div v-if="e.description" class="described"><div class="described-label"><i class="bi bi-chat-square-text"></i> A model's description of the screen, for orientation; not evidence:</div>{{ e.description }}</div>
                                     </div>
@@ -557,6 +567,18 @@ const app = createApp({
             return html.replace(pattern, m => `<mark>${m}</mark>`);
         },
         escapeHtml: t => escape(t),
+        // an experiment's comparison ("the case report's comparison <case>:<purpose>:<alternative> (<outcome>)") in words
+        experiment(e) {
+            const m = /comparison ([^:\s]+):[^:\s]+:(\S+) \((\w+)\)/.exec(e.method || '');
+            if (!m) return e.method || 'an experiment';
+            const [, kase, alt, outcome] = m;
+            const where = kase === 'launch' ? "at the app's launch" : `in a feature (episode ${kase.replace(/^e/, '')})`;
+            const a = /^R-(.+)$/.exec(alt), d = /^D-(.+)$/.exec(alt), g = /^G-round(\d+)$/.exec(alt);
+            const change = a ? `every request to ${a[1]} blocked` : d ? `the ${d[1].replace(/_/g, ' ')} replaced by a fresh one`
+                : g ? `the location rounded to ${g[1]} decimal${g[1] === '1' ? '' : 's'}` : alt;
+            const result = {preserves: 'the feature still worked', breaks: 'the feature failed', undecided: 'undecided'}[outcome] || outcome;
+            return `With ${change}, ${where}: ${result}.`;
+        },
         // a criterion's answer; one that names no reasons drops those picked for another
         setCriterion(c, v) {
             this[c] = v;
@@ -576,8 +598,8 @@ const app = createApp({
         // what an evidence item is: traffic, a screen, the provider's documents, a passage of E's corpus, or a claim
         kindOf(e) {
             const s = e.source || '';
-            return s.startsWith('traffic') ? 'traffic' : s.startsWith('a screen') ? 'screen' : s.startsWith("the provider") ? 'document'
-                : /corpus|norm/.test(s) ? 'passage' : 'claim';
+            return e.kind === 'run' ? 'experiment' : s.startsWith('traffic') ? 'traffic' : s.startsWith('a screen') ? 'screen'
+                : s.startsWith("the provider") ? 'document' : /corpus|norm/.test(s) ? 'passage' : 'claim';
         },
         traffic: t => escape(t).replace(/«([^»]*)»/g, '<mark class="datum">$1</mark>'),
         setPhrase(concern, value) { this.phrases = {...this.phrases, [concern]: value}; },

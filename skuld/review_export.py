@@ -232,12 +232,12 @@ Each sample opens in the browser at its own address (above); close the launcher'
 The page's title says which review it is: **Review of the expectation stage** shows what the analysis's first stage saw
 (traffic, screens, documentation); **Review of aggregated concerns** shows the provider's documents (privacy policy,
 Data safety section, store listing), which those concerns are about.
-**Help** at the top of each page says what each question means, where each answer ends and the next begins (yes,
-partly, no), and lists the keyboard shortcuts. Please read it once before you start, and again when a unit leaves you
-between two answers.
+**Help** at the top of each page is the codebook: what each question means, where each answer ends and the next begins
+(yes, mostly, partly, no), the reasons to pick for an answer short of yes, and the keyboard shortcuts. Please read it
+once before you start, and again when a unit leaves you between two answers.
 
-Please work **independently**: the other reviewer reviews the same samples, and the agreement between you is part of
-the result. You are not told which model produced a unit; please do not try to find out.
+Please work **independently**: other reviewers review the same samples, and the agreement between you is part of the
+result. You are not told which model produced a unit; please do not try to find out.
 
 ### The expectation stage's predictions
 
@@ -246,8 +246,8 @@ analysis predicted for it: the purposes the processing serves and whether the da
 predictions against what the stage saw**, which the right-hand side shows: the practice, its traffic as captured (where
 there is some), the screens of the app where it occurred, and documentation passages. The stage did not see the
 provider's privacy policy, so do not judge against
-it; if you know that the provider says otherwise, say so in the note. **Done** is accepted once every question is
-answered; **Save** keeps a unit half-done.
+it; if you know that the provider says otherwise, say so in the note. The purposes are shown one at a time. **Done** is
+accepted once every question is answered; **Save** keeps a unit half-done.
 
 ### E's aggregated concerns
 

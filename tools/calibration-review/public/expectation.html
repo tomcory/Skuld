@@ -117,6 +117,12 @@
         .nav-tabs .tab-traffic::before { color: #12b886; }
         .nav-tabs .tab-screens::before { color: #4c6ef5; }
         .nav-tabs .tab-passages::before { color: #f59f00; }
+        .codebook h6 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; margin: .9rem 0 .35rem; color: #343a40; }
+        .codebook h6:first-child { margin-top: 0; }
+        .codebook ul, .codebook dl, .codebook p { margin-bottom: .4rem; }
+        .codebook li { margin-bottom: .2rem; }
+        .codebook dt { margin-top: .45rem; }
+        .codebook dd { margin-bottom: 0; margin-left: 1rem; }
         [v-cloak] { display: none; }
     </style>
 </head>
@@ -134,110 +140,95 @@
         <button class="btn btn-sm btn-outline-secondary" @click="help = !help"><i class="bi bi-question-circle"></i> Help</button>
     </nav>
 
-    <div class="alert alert-info small" v-if="help">
-        <p class="mb-1"><b>What you judge.</b> Each unit is one <i>practice</i> (data sent to a recipient, or read on the device)
-            and what E's first stage predicted for it: the purposes the processing serves and whether the data is needed for
-            them. Judge the predictions <b>against what the stage saw</b>: the sentence it was given for the practice (grey
-            box), and on the right the practice's <b>traffic</b> (the requests as captured, the data found in them
-            highlighted), the screens of the episodes it occurred in and the documentation passages. The stage never sees
-            the provider's privacy policy or store listing, so do not judge against them; if you know that the provider
-            says otherwise, say so in the note.
-            A screen may come with a <b>description</b> written by a model (purple box) and a <b>screenshot</b> (click to
-            enlarge, <kbd>Esc</kbd> to close). The stage was given the descriptions and up to eight screenshots per episode;
-            you see every screenshot taken, except of screens with a privacy or consent notice, which the stage never sees. The description helps you find your way; it is a
-            model's reading, not evidence, and E may not cite it. The screenshot shows the screen as the user saw it.
-            Screens in a grey block are <b>one visit</b>: the same screen whose content changed in place (text typed, a
-            box ticked, a page loaded). They share one screenshot and one description, taken when the visit began; a
-            screen marked <i>before the change</i> shows that earlier state, since no screenshot was taken of its own.
-            Which model produced the unit is not shown.</p>
-        <p class="mb-1"><b>Each question on its own.</b> A flaw counts once, in the question it belongs to: an implausible
-            purpose is a <i>no</i> on Plausible, not also on its node, need or steps. Judge the node, the need and the steps
-            for the purpose <i>as E states it</i>, even where you find the purpose itself implausible. A purpose that repeats
-            another is judged on its own; mark the repetition under <i>Overlaps</i>. Answer <i>unsure</i> only where the context
-            does not let you decide, and say why in the note.</p>
-        <ul class="mb-1">
-            <li><b>Plausible</b>: a plausible purpose for this flow, given the context. Ask yourself how much you would have
-                to change E's wording before you would sign it.
-                <ul>
-                    <li><i>Yes</i>: nothing. Someone who knows the recipient and sees this flow would name this purpose as
-                        E states it.</li>
-                    <li><i>Mostly</i>: one phrase. It is the right purpose with one detail off, e.g. <i>personalised</i>
-                        advertising where the flow shows only ad delivery: strike "personalised" and you would sign it.</li>
-                    <li><i>Partly</i>: a rewrite. Something in it is right, but a substantial part is wrong or unsupported,
-                        or it explains only a minor part of the flow, e.g. "analytics and fraud prevention" for an ad
-                        network's ID sync, of which only a fraud check is at all plausible.</li>
-                    <li><i>No</i>: it does not fit what the recipient does, e.g. app performance analytics for an ad-tech
-                        ID sync.</li>
-                </ul>
-                For <i>mostly</i> and <i>partly</i>, click one or more reasons (hover a reason for its meaning):
-                <i>Overstates</i> (asserts a detail the context does not show), <i>Too vague</i> (too broad or generic
-                to say what the recipient does), <i>Bundles purposes</i> (two or more purposes in one, e.g. analytics
-                and advertising), <i>Part of the flow</i> (explains only part of what is sent, or to whom), <i>Loose
-                fit</i> (the recipient could do this, but the flow gives little sign of it), or <i>Other</i>, which opens a
-                field for a reason of your own (a few words). The reasons say why it is
-                not a plain yes; the level says how far it is from one: an overstated detail is usually <i>mostly</i>,
-                a loose fit usually <i>partly</i>.</li>
-            <li><b>Node</b>: the DPV purpose node: exact, too broad, too narrow, wrong (name a better one if you can), for the
-                purpose as E words it. A purpose whose node is broader or narrower than another purpose's node of the same
-                practice (e.g. <code>Advertising</code> and <code>TargetedAdvertising</code>) is judged on its <b>own</b> wording: do
-                not mark it too broad or too narrow because of the other, and do not mark it down on Plausible for it.</li>
-            <li><b>Overlaps</b> (optional): if a purpose is the same as another purpose of the practice, or a broader or
-                narrower form of it, say so here (pick the other purpose, then <i>same</i>, <i>broader</i> or
-                <i>narrower</i>: this purpose is a broader form of the other, or a narrower one). The DPV tree and a grey hint
-                under the row show where the nodes overlap, but judge the purposes, not only their nodes. Overlaps are
-                counted apart; they change no other answer.</li>
-            <li><b>Beneficiary</b> (user, provider, other) and <b>role</b> (functional: the feature the user uses; ancillary:
-                anything else): right or wrong. Functional means the feature the user is using needs this processing;
-                ads, consent dialogs, analytics, and fonts or resources loaded for an ad are ancillary even when they appear
-                on the screen. Where the screens do not show which, decide by what the recipient does; <i>unsure</i> only if
-                it serves both.</li>
-            <li><b>Cited parts show its outcome</b>, for a purpose E holds supported: the parts it cites (tab <i>Cited for</i>
-                on the right) show what the purpose achieves.
-                <i>Yes</i>: they show that this purpose's outcome happens in this app, including what sets it apart (for
-                personalised ads, something showing personalisation, not just that ads appear).
-                <i>Mostly</i>: they show it, with a minor gap: one cited part is beside the point, or the distinguishing
-                detail is suggested rather than shown.
-                <i>Partly</i>: they show only the broader activity (ads appear), or only some of the cited parts show it.
-                <i>No</i>: none of them shows it, e.g. only a general guideline or documentation passage.</li>
-            <li>Per <b>need</b> E stated (is the data, or the recipient, essential / quality-dependent / not needed for the
-                purpose): is that plausible, and do E's <b>steps</b> follow from what they cite? Each step's citations are
-                chips (<i class="bi bi-arrow-left-right"></i> traffic, <i class="bi bi-phone"></i> screen,
-                <i class="bi bi-book"></i> passage): click one to read the cited text, hover for a preview. A need E holds
-                not assessable is not asked; its reasoning can be shown.
-                <ul>
-                    <li><b>Stated need plausible</b>. <i>Yes</i>: it is the level you would choose. <i>Mostly</i>: defensible,
-                        though you would lean to the neighbouring level (a borderline case). <i>Partly</i>: clearly one level
-                        off (essential where quality-dependent fits, quality-dependent where not needed fits, or the reverse).
-                        <i>No</i>: two levels off (essential against not needed).</li>
-                    <li><b>Steps follow from what they cite</b>, whether or not you agree with the level (that is the
-                        question above). A step counts as supported if what it cites shows it, or if it is general technical
-                        knowledge you would accept without a source (e.g. that a WebView sends a User-Agent).
-                        <i>Yes</i>: every step the conclusion rests on is supported. <i>Mostly</i>: a minor step is
-                        unsupported, but the conclusion does not rest on it. <i>Partly</i>: at least one such step
-                        is an uncited claim about this app or recipient, or contradicts what it cites, but the other steps
-                        still carry the conclusion. <i>No</i>: without the unsupported steps nothing carries the
-                        conclusion.</li>
-                </ul></li>
-            <li>Every answer short of a plain yes, <i>mostly</i> or <i>partly</i>, asks <b>why</b>: click one or more of the
-                reasons that open below it (hover a reason for its meaning), or <i>Other</i> and say it in a few words. The
-                level says how far the answer is from a yes; the reasons say why.</li>
-            <li><b>Missed</b>: a purpose E should have predicted and did not; tick functional if it is the feature's own.</li>
-            <li><b>Values in <code>code type</code></b> (a data type, a purpose node) open their vocabulary when clicked: the tree
-                with the value selected (marked "shown in the unit"), its description, the broader node, the nodes alongside
-                it and the narrower ones, to judge whether it is exact, too broad or too narrow.</li>
-            <li><b>DPV node fields</b> (a missed purpose, a better node): type part of a name for suggestions
-                (<kbd>↓</kbd> <kbd>↑</kbd> <kbd>Enter</kbd>), or click <i class="bi bi-diagram-3"></i> to browse the DPV purposes as a
-                tree, filter it, read each node's description and select one.</li>
-            <li>The purposes are shown <b>one at a time</b>: the bar above them shows which one (its number) and how many of
-                each one's questions are answered (a tick when all are); move with the numbers, the arrows, the button at
-                the end of each purpose, or <kbd>J</kbd> (next) and <kbd>K</kbd> (previous). On the right, <i>Cited for</i>
-                shows what E cites for the purpose you are on; the other tabs hold all the traffic, screens and passages
-                the stage was given, colour-coded: <span style="color:#12b886">●</span> traffic, <span style="color:#4c6ef5">●</span>
-                screens, <span style="color:#f59f00">●</span> passages. Findings that repeat (the same field, datum and data
-                type) are folded under the first: open them with <i>+N more like this</i>.</li>
-            <li><kbd>←</kbd> <kbd>→</kbd> previous and next practice, <kbd>O</kbd> next open one, <kbd>S</kbd> save,
-                <kbd>Enter</kbd> save as done, <kbd>/</kbd> search the context.</li>
+    <div class="alert alert-info small codebook" v-if="help">
+        <h6>What you judge</h6>
+        <p>Each unit is one <b>practice</b> of an app (the box at the top: data sent to a recipient, or read on the device)
+            and the <b>purposes</b> the analysis's first stage (E) predicted for it, each with the <b>needs</b> it stated
+            (is the data, or the recipient, essential for the purpose?). Judge them <b>against what the stage saw</b>: the
+            sentence it was told (grey box) and, on the right, its traffic, screens and documentation passages. The stage
+            never saw the provider's privacy policy or store listing: do not judge against them; if you know the provider
+            says otherwise, put it in the note. Which model produced the unit is not shown. Work on your own.</p>
+
+        <h6>Reading the context (right)</h6>
+        <ul>
+            <li><b>Cited for</b> (opens first) shows what E cites for the purpose you are on: traffic, then screens, then
+                documentation. The other tabs hold everything the stage was given:
+                <span style="color:#12b886">●</span> traffic, <span style="color:#4c6ef5">●</span> screens,
+                <span style="color:#f59f00">●</span> passages (documentation and norms).</li>
+            <li><b>Traffic</b>: per request its method and address, where the data was found (a header, the body, the URL)
+                and the data <mark class="datum">highlighted</mark>. Findings that repeat with only numbers changed are
+                folded: <i>+N more like this</i>.</li>
+            <li><b>Screens</b>: the screen's texts, a <b>screenshot</b> (click to enlarge) and a <b>model's description</b>.
+                The description helps you find your way; it is not evidence, and E may not cite it. Some screens have none
+                (the model gave none, or gave an empty one). The stage was sent up to eight screenshots per episode; you see
+                all that were taken, except of screens with a privacy or consent notice, which the stage never sees.</li>
+            <li>A <b>grey block</b> is one visit: the same screen, its content changed in place (text typed, a box ticked).
+                It has one screenshot and one description; <i>before the change</i> marks a screen shown by its earlier
+                state.</li>
         </ul>
+
+        <h6>Rules for every question</h6>
+        <ul>
+            <li><b>One flaw, one question.</b> An implausible purpose is a <i>no</i> on Plausible, not also on its node, need
+                or steps. Judge the node, the needs and the steps for the purpose <i>as E states it</i>, even if you find it
+                implausible.</li>
+            <li><b>Each purpose on its own wording.</b> If two purposes overlap (the same purpose twice, or one a broader
+                form of the other, e.g. <code>Advertising</code> and <code>TargetedAdvertising</code>), judge each as
+                written, do not mark one down because of the other, and record the overlap under <b>Overlaps</b>.</li>
+            <li><b>The levels:</b> <i>yes</i> as stated; <i>mostly</i> one detail off (you would accept it after changing
+                one phrase); <i>partly</i> something is right but it needs a rewrite, or holds for only part of what is
+                asked; <i>no</i> it does not hold. For <i>mostly</i> and <i>partly</i>, pick one or more <b>reasons</b>
+                (hover one for its meaning), or <i>Other</i> and say it in a few words: the level says how far, the reasons
+                say why.</li>
+            <li><b><i>Unsure</i></b> only where the context does not let you decide; say why in the note.</li>
+        </ul>
+
+        <h6>The questions</h6>
+        <dl>
+            <dt>Plausible purpose</dt>
+            <dd>Would someone who knows the recipient, seeing this flow, name this purpose? How much would you change E's
+                wording before you sign it? <i>Yes</i>: nothing. <i>Mostly</i>: one phrase, e.g. <i>personalised</i>
+                advertising where the flow shows only ad delivery. <i>Partly</i>: a rewrite, e.g. "analytics and fraud
+                prevention" where only a fraud check is plausible, or it explains only part of the flow. <i>No</i>: it does
+                not fit what the recipient does, e.g. app performance analytics for an ad network's ID sync.</dd>
+            <dt>DPV node</dt>
+            <dd>The node for the purpose as E words it: <i>exact</i>, <i>too broad</i>, <i>too narrow</i>, <i>wrong</i>
+                (name a better one if you can). Click the node to see it in the DPV tree, with the practice's other
+                purposes marked (P2, P3 …).</dd>
+            <dt>Beneficiary and role</dt>
+            <dd><i>Right</i> or <i>wrong</i>. Role is <i>functional</i> only if the feature the user is using needs the
+                processing; ads, consent dialogs, analytics, and resources loaded for an ad are <i>ancillary</i>, even when
+                they appear on screen. Where the screens do not show which, decide by what the recipient does.</dd>
+            <dt>Cited parts show its outcome <span class="text-secondary">(purposes E holds supported)</span></dt>
+            <dd>Do the cited parts show the purpose's outcome happening in this app, including what sets it apart (for
+                personalised ads, something personalised, not just ads)? <i>Mostly</i>: a minor gap. <i>Partly</i>: only
+                the broader activity, or only some parts. <i>No</i>: none, e.g. only a general guideline.</dd>
+            <dt>Overlaps <span class="text-secondary">(optional)</span></dt>
+            <dd>Pick the other purpose, then <i>same</i>, <i>broader</i> (this one is a broader form of it) or
+                <i>narrower</i>. A grey hint shows where the DPV nodes nest; judge the purposes, not only the nodes.
+                Overlaps change no other answer.</dd>
+            <dt>Stated need plausible <span class="text-secondary">(per need)</span></dt>
+            <dd>Is the level E states (essential / quality-dependent / not needed) the one you would choose? <i>Mostly</i>:
+                defensible, but you lean to the neighbouring level. <i>Partly</i>: clearly one level off. <i>No</i>: two
+                levels off (essential against not needed).</dd>
+            <dt>Steps follow from what they cite <span class="text-secondary">(per need)</span></dt>
+            <dd>Regardless of the level. A step is supported if what it cites shows it (click a chip to read it), or if it is
+                general technical knowledge you would accept without a source (e.g. a WebView sends a User-Agent).
+                <i>Yes</i>: every step the conclusion rests on is supported. <i>Mostly</i>: a minor step is not, but the
+                conclusion does not rest on it. <i>Partly</i>: a step it rests on is an uncited claim about this app or
+                recipient, or contradicts what it cites, but the rest still carries the conclusion. <i>No</i>: without the
+                unsupported steps nothing carries it. A need E holds not assessable is not asked.</dd>
+            <dt>Purposes E missed</dt>
+            <dd>A purpose E should have predicted and did not; tick <i>functional</i> if it is the feature's own.</dd>
+        </dl>
+
+        <h6>Moving around</h6>
+        <p>Purposes are shown one at a time: the bar above them shows each one's progress (a tick when complete); move with
+            the numbers, the arrows, <i>Next purpose</i>, or <kbd>J</kbd> / <kbd>K</kbd>. <kbd>←</kbd> <kbd>→</kbd> practices,
+            <kbd>O</kbd> next open one, <kbd>S</kbd> save, <kbd>Enter</kbd> done (once every question is answered; the
+            links under <i>Done</i> lead to what is missing), <kbd>/</kbd> search the context. Values in
+            <code>code type</code> open their vocabulary; DPV fields suggest nodes as you type, or browse with
+            <i class="bi bi-diagram-3"></i>.</p>
     </div>
 
     <div class="row g-3" v-if="item">
