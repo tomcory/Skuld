@@ -149,6 +149,38 @@
             never saw the provider's privacy policy or store listing: do not judge against them; if you know the provider
             says otherwise, put it in the note. Which model produced the unit is not shown. Work on your own.</p>
 
+        <h6>What stage 1 gave <span class="text-secondary fw-normal" style="text-transform: none; letter-spacing: 0">(hover any of these on the page for the same text)</span></h6>
+        <dl>
+            <dt>The practice (top box)</dt>
+            <dd>What the observation saw the app do. Its type:</dd>
+            <dd><ul class="mb-0"><li v-for="(t, k) in PRACTICE_TEXT"><i>{{ k }}</i>: {{ t }}</li></ul></dd>
+            <dd><i>What stage 1 was told</i> names the data type and the recipient (an organisation from the register,
+                with what it is registered as). The episodes are the parts of the exploration the practice occurred in.
+                The recipient's relation, in brackets:</dd>
+            <dd><ul class="mb-0"><li v-for="(t, k) in RELATION_TEXT"><i>{{ k }}</i>: {{ t }}</li></ul></dd>
+            <dt>A purpose</dt>
+            <dd>{{ PURPOSE_PARTS_TEXT }}</dd>
+            <dd><ul class="mb-0">
+                <li><i>Beneficiary</i>: <template v-for="(t, k, i) in BENEFICIARY_TEXT">{{ i ? '; ' : '' }}<i>{{ k }}</i>, {{ t }}</template>.</li>
+                <li><i>Role</i>: <template v-for="(t, k, i) in ROLE_TEXT">{{ i ? '; ' : '' }}<i>{{ k }}</i>, {{ t }}</template>.</li>
+                <li><i>Specificity</i>: <template v-for="(t, k, i) in SPECIFICITY_TEXT">{{ i ? '; ' : '' }}<i>{{ k }}</i>, {{ t }}</template>.</li>
+                <li><i>n answers</i>: {{ SAMPLES_TEXT }}. A purpose that few answers gave is no worse for it: judge it on its own.</li>
+            </ul></dd>
+            <dt>A purpose's status <span class="badge text-bg-primary">E: …</span></dt>
+            <dd v-for="(t, k) in PURPOSE_STATUS"><i>{{ k.replace('_', ' ') }}</i>: {{ t }}.</dd>
+            <dt>A need</dt>
+            <dd>{{ NEED_TEXT }}</dd>
+            <dd><ul class="mb-0"><li v-for="(t, k) in RELATIONSHIP_TEXT"><i>{{ k.replace('_', ' ') }}</i>: {{ t }}</li></ul></dd>
+            <dd>A step may cite traffic to say what is sent, but traffic or the practice alone never shows that the data is
+                needed (the <b>citation rule</b>): E drops such steps when it decides the need's status, but you still see them.
+                The need's status:</dd>
+            <dd v-for="(t, k) in NEED_STATUS"><i>{{ k.replace('_', ' ') }}</i>: {{ t }}.</dd>
+            <dt>“Why E holds it …”</dt>
+            <dd><ul class="mb-0"><li v-for="(t, k) in WHY_TEXT"><i>{{ k }}</i>: {{ t }}</li></ul></dd>
+        </dl>
+        <p>The statuses are E's own reading of its answers, not a verdict you check: judge each purpose and need on the
+            questions below, whatever E's status. A <i>not established</i> purpose can still be plausible.</p>
+
         <h6>Reading the context (right)</h6>
         <ul>
             <li><b>Cited for</b> (opens first) shows what E cites for the purpose you are on: traffic, then screens, then
@@ -243,10 +275,10 @@
                     <div class="subject">
                         <div class="subject-label">The practice the purposes below are about</div>
                         <div class="subject-line">
-                            <span class="subject-verb">{{ verb(item.practice.type) }}</span>{{ ' ' }}
+                            <span class="subject-verb" :title="PRACTICE_TEXT[item.practice.type] || ''">{{ verb(item.practice.type) }}</span>{{ ' ' }}
                             <vocab-term kind="data" :id="item.practice.data"></vocab-term>
                             <span v-if="item.practice.recipient"> → <b>{{ item.practice.recipient }}</b>
-                                <span class="text-secondary small" v-if="item.practice.relation">({{ item.practice.relation }})</span></span>
+                                <span class="text-secondary small" v-if="item.practice.relation" :title="RELATION_TEXT[item.practice.relation] || ''">({{ item.practice.relation === '?' ? 'own or other: unknown' : item.practice.relation }})</span></span>
                             <span v-else class="text-secondary"> on the device</span>
                         </div>
                         <div class="subject-told" v-if="item.told"><div class="subject-label">What stage 1 was told</div>{{ item.told }}</div>
@@ -271,15 +303,15 @@
                         <div class="purpose-head d-flex justify-content-between flex-wrap gap-1">
                             <b>{{ label(p.key) }} · {{ p.action }} {{ p.object }}<span v-if="p.outcome">, {{ p.outcome }}</span></b>
                             <span>
-                                <span class="badge" :class="statusClass(p.status)" :title="statusTitle(p.status)">E: {{ p.status.replace('_', ' ') }}</span>
-                                <span class="badge text-bg-light border ms-1" title="how many of E's answers (per episode and seed) gave this purpose">{{ p.samples }} {{ p.samples === 1 ? 'answer' : 'answers' }}</span>
+                                <span class="badge" :class="statusClass(p.status)" :title="PURPOSE_STATUS[p.status] || p.status">E: {{ p.status.replace('_', ' ') }}</span>
+                                <span class="badge text-bg-light border ms-1" :title="SAMPLES_TEXT">{{ p.samples }} {{ p.samples === 1 ? 'answer' : 'answers' }}</span>
                             </span>
                         </div>
                         <div class="purpose-meta small mt-1">
-                            node <vocab-term kind="purpose" :id="p.node"></vocab-term> · beneficiary <b>{{ p.beneficiary }}</b> · role <b>{{ p.role }}</b>
-                            · specificity {{ p.specificity }}<span v-if="p.context"> · context: {{ p.context }}</span>
+                            node <vocab-term kind="purpose" :id="p.node"></vocab-term> · beneficiary <b :title="BENEFICIARY_TEXT[p.beneficiary] || ''">{{ p.beneficiary }}</b> · role <b :title="ROLE_TEXT[p.role] || ''">{{ p.role }}</b>
+                            · specificity <span :title="SPECIFICITY_TEXT[p.specificity] || ''">{{ p.specificity }}</span><span v-if="p.context"> · context: {{ p.context }}</span>
                         </div>
-                        <div class="why" v-if="p.reason">Why E holds it {{ p.status.replace('_', ' ') }}: {{ p.reason }}</div>
+                        <div class="why" v-if="p.reason" :title="WHY_TEXT[p.reason] || ''">Why E holds it {{ p.status.replace('_', ' ') }}: {{ p.reason }}</div>
                         <div class="why" v-if="p.evidence.length">{{ p.evidence.length }} cited {{ p.evidence.length === 1 ? 'part' : 'parts' }}: tab <i>Cited for {{ label(p.key) }}</i> on the right</div>
 
                         <div class="q" v-for="q in asked(p)" :key="q">
@@ -322,12 +354,12 @@
                         <div v-for="d in p.dependencies" :key="d.key" class="dependency small">
                             <div class="d-flex justify-content-between gap-2">
                                 <span><b>{{ label(d.key) }}</b> · E: the <b>{{ d.component || 'data' }}</b> is
-                                    <b>{{ (d.relationship || '?').replace('_', ' ') }}</b> for this purpose</span>
-                                <span><span class="badge" :class="statusClass(d.status)" :title="statusTitle(d.status)">E: {{ d.status.replace('_', ' ') }}</span></span>
+                                    <b :title="RELATIONSHIP_TEXT[d.relationship] || ''">{{ (d.relationship || '?').replace('_', ' ') }}</b> for this purpose</span>
+                                <span><span class="badge" :class="statusClass(d.status)" :title="NEED_STATUS[d.status] || d.status">E: {{ d.status.replace('_', ' ') }}</span></span>
                             </div>
                             <div class="not-asked mt-1" v-if="!d.asked">Not asked: E holds this need not assessable<span v-if="d.reason === 'the purpose is too vague'">,
                                 because in every one of E's answers that state it the purpose was too vague to judge it</span><span v-else-if="d.reason">: {{ d.reason }}</span>.</div>
-                            <div class="why" v-else-if="d.reason">Why E holds it {{ d.status.replace('_', ' ') }}: {{ d.reason }}</div>
+                            <div class="why" v-else-if="d.reason" :title="WHY_TEXT[d.reason] || ''">Why E holds it {{ d.status.replace('_', ' ') }}: {{ d.reason }}</div>
                             <button v-if="!d.asked && d.steps.length" class="btn btn-link btn-sm p-0" @click.stop="toggle(d.key)">
                                 <i class="bi" :class="expanded.has(d.key) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
                                 {{ expanded.has(d.key) ? 'hide' : 'show' }} E's reasoning ({{ d.steps.length }} {{ d.steps.length === 1 ? 'step' : 'steps' }})</button>
@@ -473,13 +505,55 @@ import {useTraffic} from '/traffic.js';
 const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 const labels = {plausible: 'Plausible purpose', node: 'DPV node', beneficiary: 'Beneficiary', role: 'Role',
                 cites: 'Cited parts show its outcome', relationship: 'Stated need plausible', steps: 'Steps follow from what they cite'};
-const STATUS = {supported: 'the cited context shows it', not_established: 'E could not show it from the context',
-                not_assessable: 'E could not judge it', conflicted: "E's answers disagree"};
+// What stage 1 (E) gave, in words: the page's hover texts and the codebook's section "What stage 1 gave" (one source for both)
+const PRACTICE_TEXT = {
+    transmits: 'the app sent the data to the recipient (seen in its traffic)',
+    accesses: 'the app read the data on the device (e.g. an identifier from the system)',
+    stores: 'the app wrote the data to storage on the device',
+    performs: 'the app processed the data on the device in another way than reading or storing it',
+};
+const RELATION_TEXT = {
+    own: "the recipient is the provider itself (its register owner is the provider, or its domain is the provider's)",
+    other: 'the recipient belongs to another, known organisation (a legal role such as processor is not implied)',
+    '?': 'whether the recipient is the provider or another organisation could not be decided',
+};
+const PURPOSE_PARTS_TEXT = 'E states each purpose as an action and an object (the headline), a context, and an outcome: what the processing is for. It also names a DPV node, a beneficiary and a role.';
+const BENEFICIARY_TEXT = {user: 'the user benefits from the purpose', provider: "the app's provider benefits", other: 'another party benefits (e.g. an ad network or an analytics company)'};
+const ROLE_TEXT = {functional: 'it serves something the user does on the screens', ancillary: 'it serves something other than what the user does (ads, analytics, consent, fraud checks …)'};
+const SPECIFICITY_TEXT = {sufficient: 'E could state the purpose specifically (action, object and outcome)', vague: 'E marked the purpose as not specific, or left a part of it open'};
+const SAMPLES_TEXT = "how many of E's answers gave this purpose: E answered once per episode the practice occurred in and per seed, and the answers are combined";
+const PURPOSE_STATUS = {
+    supported: "a screen or passage E cites shows the purpose's outcome (traffic and the practice itself do not count: they show that the processing happens, not what it is for)",
+    not_established: "E stated the purpose but could not show it from the context (see “Why”)",
+    not_assessable: 'E could not judge it',
+    conflicted: "E's answers disagree about it",
+};
+const NEED_TEXT = 'For each purpose and each component of the practice (the data; for a transmission also the recipient), E states how far the purpose depends on it, with numbered steps that cite the context:';
+const RELATIONSHIP_TEXT = {
+    essential: 'the purpose cannot be achieved without it',
+    quality_dependent: 'the purpose is achieved without it, but less well',
+    not_dependent: 'the purpose is achieved as well without it',
+};
+const NEED_STATUS = {
+    supported: 'steps remain after the citation rule, and each cites the context',
+    not_established: 'E stated the need but could not ground it in the context (see “Why”)',
+    not_assessable: 'not judged: the purpose was too vague to state a need for (not asked of you)',
+    conflicted: "E's answers disagree about it",
+};
+const WHY_TEXT = {
+    'too vague': 'E marked the purpose as not specific',
+    'no screen or passage shows its outcome': "no screen or passage E cites shows the purpose's outcome",
+    'a step does not cite the context': 'a step cites nothing of the context (E\'s own knowledge)',
+    'no step is left that grounds the need': 'every step was dropped by the citation rule: a step may not cite the practice, or only traffic, to show the data is needed',
+    'not dependent needs a run without the component': 'not dependent can only be shown by an experiment without the component, never from the context',
+    'the purpose is too vague': 'the purpose was too vague to state a need for',
+};
+const STATUS = PURPOSE_STATUS;
 const ICON = {traffic: 'bi-arrow-left-right', screen: 'bi-phone', passage: 'bi-book', practice: 'bi-eye', application: 'bi-app'};
 const GOOD = ['yes', 'exact', 'right'];
 const BAD = ['no', 'wrong'];
 const app = createApp({
-    data: () => ({progress: null, item: null, help: false, labels, purposes: {}, dependencies: {}, missed: [], note: '',
+    data: () => ({progress: null, item: null, help: false, labels, PRACTICE_TEXT, RELATION_TEXT, PURPOSE_PARTS_TEXT, BENEFICIARY_TEXT, ROLE_TEXT, SPECIFICITY_TEXT, SAMPLES_TEXT, PURPOSE_STATUS, NEED_TEXT, RELATIONSHIP_TEXT, NEED_STATUS, WHY_TEXT, purposes: {}, dependencies: {}, missed: [], note: '',
                   focus: null, tab: 'evidence', query: '', vocabs: {purpose: [], data: []}, browser: null, expanded: new Set(), zoom: null, overlapWith: ''}),
     provide() { return {openVocab: (kind, id) => this.openVocab(kind, id)}; },
     computed: {
