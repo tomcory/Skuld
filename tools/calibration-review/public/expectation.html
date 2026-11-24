@@ -124,6 +124,9 @@
         .codebook dt { margin-top: .45rem; }
         .codebook dd { margin-bottom: 0; margin-left: 1rem; }
         [v-cloak] { display: none; }
+        .rule-link { color: #adb5bd; margin-left: .2rem; cursor: pointer; text-transform: none; }
+        .rule-link:hover { color: #0d6efd; }
+        .rule-flash { background: #fff3bf; transition: background .3s; }
     </style>
 </head>
 <body>
@@ -141,13 +144,101 @@
     </nav>
 
     <div class="alert alert-info small codebook" v-if="help">
+        <h6>Words used here</h6>
+        <p>The analysis has three parts: <b>O</b> observes what the app does (its traffic, what it reads on the device),
+            <b>D</b> reads what the provider declares (privacy policy, store listing), and <b>E</b> compares the two
+            against data protection requirements. A <b>practice</b> is one observed processing: data sent to a recipient,
+            or read on the device. E's <b>stage 1</b>, reviewed here, predicts what each practice is for (its
+            <b>purposes</b>) and how far each purpose depends on the data and the recipient (its <b>needs</b>), without
+            seeing anything the provider declares. Its later stage raises concerns, reviewed on the other page.</p>
+
         <h6>What you judge</h6>
-        <p>Each unit is one <b>practice</b> of an app (the box at the top: data sent to a recipient, or read on the device)
-            and the <b>purposes</b> the analysis's first stage (E) predicted for it, each with the <b>needs</b> it stated
-            (is the data, or the recipient, essential for the purpose?). Judge them <b>against what the stage saw</b>: the
-            sentence it was told (grey box) and, on the right, its traffic, screens and documentation passages. The stage
-            never saw the provider's privacy policy or store listing: do not judge against them; if you know the provider
-            says otherwise, put it in the note. Which model produced the unit is not shown. Work on your own.</p>
+        <p>Each unit is one practice (top box) and the purposes and needs stage 1 predicted for it. Judge them <b>against
+            what the stage saw</b>: the sentence it was told (grey box) and, on the right, its traffic, screens and
+            documentation passages. The stage never saw the provider's privacy policy or store listing: do not judge
+            against them; if you know the provider says otherwise, put it in the note. Which model produced the unit is not
+            shown. Work on your own.</p>
+        <p><b>What you may use:</b> the context, general knowledge of the domain (what an ad network or an analytics
+            service does), and web searches about a recipient or service (its documentation, what it is). Say in the note
+            what you looked up. A claim E makes about <i>this app</i> still needs the context.</p>
+
+        <h6>Rules for every question</h6>
+        <ul>
+            <li><b>One scale.</b> <i>Yes</i>: you would sign it as it is. <i>Mostly</i>: after a small fix (one phrase, one
+                loose citation, a neighbouring level). <i>Partly</i>: part of it is right and part is wrong or missing; it
+                needs a rewrite. <i>No</i>: it does not hold. For <i>mostly</i> and <i>partly</i>, pick one or more
+                <b>reasons</b> (hover one for its meaning), or <i>Other</i> and say it in a few words: the level says how
+                far, the reasons say why.</li>
+            <li><b>One flaw, one question.</b> An implausible purpose is a <i>no</i> on Plausible, not also on its node, need
+                or steps. Judge the node, the needs and the steps for the purpose <i>as E states it</i>, even if you find it
+                implausible.</li>
+            <li><b>Each purpose on its own wording.</b> If two purposes overlap (the same purpose twice, or one a broader
+                form of the other, e.g. <code>Advertising</code> and <code>TargetedAdvertising</code>), judge each as
+                written, do not mark one down because of the other, and record the overlap under <b>Overlaps</b>.</li>
+            <li><b>E's status is not the question.</b> Judge each purpose and need on the questions, whatever E's status: a
+                <i>not established</i> purpose can still be plausible.</li>
+            <li><b><i>Unsure</i></b> only where the context and a search do not let you decide; say why in the note.</li>
+        </ul>
+
+        <h6>The questions <span class="text-secondary fw-normal" style="text-transform: none; letter-spacing: 0">(the <i class="bi bi-info-circle"></i> beside a question on the page opens its rule here)</span></h6>
+        <dl>
+            <dt id="rule-plausible">Plausible purpose</dt>
+            <dd>Would someone who knows the recipient, seeing this flow, name this purpose? How much would you change E's
+                wording before you sign it? <i>Yes</i>: nothing. <i>Mostly</i>: one phrase, e.g. <i>personalised</i>
+                advertising where the flow shows only ad delivery. <i>Partly</i>: a rewrite, e.g. "analytics and fraud
+                prevention" where only a fraud check is plausible, or it explains only part of the flow. <i>No</i>: it does
+                not fit what the recipient does, e.g. app performance analytics for an ad network's ID sync.</dd>
+            <dt id="rule-node">DPV node</dt>
+            <dd>The node for the purpose as E words it. <i>Exact</i>: the most specific DPV node that covers the wording.
+                <i>Too broad</i>: a more specific node covers it fully (<code>Advertising</code> for "ads chosen by your
+                interests", where <code>TargetedAdvertising</code> fits). <i>Too narrow</i>: the node covers less than the
+                wording. <i>Wrong</i>: another branch (name a better one if you can). A broad node is <i>exact</i> where no
+                narrower node fits. Click the node to see it in the DPV tree, with the practice's other purposes marked
+                (P2, P3 …).</dd>
+            <dt id="rule-beneficiary">Beneficiary</dt>
+            <dd>Whose interest the purpose serves, as worded; where two fit, the one the processing exists for:
+                <ul class="mb-0">
+                    <li><i>user</i>: a feature the user uses (syncing notes, a map, signing in, the weather where they are);</li>
+                    <li><i>provider</i>: the app provider's own interest: its analytics and crash reports, revenue from ads it
+                        shows, attribution of installs, fraud and security checks;</li>
+                    <li><i>other</i>: the recipient's or a third party's own interest: building its profiles, targeting ads
+                        across apps, data it passes on.</li>
+                </ul>
+                <i>Right</i> or <i>wrong</i>; ads in the app are the provider's unless the purpose as worded is the
+                recipient's own profiling.</dd>
+            <dt id="rule-role">Role</dt>
+            <dd><i>Right</i> or <i>wrong</i>. <i>Functional</i> only if the feature the user is using needs the processing;
+                ads, consent dialogs, analytics, and resources loaded for an ad are <i>ancillary</i>, even when they appear
+                on screen. Where the screens do not show which, decide by what the recipient does.</dd>
+            <dt id="rule-cites">Cited parts show its outcome <span class="text-secondary">(purposes E holds supported)</span></dt>
+            <dd>Do the cited parts show the purpose's outcome happening in this app, including what sets it apart (for
+                personalised ads, something personalised, not just ads)? <i>Mostly</i>: a minor gap. <i>Partly</i>: only
+                the broader activity, or only some parts. <i>No</i>: none, e.g. only a general guideline.</dd>
+            <dt id="rule-overlaps">Overlaps <span class="text-secondary">(optional)</span></dt>
+            <dd>Pick the other purpose, then <i>same</i>, <i>broader</i> (this one is a broader form of it) or
+                <i>narrower</i>. A grey hint shows where the DPV nodes nest; judge the purposes, not only the nodes.
+                Overlaps change no other answer.</dd>
+            <dt id="rule-relationship">Stated need plausible <span class="text-secondary">(per need)</span></dt>
+            <dd>Is the level E states (<i>essential</i> / <i>quality dependent</i> / <i>not dependent</i>) the one you would
+                choose? <b>"Without it" means the component removed and nothing in its place</b>: the data not sent or read
+                at all; for the recipient, the data not sent to it and no other party doing its job. Whether something less
+                invasive could replace it is the concern stage's question, not this one. <i>Mostly</i>: defensible, but you
+                lean to the neighbouring level. <i>Partly</i>: clearly one level off. <i>No</i>: two levels off
+                (essential against not dependent).</dd>
+            <dt id="rule-steps">Steps follow from what they cite <span class="text-secondary">(per need)</span></dt>
+            <dd>Regardless of the level. A step is supported if what it cites shows it (click a chip to read it), or if it is
+                general technical knowledge you would accept without a source: "a WebView sends a User-Agent", "an analytics
+                SDK sends its events in batches". A claim about this app or this recipient is not general knowledge and
+                needs a citation, even if you could confirm it elsewhere: "the app uses the ID to restore purchases".
+                <b>Traffic</b> supports a step about what is sent, not one that says the data is <i>needed</i> because it is
+                sent. <i>Yes</i>: every step the conclusion rests on is supported. <i>Mostly</i>: a minor step is not, but
+                the conclusion does not rest on it. <i>Partly</i>: a step it rests on is an uncited claim about this app or
+                recipient, or contradicts what it cites, but the rest still carries the conclusion. <i>No</i>: without the
+                unsupported steps nothing carries it. A need E holds not assessable is not asked.</dd>
+            <dt id="rule-missed">Purposes E missed</dt>
+            <dd>A purpose you would answer <i>yes</i> or <i>mostly</i> on Plausible that E did not give: one per line, not a
+                narrower form of a purpose E gave; tick <i>functional</i> if it is the feature's own.</dd>
+        </dl>
 
         <h6>What stage 1 gave <span class="text-secondary fw-normal" style="text-transform: none; letter-spacing: 0">(hover any of these on the page for the same text)</span></h6>
         <dl>
@@ -178,8 +269,8 @@
             <dt>“Why E holds it …”</dt>
             <dd><ul class="mb-0"><li v-for="(t, k) in WHY_TEXT"><i>{{ k }}</i>: {{ t }}</li></ul></dd>
         </dl>
-        <p>The statuses are E's own reading of its answers, not a verdict you check: judge each purpose and need on the
-            questions below, whatever E's status. A <i>not established</i> purpose can still be plausible.</p>
+        <p>The statuses are E's own reading of its answers, not a verdict you check (see the rules above).</p>
+
 
         <h6>Reading the context (right)</h6>
         <ul>
@@ -198,61 +289,6 @@
                 It has one screenshot and one description; <i>before the change</i> marks a screen shown by its earlier
                 state.</li>
         </ul>
-
-        <h6>Rules for every question</h6>
-        <ul>
-            <li><b>One flaw, one question.</b> An implausible purpose is a <i>no</i> on Plausible, not also on its node, need
-                or steps. Judge the node, the needs and the steps for the purpose <i>as E states it</i>, even if you find it
-                implausible.</li>
-            <li><b>Each purpose on its own wording.</b> If two purposes overlap (the same purpose twice, or one a broader
-                form of the other, e.g. <code>Advertising</code> and <code>TargetedAdvertising</code>), judge each as
-                written, do not mark one down because of the other, and record the overlap under <b>Overlaps</b>.</li>
-            <li><b>The levels:</b> <i>yes</i> as stated; <i>mostly</i> one detail off (you would accept it after changing
-                one phrase); <i>partly</i> something is right but it needs a rewrite, or holds for only part of what is
-                asked; <i>no</i> it does not hold. For <i>mostly</i> and <i>partly</i>, pick one or more <b>reasons</b>
-                (hover one for its meaning), or <i>Other</i> and say it in a few words: the level says how far, the reasons
-                say why.</li>
-            <li><b><i>Unsure</i></b> only where the context does not let you decide; say why in the note.</li>
-        </ul>
-
-        <h6>The questions</h6>
-        <dl>
-            <dt>Plausible purpose</dt>
-            <dd>Would someone who knows the recipient, seeing this flow, name this purpose? How much would you change E's
-                wording before you sign it? <i>Yes</i>: nothing. <i>Mostly</i>: one phrase, e.g. <i>personalised</i>
-                advertising where the flow shows only ad delivery. <i>Partly</i>: a rewrite, e.g. "analytics and fraud
-                prevention" where only a fraud check is plausible, or it explains only part of the flow. <i>No</i>: it does
-                not fit what the recipient does, e.g. app performance analytics for an ad network's ID sync.</dd>
-            <dt>DPV node</dt>
-            <dd>The node for the purpose as E words it: <i>exact</i>, <i>too broad</i>, <i>too narrow</i>, <i>wrong</i>
-                (name a better one if you can). Click the node to see it in the DPV tree, with the practice's other
-                purposes marked (P2, P3 …).</dd>
-            <dt>Beneficiary and role</dt>
-            <dd><i>Right</i> or <i>wrong</i>. Role is <i>functional</i> only if the feature the user is using needs the
-                processing; ads, consent dialogs, analytics, and resources loaded for an ad are <i>ancillary</i>, even when
-                they appear on screen. Where the screens do not show which, decide by what the recipient does.</dd>
-            <dt>Cited parts show its outcome <span class="text-secondary">(purposes E holds supported)</span></dt>
-            <dd>Do the cited parts show the purpose's outcome happening in this app, including what sets it apart (for
-                personalised ads, something personalised, not just ads)? <i>Mostly</i>: a minor gap. <i>Partly</i>: only
-                the broader activity, or only some parts. <i>No</i>: none, e.g. only a general guideline.</dd>
-            <dt>Overlaps <span class="text-secondary">(optional)</span></dt>
-            <dd>Pick the other purpose, then <i>same</i>, <i>broader</i> (this one is a broader form of it) or
-                <i>narrower</i>. A grey hint shows where the DPV nodes nest; judge the purposes, not only the nodes.
-                Overlaps change no other answer.</dd>
-            <dt>Stated need plausible <span class="text-secondary">(per need)</span></dt>
-            <dd>Is the level E states (essential / quality-dependent / not needed) the one you would choose? <i>Mostly</i>:
-                defensible, but you lean to the neighbouring level. <i>Partly</i>: clearly one level off. <i>No</i>: two
-                levels off (essential against not needed).</dd>
-            <dt>Steps follow from what they cite <span class="text-secondary">(per need)</span></dt>
-            <dd>Regardless of the level. A step is supported if what it cites shows it (click a chip to read it), or if it is
-                general technical knowledge you would accept without a source (e.g. a WebView sends a User-Agent).
-                <i>Yes</i>: every step the conclusion rests on is supported. <i>Mostly</i>: a minor step is not, but the
-                conclusion does not rest on it. <i>Partly</i>: a step it rests on is an uncited claim about this app or
-                recipient, or contradicts what it cites, but the rest still carries the conclusion. <i>No</i>: without the
-                unsupported steps nothing carries it. A need E holds not assessable is not asked.</dd>
-            <dt>Purposes E missed</dt>
-            <dd>A purpose E should have predicted and did not; tick <i>functional</i> if it is the feature's own.</dd>
-        </dl>
 
         <h6>Moving around</h6>
         <p>Purposes are shown one at a time: the bar above them shows each one's progress (a tick when complete); move with
@@ -315,7 +351,7 @@
                         <div class="why" v-if="p.evidence.length">{{ p.evidence.length }} cited {{ p.evidence.length === 1 ? 'part' : 'parts' }}: tab <i>Cited for {{ label(p.key) }}</i> on the right</div>
 
                         <div class="q" v-for="q in asked(p)" :key="q">
-                            <span class="q-label">{{ labels[q] }}</span>
+                            <span class="q-label">{{ labels[q] }} <i class="bi bi-info-circle rule-link" role="button" title="Open the rule in the codebook" @click.stop="openRule('rule-' + q)"></i></span>
                             <div class="btn-group btn-group-sm">
                                 <button v-for="v in item.questions.purpose[q]" class="btn"
                                         :class="answer(p.key, q) === v ? btnOn(v) : btnOff(v)" @click.stop="setPurpose(p.key, q, v)">{{ v.replace('_', ' ') }}</button>
@@ -336,7 +372,7 @@
                         </div>
 
                         <div class="q overlap-row" v-if="(item.questions.overlaps || []).length && item.purposes.length > 1" @click.stop>
-                            <span class="q-label">Overlaps <span class="optional">optional</span></span>
+                            <span class="q-label">Overlaps <span class="optional">optional</span> <i class="bi bi-info-circle rule-link" role="button" title="Open the rule in the codebook" @click.stop="openRule('rule-overlaps')"></i></span>
                             <div class="d-flex flex-wrap gap-1 align-items-center">
                                 <span v-for="(o, i) in overlapsOf(p.key)" :key="o.with" class="chip open">{{ relationText(o.relation) }} {{ label(o.with) }}
                                     <i class="bi bi-x" role="button" title="remove" @click.stop="removeOverlap(p.key, i)"></i></span>
@@ -376,7 +412,7 @@
                             </template>
                             <template v-if="d.asked">
                                 <div class="q" v-for="(values, q) in item.questions.dependency" :key="q">
-                                    <span class="q-label">{{ labels[q] }}</span>
+                                    <span class="q-label">{{ labels[q] }} <i class="bi bi-info-circle rule-link" role="button" title="Open the rule in the codebook" @click.stop="openRule('rule-' + q)"></i></span>
                                     <div class="btn-group btn-group-sm">
                                         <button v-for="v in values" class="btn" :class="dependency(d.key, q) === v ? btnOn(v) : btnOff(v)"
                                                 @click.stop="setDependency(d.key, q, v)">{{ v }}</button>
@@ -401,7 +437,7 @@
                     </div>
 
                     <div class="mt-3">
-                        <b class="small">Purposes E missed</b>
+                        <b class="small">Purposes E missed <i class="bi bi-info-circle rule-link" role="button" title="Open the rule in the codebook" @click.stop="openRule('rule-missed')"></i></b>
                         <div v-for="(m, i) in missed" class="row g-1 mt-1">
                             <div class="col-5"><input class="form-control form-control-sm" v-model="m.note" placeholder="the purpose E should have predicted" @keydown.stop></div>
                             <div class="col-4"><node-picker :vocab="vocabs.purpose" v-model="m.node" placeholder="DPV node: type or browse"
@@ -518,8 +554,12 @@ const RELATION_TEXT = {
     '?': 'whether the recipient is the provider or another organisation could not be decided',
 };
 const PURPOSE_PARTS_TEXT = 'E states each purpose as an action and an object (the headline), a context, and an outcome: what the processing is for. It also names a DPV node, a beneficiary and a role.';
-const BENEFICIARY_TEXT = {user: 'the user benefits from the purpose', provider: "the app's provider benefits", other: 'another party benefits (e.g. an ad network or an analytics company)'};
-const ROLE_TEXT = {functional: 'it serves something the user does on the screens', ancillary: 'it serves something other than what the user does (ads, analytics, consent, fraud checks …)'};
+const BENEFICIARY_TEXT = {
+    user: 'a feature the user uses (syncing notes, a map, signing in)',
+    provider: "the app provider's own interest: its analytics and crash reports, revenue from ads it shows, attribution of installs, fraud and security checks",
+    other: "the recipient's or a third party's own interest: building its profiles, targeting ads across apps, data it passes on",
+};
+const ROLE_TEXT = {functional: 'the feature the user is using needs the processing', ancillary: 'anything else: ads, consent dialogs, analytics, resources loaded for an ad, even when they appear on screen'};
 const SPECIFICITY_TEXT = {sufficient: 'E could state the purpose specifically (action, object and outcome)', vague: 'E marked the purpose as not specific, or left a part of it open'};
 const SAMPLES_TEXT = "how many of E's answers gave this purpose: E answered once per episode the practice occurred in and per seed, and the answers are combined";
 const PURPOSE_STATUS = {
@@ -756,6 +796,11 @@ const app = createApp({
         btnOn: v => (GOOD.includes(v) ? 'btn-success' : BAD.includes(v) ? 'btn-danger' : v === 'unsure' ? 'btn-secondary' : v === 'mostly' ? 'btn-info' : 'btn-warning'),
         btnOff: v => (GOOD.includes(v) ? 'btn-outline-success' : BAD.includes(v) ? 'btn-outline-danger' : v === 'unsure' ? 'btn-outline-secondary' : v === 'mostly' ? 'btn-outline-info' : 'btn-outline-warning'),
         statusTitle: s => STATUS[s] || s,
+        // the ⓘ beside a question: the codebook, opened at its rule
+        openRule(id) {
+            this.help = true;
+            this.$nextTick(() => { const el = document.getElementById(id); if (el) { el.scrollIntoView({block: 'start'}); el.classList.add('rule-flash'); setTimeout(() => el.classList.remove('rule-flash'), 1500); } });
+        },
         kindIcon: k => ICON[k] || 'bi-dot',
         // what an evidence item is, for the coded style: traffic, screen, passage or a claim
         kindOf(e) {

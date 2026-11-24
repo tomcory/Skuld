@@ -59,6 +59,9 @@
         .codebook dd { margin-bottom: 0; margin-left: 1rem; }
         .evidence-card.kind-experiment { border-left-color: #e8590c; }
         [v-cloak] { display: none; }
+        .rule-link { color: #6c757d; margin-left: .25rem; cursor: pointer; }
+        .rule-link:hover { color: #0d6efd; }
+        .rule-flash { background: #fff3bf; transition: background .3s; }
             /* the stage-1 page's treatment (24 Nov 2026): the concern on top, sections, cards, rows */
         .left { max-height: 88vh; overflow-y: auto; }
         .members, .evidence { max-height: none; overflow: visible; }
@@ -113,7 +116,7 @@
     <nav class="d-flex flex-wrap align-items-center gap-3 mb-3">
         <h1 class="h5 m-0">Review of aggregated concerns</h1>
         <span class="text-secondary small" v-if="progress">{{ progress.calibration }} · {{ progress.reviewed }}/{{ progress.total }} judged
-            ({{ progress.counts.agree }} agree, <span v-if="progress.counts.partly">{{ progress.counts.partly }} partly, </span>{{ progress.counts.disagree }} disagree, {{ progress.counts.unsure }} unsure)</span>
+            ({{ progress.counts.holds }} hold, <span v-if="progress.counts.partly">{{ progress.counts.partly }} partly, </span>{{ progress.counts.not_holds }} do not hold, {{ progress.counts.unsure }} unsure)</span>
         <div class="flex-grow-1" style="min-width: 160px">
             <div class="progress" style="height: .5rem" v-if="progress">
                 <div class="progress-bar" :style="{width: (100 * progress.reviewed / progress.total) + '%'}"></div>
@@ -122,13 +125,81 @@
         <button class="btn btn-sm btn-outline-secondary" @click="help = !help"><i class="bi bi-question-circle"></i> Help</button>
     </nav>
 
-    <div class="alert alert-info small codebook" v-if="help">
-        <h6>What you judge</h6>
-        <p>Each unit is one <b>aggregated concern</b>: concerns the analysis (E) raised that share a requirement, a step, a
-            status and a subject. You see E's statement and status, its members (each with its reason), the evidence it rests
-            on and, on the right, the provider's documents. Judge whether E is right <b>as it states it</b>, in this order:
-            the evidence, whether the conclusion follows, then your verdict. Which model produced the unit is not shown.
-            Work on your own.</p>
+    <div class="alert alert-info small codebook" v-if="help" ref="codebook">
+        <h6>Words used here</h6>
+        <p>The analysis has three parts: <b>O</b> observes what the app does (its traffic, what it reads on the device),
+            <b>D</b> reads what the provider declares (privacy policy, Data safety section, store listing), and <b>E</b>
+            compares the two against data protection requirements. E first predicts what each practice is for (<b>stage
+            1</b>, reviewed on the other page), then raises <b>concerns</b>: a requirement that, by E's evidence, the app
+            does not meet. A <b>practice</b> is one observed processing: data sent to a recipient, or read on the device.</p>
+
+        <h6 id="rule-verdict">Your verdict: does the concern hold? <span class="text-secondary fw-normal" style="text-transform: none; letter-spacing: 0">(<kbd>H</kbd> holds, <kbd>D</kbd> does not hold, <kbd>U</kbd> unsure)</span></h6>
+        <p>You judge <b>the app</b>, not E. A concern says that the requirement (top box) is not met for its subject: the
+            frame's question answered against the app. <b>Holds</b>: the requirement is not met, as the concern states.
+            <b>Does not hold</b>: it is met, or the concern is wrong as stated. <b>Unsure</b> (left out of the rates):
+            you cannot decide; say why in the note. E's status does not change what these mean: for a concern E
+            <i>did not establish</i>, too, say whether it holds.</p>
+        <ul>
+            <li><b>As stated</b> means the requirement, the subject and the members. How E knows it (demonstrated, from
+                documents) and how well it shows it are for the two criteria, not the verdict: a concern that is true but
+                badly supported <b>holds</b>, with low criteria.</li>
+            <li><b>What you may use:</b> the unit, the documents, general knowledge of the domain, and web searches about a
+                recipient or service (its documentation, what it is). Say in the note what you looked up.</li>
+            <li><b>Several members:</b> it holds if it holds for at least half of them; name the others in the note.</li>
+            <li><b>E's purpose is given.</b> Where a concern is about a practice's purpose (an alternative, a purpose not
+                specified), take the purpose as E states it: whether it is plausible is judged on the stage-1 page.</li>
+            <li><b>Conditional concerns</b> ("if a DPO is designated"): take the condition as given; if you think it does not
+                apply to this app, say so in the note.</li>
+            <li><b>Contradicted declarations:</b> it holds if at least one listed practice is something the declaration,
+                read with its own sentence, denies. Judge the provider's sentence, not the label D gave it. A denial of
+                collecting or sharing is not contradicted by processing that stays on the device.</li>
+            <li><b>A less invasive alternative</b> holds only if it would still serve the purpose as stated: an identifier
+                that cannot do what the purpose needs is no alternative, however narrow.</li>
+            <li><b>Incomplete documents</b> (e.g. a policy captured only as headings), where the concern rests on what they
+                do not say: <i>unsure</i>.</li>
+            <li>If the requirement is not met for a <i>different</i> reason than the concern's, the concern does not hold as
+                stated: note the other reason in the recall pass.</li>
+        </ul>
+
+        <h6>The levels of the criteria</h6>
+        <p>One scale for both: <i>yes</i>, you would sign it as it is; <i>mostly</i>, after a small fix (one loose
+            citation, one overstated word); <i>partly</i>, part of it is right and part is wrong or missing; <i>no</i>, it
+            does not hold. For <i>mostly</i> and <i>partly</i>, pick one or more <b>reasons</b> (hover one for its meaning),
+            or <i>Other</i> and say it in a few words: the level says how far, the reasons say why.</p>
+        <dl>
+            <dt id="rule-evidence">Evidence exists, cited correctly <span class="text-secondary">(<kbd>1</kbd>–<kbd>5</kbd>)</span></dt>
+            <dd><i>Yes</i>: every item exists and says what E takes it to say. <i>Mostly</i>: one is cited a little loosely.
+                <i>Partly</i>: some items do not say it, or one sentence is cut into fragments counted as separate evidence.
+                <i>No</i>: the items the conclusion rests on do not exist or do not say it. <i>None cited</i>: E cites
+                nothing, as for a concern resting on what the documents do not say; that is no fault.</dd>
+            <dt id="rule-follows">E's conclusion follows <span class="text-secondary">(<kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd>)</span></dt>
+            <dd><i>Yes</i>: it follows from the evidence. <i>Mostly</i>: slightly overstated, or a small gap.
+                <i>Partly</i>: it follows for some members only, or the conclusion is right but a step to it is wrong.
+                <i>No</i>: it does not follow.</dd>
+            <dd class="mt-1"><b>Experiments</b> count here: a success check that does not test the purpose (it only shows the
+                app started, for a purpose of a later screen) or few runs on a side make the conclusion overreach.
+                <i>Evidence</i> asks only whether the experiment exists and is what E says it is.</dd>
+        </dl>
+
+        <h6 id="rule-phrases">Declared purposes (phrases)</h6>
+        <p>Mark each phrase <i>specific</i>, <i>not specific</i> or <i>unsure</i> (<kbd>N</kbd>: all not specific), first
+            blind, then with E's output (your blind judgments are kept). <b>The test:</b> could a user tell from the phrase
+            which processing it covers and why? Not specific: "to improve our services", "for marketing purposes", "for
+            business purposes". Specific: "to send you a receipt for your purchase", "to show ads based on the apps you
+            use". Read a phrase with its own sentence or table row and what that sentence directly introduces or refers
+            to, not with explanations elsewhere in the policy; fragments of one sentence get the sentence's answer; a
+            phrase that is no purpose (a heading, a feature name, a negation): <i>unsure</i>, with a note. Where E holds
+            the phrases not specific, your verdict is derived from them (all not specific: holds); save with <kbd>S</kbd>.</p>
+
+        <h6>Blind first and the recall pass</h6>
+        <ul>
+            <li>Some units are shown <b>blind first</b> (subject and question only): <b>Requirement not met</b>
+                (<kbd>F</kbd>), <b>met</b> (<kbd>M</kbd>) or <b>unsure</b> (<kbd>U</kbd>), before E's output is shown; it
+                cannot be changed afterwards. <i>Not met</i> is the same as a concern holding.</li>
+            <li id="rule-recall"><b>Recall pass</b> (<kbd>R</kbd>), once an app's units are judged: a concern E should have
+                raised and did not, which you would judge <i>holds</i>. One per line; not a narrower form of a concern E
+                raised.</li>
+        </ul>
 
         <h6>The evidence</h6>
         <ul>
@@ -143,9 +214,8 @@
                 shows the feature and the purpose tested, the change, and the <b>success check</b> (a screen to be
                 reached, shown with its screenshot; a text to appear; or the first screen ready after launch). Each side
                 ran several times: ✓ the check was met, ✗ it was not (hover for the run's traffic). <i>Still worked</i>
-                means the check was met with the change as without it. Judge whether the check fits the purpose and
-                whether the runs support the conclusion; few runs, or a check that only shows the app started, support
-                less. The screenshots show where a run met the check, for orientation.</li>
+                means the check was met with the change as without it. The screenshots show where a run met the check, for
+                orientation.</li>
         </ul>
 
         <h6>E's evaluations</h6>
@@ -163,58 +233,13 @@
             <dd v-for="(t, k) in ALTERNATIVE_TEXT"><i>{{ k.replace('_', ' ') }}</i>: {{ t }}.</dd>
             <dd v-for="(t, k) in LEVEL_TEXT"><i>{{ k.replace('_', ' ') }}</i>: {{ t }}.</dd>
         </dl>
-        <p>These are E's claims, part of what you judge, not facts: uncertainty does not change your verdict, but a high
-            one is a hint to read the evidence closely.</p>
+        <p>These are E's claims, part of what you judge, not facts: neither its status nor its uncertainty changes what
+            your verdict means, but a high uncertainty is a hint to read the evidence closely.</p>
 
-        <h6>The criteria</h6>
-        <dl>
-            <dt>Evidence exists, cited correctly <span class="text-secondary">(<kbd>1</kbd>–<kbd>5</kbd>)</span></dt>
-            <dd><i>Yes</i>: every item exists and says what E takes it to say. <i>Mostly</i>: one is cited a little loosely.
-                <i>Partly</i>: some items do not say it, or one sentence is cut into fragments counted as separate evidence.
-                <i>No</i>: the items the conclusion rests on do not exist or do not say it. <i>None cited</i>: E cites
-                nothing (the concern rests on what the documents do not say).</dd>
-            <dt>E's conclusion follows <span class="text-secondary">(<kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd>)</span></dt>
-            <dd><i>Yes</i>: it follows. <i>Mostly</i>: slightly overstated, or a small gap. <i>Partly</i>: it follows for
-                some members only, or the conclusion is right but a step to it is wrong. <i>No</i>: it does not follow.
-                A less invasive alternative counts only if it would still serve the purpose as stated: an identifier that
-                cannot do what the purpose needs is no alternative, however narrow.</dd>
-            <dd class="mt-1">For <i>mostly</i> and <i>partly</i>, pick one or more <b>reasons</b> (hover one for its
-                meaning), or <i>Other</i> and say it in a few words: the level says how far, the reasons say why.</dd>
-        </dl>
-
-        <h6>Your verdict</h6>
-        <p><b>Agree</b> (<kbd>A</kbd>), <b>Disagree</b> (<kbd>D</kbd>) or <b>Unsure</b> (<kbd>U</kbd>, left out of the rates;
-            say why in the note), on the concern as stated; the criteria explain it, they do not replace it.</p>
-        <ul>
-            <li><b>Not established</b> is E saying it could not establish the concern: agree if that is the right call, which
-                it is unless the unit itself shows what E needed (e.g. a cited passage documenting the alternative). If
-                other units seem to decide the same question differently, say so in the note; it does not change this
-                verdict.</li>
-            <li><b>Several members</b>: agree if the concern holds for at least half of them; name the others in the
-                note.</li>
-            <li><b>Conditional concerns</b> ("if a DPO is designated"): take the condition as given; if you think it does not
-                apply to this app, say so in the note.</li>
-            <li><b>Contradicted declarations</b>: agree if at least one listed practice is something the declaration, read
-                with its own sentence, denies. Judge the provider's sentence, not the label D gave it. A denial of
-                collecting or sharing is not contradicted by processing that stays on the device.</li>
-            <li><b>Incomplete documents</b> (e.g. a policy captured only as headings), where the concern rests on what they
-                do not say: <i>unsure</i>.</li>
-        </ul>
-
-        <h6>Declared purposes (phrases)</h6>
-        <p>Mark each phrase <i>specific</i>, <i>not specific</i> or <i>unsure</i> (<kbd>N</kbd>: all not specific), first
-            blind, then with E's output (your blind judgments are kept). Read a phrase with its own sentence or table row
-            and what that sentence directly introduces or refers to, not with explanations elsewhere in the policy;
-            fragments of one sentence get the sentence's answer; a phrase that is no purpose (a heading, a feature name, a
-            negation): <i>unsure</i>, with a note. Where E holds the phrases not specific, your verdict is derived from
-            them; save with <kbd>S</kbd>.</p>
-
-        <h6>Also</h6>
-        <p>Some units are shown <b>blind first</b> (subject and question only): decide <b>Fails</b> (<kbd>F</kbd>),
-            <b>Holds</b> (<kbd>H</kbd>) or <b>Unsure</b> (<kbd>U</kbd>); it cannot be changed afterwards. <b>Recall pass</b>
-            (<kbd>R</kbd>), once an app's units are judged: what E should have raised for it and did not. <kbd>←</kbd>
-            <kbd>→</kbd> units, <kbd>O</kbd> next open unit, <kbd>V</kbd> show or hide the evidence, <kbd>/</kbd> search
-            the document. Values in <code>code type</code> open their vocabulary.</p>
+        <h6>Moving around</h6>
+        <p><kbd>←</kbd> <kbd>→</kbd> units, <kbd>O</kbd> next open unit, <kbd>V</kbd> show or hide the evidence,
+            <kbd>/</kbd> search the document. Values in <code>code type</code> open their vocabulary. The
+            <i class="bi bi-info-circle"></i> beside a question opens its rule here.</p>
     </div>
 
     <div class="alert alert-warning d-flex align-items-center gap-2 small" v-if="recallDue && !recallOpen">
@@ -272,7 +297,7 @@
                         <span>
                             <span v-if="item.blind_first" class="badge text-bg-info me-1">blind first</span>
                             <span v-if="item.blind_phrases_now || (item.review && item.review.blind_phrases)" class="badge text-bg-info me-1">phrases blind first</span>
-                            <span v-if="item.review && item.review.overall" class="badge" :class="overallClass(item.review.overall)">{{ item.review.overall }}</span>
+                            <span v-if="item.review && item.review.overall" class="badge" :class="overallClass(item.review.overall)">{{ verdictText(item.review.overall) }}</span>
                         </span>
                     </div>
                     <div class="subject">
@@ -295,8 +320,8 @@
                         <div class="decide">
                             <textarea class="form-control form-control-sm" rows="2" placeholder="Note on the blind decision (optional)" v-model="blindNote" @keydown.stop></textarea>
                             <div class="d-flex gap-2 mt-2">
-                                <button class="btn btn-danger" @click="saveBlind('fails')">Fails <kbd>F</kbd></button>
-                                <button class="btn btn-success" @click="saveBlind('holds')">Holds <kbd>H</kbd></button>
+                                <button class="btn btn-danger" @click="saveBlind('fails')">Requirement not met <kbd>F</kbd></button>
+                                <button class="btn btn-success" @click="saveBlind('holds')">Requirement met <kbd>M</kbd></button>
                                 <button class="btn btn-outline-secondary" @click="saveBlind('unsure')">Unsure <kbd>U</kbd></button>
                             </div>
                             <div class="d-flex gap-2 mt-2">
@@ -475,7 +500,7 @@
                         <div class="judge">
                             <div class="section-head">Your judgement</div>
                             <div class="q">
-                                <span class="q-label">Evidence exists, cited correctly</span>
+                                <span class="q-label">Evidence exists, cited correctly <i class="bi bi-info-circle rule-link" role="button" title="Open the rule in the codebook" @click.stop="openRule('rule-evidence')"></i></span>
                                 <div class="btn-group btn-group-sm">
                                     <button v-for="(v, i) in evidenceValues" class="btn" :class="evidence === v ? btnOn(v) : btnOff(v)" @click="setCriterion('evidence', v)">{{ v.replace('_', ' ') }} <kbd>{{ i + 1 }}</kbd></button>
                                 </div>
@@ -488,7 +513,7 @@
                                        v-model="crit.evidence_other" @keydown.stop>
                             </div>
                             <div class="q">
-                                <span class="q-label">E's conclusion follows</span>
+                                <span class="q-label">E's conclusion follows <i class="bi bi-info-circle rule-link" role="button" title="Open the rule in the codebook" @click.stop="openRule('rule-follows')"></i></span>
                                 <div class="btn-group btn-group-sm">
                                     <button v-for="(v, i) in followsValues" class="btn" :class="follows === v ? btnOn(v) : btnOff(v)" @click="setCriterion('follows', v)">{{ v }} <kbd>{{ followsKeys[i] }}</kbd></button>
                                 </div>
@@ -500,20 +525,24 @@
                                 <input v-if="otherAsked('follows')" id="other-follows" class="form-control form-control-sm other-reason" placeholder="Your reason (required)"
                                        v-model="crit.follows_other" @keydown.stop>
                             </div>
-                            <textarea class="form-control form-control-sm mt-2" rows="2" placeholder="Note (say why if you disagree or are unsure)" v-model="note" @keydown.stop></textarea>
+                            <textarea class="form-control form-control-sm mt-2" rows="2" placeholder="Note (say why if it does not hold or you are unsure; what you looked up)" v-model="note" @keydown.stop></textarea>
                         </div>
                         <div class="decide">
                             <div v-if="derived" class="small text-secondary mt-2">For declared purposes your verdict is your judgment of the
-                                phrases: it agrees with E where you marked a phrase not specific, and is derived from them when you save.</div>
-                            <div v-else><span class="q-label" title="On the concern as stated: its status, label and members. The criteria above explain your verdict; they do not replace it.">Your verdict on the concern as stated <i class="bi bi-info-circle"></i></span></div>
+                                phrases: the concern holds where you marked every phrase not specific, and the verdict is derived when you save.</div>
+                            <div v-else><span class="q-label">Does the concern hold for this app, as stated?</span>
+                                <i class="bi bi-info-circle rule-link" role="button" title="Open the rule in the codebook" @click="openRule('rule-verdict')"></i>
+                                <div class="small text-secondary">You judge the app, not E: <b>holds</b> means the requirement is not met for this
+                                    subject, whatever E's status{{ item.status === 'supported' ? '' : ' (E did not establish it: say whether it holds anyway)' }}.
+                                    How well E shows it goes into the criteria above.</div></div>
                             <div class="d-flex flex-wrap gap-2 mt-1 align-items-center">
                                 <template v-if="derived">
                                     <button class="btn btn-primary" :disabled="!ready" @click="save(null)"><i class="bi bi-check-lg"></i> Save <kbd>S</kbd></button>
-                                    <span v-if="ready" class="small">verdict from the phrases: <span class="badge" :class="overallClass(derivedVerdict)">{{ derivedVerdict }}</span></span>
+                                    <span v-if="ready" class="small">verdict from the phrases: <span class="badge" :class="overallClass(derivedVerdict)">{{ verdictText(derivedVerdict) }}</span></span>
                                 </template>
                                 <template v-else>
-                                    <button class="btn btn-success" :disabled="!ready" @click="save('agree')"><i class="bi bi-check-lg"></i> Agree <kbd>A</kbd></button>
-                                    <button class="btn btn-danger" :disabled="!ready" @click="save('disagree')"><i class="bi bi-x-lg"></i> Disagree <kbd>D</kbd></button>
+                                    <button class="btn btn-danger" :disabled="!ready" @click="save('holds')"><i class="bi bi-exclamation-lg"></i> Concern holds <kbd>H</kbd></button>
+                                    <button class="btn btn-success" :disabled="!ready" @click="save('not_holds')"><i class="bi bi-x-lg"></i> Does not hold <kbd>D</kbd></button>
                                     <button class="btn btn-outline-secondary" :disabled="!ready" @click="save('unsure')">Unsure <kbd>U</kbd></button>
                                 </template>
                                 <span v-if="!ready" class="small text-secondary">{{ missing }}</span>
@@ -586,7 +615,7 @@ const FOLLOWS_KEYS = 'qwet';
 // E's evaluations, in words: the hover texts and the codebook's section "E's evaluations" (one source for both)
 const STATUS_TEXT = {
     supported: 'E raises the concern: its evidence shows the requirement is not met',
-    not_established: 'E could not establish the concern from its evidence (e.g. alternatives proposed, none supported; or its samples did not agree it holds); agree if that is the right call',
+    not_established: 'E could not establish the concern from its evidence (e.g. alternatives proposed, none supported; or its samples did not agree it holds); you still judge whether it holds',
     not_assessable: 'E could not judge the requirement',
 };
 const TIER_TEXT = {
@@ -660,7 +689,7 @@ const app = createApp({
             const judged = this.item.members.map(m => this.phrases[m.concern]).filter(v => v === 'specific' || v === 'not_specific');
             if (!judged.length) return 'unsure';
             const agree = judged.filter(v => v === 'not_specific').length;
-            return agree === judged.length ? 'agree' : agree === 0 ? 'disagree' : 'partly';
+            return agree === judged.length ? 'holds' : agree === 0 ? 'not_holds' : 'partly';
         },
         requirementsList() {
             return ['information_not_given (documents)', 'not_specific (declared purpose)', 'no_specified_purpose (practice)', 'less_invasive_alternative (practice)', 'declaration_contradicted (declaration)', 'other'];
@@ -863,7 +892,13 @@ const app = createApp({
             return [UNCERTAINTY_TEXT, ...reasons].join('\n');
         },
         statusClass: s => ({supported: 'text-bg-danger', not_established: 'text-bg-warning', not_assessable: 'text-bg-secondary'})[s] || 'text-bg-secondary',
-        overallClass: d => ({agree: 'text-bg-success', disagree: 'text-bg-danger', partly: 'text-bg-warning', unsure: 'text-bg-secondary'})[d],
+        overallClass: d => ({holds: 'text-bg-danger', not_holds: 'text-bg-success', partly: 'text-bg-warning', unsure: 'text-bg-secondary'})[d],
+        verdictText: d => ({holds: 'concern holds', not_holds: 'does not hold', partly: 'partly holds', unsure: 'unsure'})[d] || d,
+        // the ⓘ beside a question: the codebook, opened at its rule
+        openRule(id) {
+            this.help = true;
+            this.$nextTick(() => { const el = document.getElementById(id); if (el) { el.scrollIntoView({block: 'start'}); el.classList.add('rule-flash'); setTimeout(() => el.classList.remove('rule-flash'), 1500); } });
+        },
         key(event) {
             if (this.zoom) { if (event.key === 'Escape') this.zoom = null; return; }  // a screenshot is open
             if (this.browser) { if (event.key === 'Escape') this.browser = null; return; }  // a vocabulary is open: no shortcuts
@@ -872,7 +907,7 @@ const app = createApp({
             const k = event.key;
             let action;
             if (this.item.blind_now) {
-                action = {f: () => this.saveBlind('fails'), h: () => this.saveBlind('holds'), u: () => this.saveBlind('unsure')}[k];
+                action = {f: () => this.saveBlind('fails'), m: () => this.saveBlind('holds'), u: () => this.saveBlind('unsure')}[k];
             } else if (this.item.blind_phrases_now) {
                 action = {n: () => this.allNotSpecific(), s: () => this.saveBlindPhrases()}[k];
             } else {
@@ -882,7 +917,7 @@ const app = createApp({
                 else if (follows >= 0 && follows < this.followsValues.length) action = () => this.setCriterion('follows', this.followsValues[follows]);
                 else if (this.derived) action = {s: () => this.save(null), n: () => this.allNotSpecific(),
                                v: () => (this.evidenceShown = !this.evidenceShown), r: () => this.openRecall(), o: () => this.nextOpen()}[k];
-                else action = {a: () => this.save('agree'), d: () => this.save('disagree'), u: () => this.save('unsure'),
+                else action = {h: () => this.save('holds'), d: () => this.save('not_holds'), u: () => this.save('unsure'),
                                n: () => this.allNotSpecific(), v: () => (this.evidenceShown = !this.evidenceShown),
                                r: () => this.openRecall(), o: () => this.nextOpen()}[k];
             }

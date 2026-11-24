@@ -252,8 +252,9 @@ accepted once every question is answered; **Save** keeps a unit half-done.
 ### E's aggregated concerns
 
 Each unit is one aggregated concern: concerns the analysis raised that share a requirement and a subject. You see its
-statement, its members, the evidence and the app's documents, and judge whether it is right as stated: first whether
-the evidence exists and is cited correctly and whether the conclusion follows, then agree, disagree or unsure. When
+statement, its members, the evidence and the app's documents. First judge whether the evidence exists and is cited
+correctly and whether the conclusion follows; then whether **the concern holds for the app**, as stated: holds, does
+not hold, or unsure. You judge the app, not whether you agree with the analysis. When
 every unit of an app is judged, the **recall pass** asks what the analysis should have raised for the app and did not.
 
 ## Sending your reviews back

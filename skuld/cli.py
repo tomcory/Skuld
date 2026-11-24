@@ -897,7 +897,10 @@ def main(argv: list[str] | None = None) -> int:
                 sc = review.score(args.folder)
                 for e in sc["estimates"]:
                     name = " ".join(str(e[k]) for k in ("run", "principle", "step", "status"))
-                    print(f"{name:<80} {e['rate']} per unit, {e['members_rate']} per member ({e['units']} units)")
+                    print(
+                        f"{name:<80} {e['rate']} agree per unit, {e['members_rate']} per member, "
+                        f"{e['well_supported_rate']} well supported ({e['units']} units)"
+                    )
                 a = sc["anchoring"]
                 if "difference" in a:
                     print(f"anchoring: blind {a['blind_rate']}, non-blind {a['non_blind_rate']} on {a['units']} units")

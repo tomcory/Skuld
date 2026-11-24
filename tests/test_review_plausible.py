@@ -345,19 +345,42 @@ def test_the_tool_checks_an_overlap_mark(drawn):
 
 
 def test_the_codebooks_cover_what_the_first_run_and_this_rerun_raised():
-    stage1 = (rex.TOOL / "public" / "expectation.html").read_text()
+    def text(name):
+        return " ".join((rex.TOOL / "public" / name).read_text().split())
+
+    stage1 = text("expectation.html")
     for point in (
         "against what the stage saw",  # not against the provider's documents
+        "web searches about a recipient",  # A1 (author, 25 Nov 2026)
         "One flaw, one question.",
         "Each purpose on its own wording.",  # nested nodes, overlaps
-        "<i>mostly</i> one detail off",  # the scale: partly was too broad
-        "the level says how far, the reasons\n                say why",
+        "<i>Mostly</i>: after a small fix",  # one scale: partly was too broad
+        "the level says how far, the reasons say why",
+        "the most specific DPV node",  # B5
+        "the component removed and nothing in its place",  # A2
+        "revenue from ads it shows",  # A3, the beneficiary table
         "it is not evidence",  # descriptions
         "before the change",
         "ancillary",  # role
         "general technical knowledge",  # steps
+        "<b>Traffic</b> supports a step about what is sent",  # B8
+        "<b>D</b> reads what the provider declares",  # the words used
+        "openRule(",  # the rule beside each question
     ):
         assert point in stage1, point
-    concerns = (rex.TOOL / "public" / "aggregate.html").read_text()
-    for point in ("An <b>experiment</b>", "Not established", "Several members", "Contradicted declarations", "experiment(e)"):
+    concerns = text("aggregate.html")
+    for point in (
+        "You judge <b>the app</b>, not E",  # method 5
+        "a concern that is true but badly supported <b>holds</b>",
+        "web searches about a recipient",
+        "E's purpose is given.",
+        "<b>Experiments</b> count here",
+        "could a user tell from the phrase",
+        "<i>Not met</i> is the same as a concern holding",
+        "Several members",
+        "Contradicted declarations",
+        "experiment(e)",
+        "openRule(",
+    ):
         assert point in concerns, point
+    assert "Agree <kbd>A</kbd>" not in concerns

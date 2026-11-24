@@ -22,10 +22,16 @@ The reviewer records, before the overall judgment:
     follows     the conclusion follows from it: yes, partly, no
     phrases     for a unit of declared purposes: per phrase, specific, not specific or unsure (specificity is a property
                 of each phrase, and a unit can be mixed)
-    overall     the verdict on the concern as stated: agree, disagree or unsure (unsure is left out of the rates), with a
-                note. For a unit of declared purposes E holds not specific, the verdict is derived from the phrases
-                (author, 12 Nov 2026): agree if every phrase judged is not specific, disagree if none is, partly if some
-                are (partly counts as not agreeing), unsure if every phrase is unsure
+    overall     whether the concern holds for the app, as E states it (method 5, author, 25 Nov 2026): holds, not_holds
+                or unsure (unsure is left out of the rates), with a note. The reviewer judges the app, not E: the score
+                compares the answer with E's status (`agrees`): a unit agrees with E where the reviewer holds a concern
+                E supports, or holds that a concern E did not establish does not hold. Before method 5 the reviewer
+                agreed or disagreed with E, which reviewers read both as "the concern is true" and as "E showed it", and
+                as the opposite on a concern E did not establish. For a unit of declared purposes E holds not specific,
+                the verdict is derived from the phrases (author, 12 Nov 2026): holds if every phrase judged is not
+                specific, not_holds if none is, partly if some are (partly counts as not agreeing), unsure if every
+                phrase is unsure. A unit is also `well supported` where it agrees and the reviewer found the evidence
+                and the conclusion at least mostly sound (evidence yes, mostly or none cited; follows yes or mostly)
 
 Some units (`--anchor`, drawn among supported units other than declared purposes) are shown blind first: subject and
 question only, with a blind decision (fails, holds, unsure) recorded before E's output is revealed; the difference
@@ -82,7 +88,10 @@ from skuld.calibrate import (
 #: 4 since an experiment among a unit's evidence is shown as what it did (skuld.review_experiments: the feature and
 #: purpose, the change, the success check, the runs per side, the screens the check was met at), and a unit's
 #: experiments are each shown, no longer merged into its first (author, 24 Nov 2026)
-VERSION = "4"
+#: 5 since the verdict asks whether the concern holds for the app (holds, not_holds, unsure), not whether the reviewer
+#: agrees with E; agreement with E is derived from E's status (`agrees`), and a unit's being well supported from the
+#: criteria (author, 25 Nov 2026)
+VERSION = "5"
 KIND = "aggregate-review"
 MANIFEST, SAMPLE, KEY, REVIEWS, RECALL, SCORES, AGREEMENT = (
     "manifest.json",
@@ -94,15 +103,35 @@ MANIFEST, SAMPLE, KEY, REVIEWS, RECALL, SCORES, AGREEMENT = (
     "agreement.json",
 )
 DOCUMENTS = "documents"
-OVERALL = ("agree", "disagree", "partly", "unsure")  # partly: only derived from a unit's phrases
-DECIDED = ("agree", "disagree", "partly")  # the verdicts the rates count
+OVERALL = ("holds", "not_holds", "partly", "unsure")  # partly: only derived from a unit's phrases
+DECIDED = ("holds", "not_holds", "partly")  # the verdicts the rates count
+#: The criteria's answers by which an agreeing unit is also well supported
+SOUND = {"evidence": ("yes", "mostly", "none_cited"), "follows": ("yes", "mostly")}
 EVIDENCE = ("yes", "mostly", "partly", "no", "none_cited")
 FOLLOWS = ("yes", "mostly", "partly", "no")
 #: The phrases' answers that judge (the review tool also offers unsure, and fails, holds or unsure for a unit shown
 #: blind; tools/calibration-review/server.js checks them)
 JUDGED_PHRASE = ("specific", "not_specific")
 #: What the reviewer is asked of a unit
-ASK = "Do you agree with this aggregated concern as E states it, on the evidence it gives and the documents?"
+ASK = "Does this concern hold for the app, as E states it? Judge the app, from the evidence, the documents and what you know."
+
+
+def agrees(item: dict, overall: str | None) -> bool | None:
+    """Whether a verdict agrees with E: the reviewer holds a concern E supports, or holds a concern E did not
+    establish (or could not assess) not to hold; partly (derived from phrases) does not; None for unsure or none."""
+    if overall not in DECIDED:
+        return None
+    if overall == "partly":
+        return False
+    return (overall == "holds") == (item.get("status") == "supported")
+
+
+def well_supported(item: dict, review: dict) -> bool | None:
+    """Whether a judged unit agrees with E and the reviewer found its evidence and conclusion at least mostly sound."""
+    a = agrees(item, review.get("overall"))
+    if a is None:
+        return None
+    return a and all(review.get(c) in ok for c, ok in SOUND.items())
 
 
 class ReviewError(inputs.InputError):
@@ -662,9 +691,9 @@ def _member_agreement(item: dict, review: dict) -> tuple[float, float] | None:
     if item["kind"] == "declared" and phrases and item["status"] == "supported":
         judged = [v for v in phrases.values() if v in JUDGED_PHRASE]
         return (sum(v == "not_specific" for v in judged), len(judged)) if judged else None
-    if review.get("overall") in ("agree", "disagree"):  # a partly unit has its phrases, above
+    if review.get("overall") in ("holds", "not_holds"):  # a partly unit has its phrases, above
         n = len(item["members"])
-        return (n if review["overall"] == "agree" else 0, n)
+        return (n if agrees(item, review["overall"]) else 0, n)
     return None
 
 
@@ -787,12 +816,21 @@ def score(folder: str | Path) -> dict:
     weight = {_skey(s): (s["population"] / judged[_skey(s)] if judged[_skey(s)] else 0.0) for s in manifest["strata"]}
 
     by_stratum = defaultdict(
-        lambda: {"agree": 0, "disagree": 0, "partly": 0, "unsure": 0, "members_agree": 0.0, "members": 0.0}
+        lambda: {
+            "holds": 0,
+            "not_holds": 0,
+            "partly": 0,
+            "unsure": 0,
+            "agree": 0,
+            "well_supported": 0,
+            "members_agree": 0.0,
+            "members": 0.0,
+        }
     )
     criteria = defaultdict(
         lambda: {"evidence": defaultdict(int), "follows": defaultdict(int), "reasons": defaultdict(int), "other": []}
     )
-    totals = defaultdict(lambda: {"k": 0, "n": 0, "wk": 0.0, "wn": 0.0, "mk": 0.0, "mn": 0.0})
+    totals = defaultdict(lambda: {"k": 0, "n": 0, "wk": 0.0, "wn": 0.0, "mk": 0.0, "mn": 0.0, "sk": 0, "wsk": 0.0})
     for iid, entry in key.items():
         r = reviews.get(iid) or {}
         s = entry["stratum"]
@@ -814,7 +852,12 @@ def score(folder: str | Path) -> dict:
                 by_stratum[sk]["members_agree"] += m[0]
                 by_stratum[sk]["members"] += m[1]
             t = totals[(s["run"], s["principle"], s["step"], s["status"])]
-            agreed = r["overall"] == "agree"
+            agreed = bool(agrees(items[iid], r["overall"]))
+            sound = bool(well_supported(items[iid], r))
+            by_stratum[sk]["agree"] += agreed
+            by_stratum[sk]["well_supported"] += sound
+            t["sk"] += sound
+            t["wsk"] += weight[sk] * sound
             t["k"] += agreed
             t["n"] += 1
             t["wk"] += weight[sk] * agreed
@@ -826,22 +869,26 @@ def score(folder: str | Path) -> dict:
     strata = []
     for s in manifest["strata"]:
         c = by_stratum[_skey(s)]
-        n = c["agree"] + c["disagree"] + c["partly"]
+        n = c["holds"] + c["not_holds"] + c["partly"]
         strata.append(
             {
                 **s,
                 "reviewed": reviewed[_skey(s)],
                 "judged": judged[_skey(s)],
-                "agree": c["agree"],
-                "disagree": c["disagree"],
+                "holds": c["holds"],
+                "not_holds": c["not_holds"],
                 "partly": c["partly"],
                 "unsure": c["unsure"],
+                "agree": c["agree"],
                 **_rate(c["agree"], n),
+                "well_supported": c["well_supported"],
+                "well_supported_rate": _rate(c["well_supported"], n)["rate"],
                 "members_rate": round(c["members_agree"] / c["members"], 3) if c["members"] else None,
             }
         )
 
-    anchoring = {"units": 0, "blind_fails": 0, "blind_decided": 0, "agree": 0, "decided": 0}
+    # blind: the requirement fails (the concern holds) or holds; after: the concern holds
+    anchoring = {"units": 0, "blind_fails": 0, "blind_decided": 0, "holds": 0, "decided": 0}
     for iid, item in items.items():
         if not item.get("blind_first"):
             continue
@@ -853,10 +900,10 @@ def score(folder: str | Path) -> dict:
             anchoring["blind_fails"] += blind == "fails"
         if r.get("overall") in DECIDED:
             anchoring["decided"] += 1
-            anchoring["agree"] += r["overall"] == "agree"
+            anchoring["holds"] += r["overall"] == "holds"
     if anchoring["blind_decided"] and anchoring["decided"]:
         anchoring["blind_rate"] = round(anchoring["blind_fails"] / anchoring["blind_decided"], 3)
-        anchoring["non_blind_rate"] = round(anchoring["agree"] / anchoring["decided"], 3)
+        anchoring["non_blind_rate"] = round(anchoring["holds"] / anchoring["decided"], 3)
         anchoring["difference"] = round(anchoring["non_blind_rate"] - anchoring["blind_rate"], 3)
 
     # per estimate (run, principle, step, status), the share of its strata's population in strata with a unit judged
@@ -873,7 +920,10 @@ def score(folder: str | Path) -> dict:
     out = {
         "review": manifest["id"],
         "scored": datetime.now(UTC).isoformat(timespec="seconds"),
-        "measure": "agreement with E's output (non-blind; not precision)",
+        "measure": (
+            "agreement with E's output (non-blind; not precision): the reviewer's holds or not_holds against E's status; "
+            "well supported: agreeing, with evidence and conclusion at least mostly sound"
+        ),
         "items": len(key),
         "judged": sum(1 for iid in key if (reviews.get(iid) or {}).get("overall") in DECIDED),
         "unsure": sum(1 for iid in key if (reviews.get(iid) or {}).get("overall") == "unsure"),
@@ -890,6 +940,8 @@ def score(folder: str | Path) -> dict:
                 "unweighted_rate": _rate(t["k"], t["n"])["rate"],
                 "interval": _rate(t["k"], t["n"])["interval"],
                 "members_rate": round(t["mk"] / t["mn"], 3) if t["mn"] else None,
+                "well_supported_rate": round(t["wsk"] / t["wn"], 3) if t["wn"] else None,
+                "unweighted_well_supported_rate": _rate(t["sk"], t["n"])["rate"],
                 "population_covered": round(covered[(run, p, step, status)] / population[(run, p, step, status)], 3)
                 if population[(run, p, step, status)]
                 else None,

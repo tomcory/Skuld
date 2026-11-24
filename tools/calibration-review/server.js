@@ -24,7 +24,7 @@ const PRIOR = path.join(FOLDER, 'prior-review.json');
 const PORT = Number(process.env.PORT || 3001);
 const DECISIONS = ['fails', 'holds', 'unsure'];
 const RECALL = path.join(FOLDER, 'recall.json');
-const OVERALL = ['agree', 'disagree', 'unsure'];
+const OVERALL = ['holds', 'not_holds', 'unsure'];  // does the concern hold for the app (review method 5)
 // a verdict derived from the phrases (declared purposes E holds not specific) may also be partly: some phrases as E says
 const DERIVED = [...OVERALL, 'partly'];
 // the criteria's values: the sample's (since skuld.review 3, with mostly), else those of a sample drawn before
@@ -95,7 +95,7 @@ function derive(item, phrases) {
     const judged = item.members.map(m => phrases[m.concern]).filter(v => v !== 'unsure');
     if (!judged.length) return 'unsure';
     const agree = judged.filter(v => v === 'not_specific').length;
-    return agree === judged.length ? 'agree' : agree === 0 ? 'disagree' : 'partly';
+    return agree === judged.length ? 'holds' : agree === 0 ? 'not_holds' : 'partly';
 }
 
 // an item's prior review, with who made it and when, or null

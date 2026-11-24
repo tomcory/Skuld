@@ -113,7 +113,7 @@ def test_the_phrases_are_judged_blind_before_es_output_is_shown(tool):
     assert status == 200
     saved = json.loads((folder / review.REVIEWS).read_text())[item["id"]]
     assert saved["blind_phrases"]["phrases"] == blind and saved["blind_phrases"]["note"] == "n"
-    assert saved["phrases"] == after and saved["overall"] == "agree"
+    assert saved["phrases"] == after and saved["overall"] == "holds"
     # removing the judgment keeps the blind phrases: the unit has been seen with E's output since
     call(base, f"/reviews/{item['id']}", "DELETE")
     assert json.loads((folder / review.REVIEWS).read_text())[item["id"]] == {"blind_phrases": saved["blind_phrases"]}

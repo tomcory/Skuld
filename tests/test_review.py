@@ -140,13 +140,13 @@ def test_scores_are_agreement_per_unit_and_per_member(tmp_path, runs):
             # one phrase of two judged not specific: half its members agree with E
             first, second = (m["concern"] for m in i["members"])
             reviews[i["id"]] = {
-                "overall": "agree",
+                "overall": "holds",
                 "evidence": "yes",
                 "follows": "yes",
                 "phrases": {first: "not_specific", second: "specific"},
             }
         else:
-            reviews[i["id"]] = {"overall": "disagree", "evidence": "partly", "follows": "no"}
+            reviews[i["id"]] = {"overall": "not_holds", "evidence": "partly", "follows": "no"}
     (folder / review.REVIEWS).write_text(json.dumps(reviews), encoding="utf-8")
     (folder / review.RECALL).write_text(
         json.dumps({"a.b@1": {"done": True, "missed": [{"requirement": "other", "subject": "P-x", "note": "n"}]}}),
@@ -157,7 +157,10 @@ def test_scores_are_agreement_per_unit_and_per_member(tmp_path, runs):
     est = {(e["run"], e["step"]): e for e in s["estimates"]}
     declared = est[("model-x", "not_specific")]
     assert declared["rate"] == 1.0 and declared["members_rate"] == 0.5
-    assert est[("model-x", "less_invasive_alternative")]["rate"] == 0.0
+    # E did not establish these concerns: held not to hold, they agree with E (method 5)
+    assert est[("model-x", "less_invasive_alternative")]["status"] == "not_established"
+    assert est[("model-x", "less_invasive_alternative")]["rate"] == 1.0
+    assert est[("model-x", "less_invasive_alternative")]["well_supported_rate"] == 0.0  # follows: no
     assert s["recall"]["applications_done"] == 1 and len(s["recall"]["missed"]) == 1
     crit = {(c["run"], c["step"]): c for c in s["criteria"]}
     assert crit[("model-y", "less_invasive_alternative")]["follows"] == {"no": 1}
@@ -168,8 +171,8 @@ def test_the_anchoring_units_compare_blind_and_non_blind(tmp_path, supported_run
     blind = [i for i in items if i.get("blind_first")]
     assert len(blind) == 2
     reviews = {
-        blind[0]["id"]: {"blind": {"decision": "holds"}, "overall": "agree", "evidence": "yes", "follows": "yes"},
-        blind[1]["id"]: {"blind": {"decision": "fails"}, "overall": "agree", "evidence": "yes", "follows": "yes"},
+        blind[0]["id"]: {"blind": {"decision": "holds"}, "overall": "holds", "evidence": "yes", "follows": "yes"},
+        blind[1]["id"]: {"blind": {"decision": "fails"}, "overall": "holds", "evidence": "yes", "follows": "yes"},
     }
     (folder / review.REVIEWS).write_text(json.dumps(reviews), encoding="utf-8")
     a = review.score(folder)["anchoring"]
@@ -186,9 +189,9 @@ def test_a_changed_sample_is_not_scored(tmp_path, runs):
 def test_two_reviewers_kappa_disagreements_and_seeding(tmp_path, runs):
     folder, items, _ = drawn(tmp_path, runs)
     ids = [i["id"] for i in items]
-    first = {i: {"overall": "agree", "evidence": "yes", "follows": "yes"} for i in ids}
+    first = {i: {"overall": "holds", "evidence": "yes", "follows": "yes"} for i in ids}
     second = {i: dict(first[i]) for i in ids}
-    second[ids[0]] = {"overall": "disagree", "evidence": "no", "follows": "no", "note": "wrong"}
+    second[ids[0]] = {"overall": "not_holds", "evidence": "no", "follows": "no", "note": "wrong"}
     a, b = tmp_path / "a.json", tmp_path / "b.json"
     a.write_text(json.dumps(first), encoding="utf-8")
     b.write_text(json.dumps({"reviewer": "b", "items": second}), encoding="utf-8")
@@ -333,7 +336,7 @@ def test_a_partial_return_reports_the_strata_it_reached(tmp_path, runs):
     folder, items, key = drawn(tmp_path, runs)
     # only model-x's units reviewed: model-y's strata are not reached
     reviews = {
-        i["id"]: {"overall": "agree", "evidence": "yes", "follows": "yes"}
+        i["id"]: {"overall": "holds", "evidence": "yes", "follows": "yes"}
         for i in items
         if key[i["id"]]["stratum"]["run"] == "model-x" and i["kind"] != "declared"
     }
@@ -360,7 +363,7 @@ def test_declared_purposes_carry_their_phrases_to_be_judged_blind_first(tmp_path
             assert not i.get("blind_first")  # judged blind phrase by phrase, not by an anchoring decision
         else:
             assert "blind_phrases" not in i
-    assert read(folder / review.MANIFEST)["method"]["version"] == "4"
+    assert read(folder / review.MANIFEST)["method"]["version"] == "5"
 
 
 def blind_reviews(items, blind, after):
@@ -403,7 +406,7 @@ def test_a_sample_drawn_before_blind_phrases_still_scores(tmp_path, runs):
     manifest = read(folder / review.MANIFEST)
     manifest["files"][review.SAMPLE] = file_sha256(folder / review.SAMPLE)
     (folder / review.MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
-    reviews = {i["id"]: {"overall": "agree", "evidence": "yes", "follows": "yes"} for i in items}
+    reviews = {i["id"]: {"overall": "holds", "evidence": "yes", "follows": "yes"} for i in items}
     (folder / review.REVIEWS).write_text(json.dumps(reviews), encoding="utf-8")
     s = review.score(folder)
     assert s["blind_phrases"] == {"units": 0, "units_judged_blind": 0, "units_not_supported": 0, "runs": {}}
@@ -422,3 +425,30 @@ def test_two_reviewers_kappa_on_the_blind_phrases_and_their_seeding(tmp_path, ru
     assert out["overall"]["phrases"]["items"] == 4
     seeded = read(folder / review.REVIEWS)
     assert all(seeded[i]["blind_phrases"] == first[i]["blind_phrases"] for i in first)
+
+
+def test_the_verdict_is_about_the_app_and_agreement_with_e_is_derived():
+    """Method 5 (author, 25 Nov 2026): the reviewer says whether the concern holds; agreeing with E is holding a concern
+    E supports, or holding one E did not establish not to hold."""
+    supported, held_back = {"status": "supported"}, {"status": "not_established"}
+    assert review.agrees(supported, "holds") is True and review.agrees(supported, "not_holds") is False
+    assert review.agrees(held_back, "not_holds") is True and review.agrees(held_back, "holds") is False
+    assert review.agrees(supported, "partly") is False and review.agrees(supported, "unsure") is None
+    sound = {"overall": "holds", "evidence": "mostly", "follows": "yes"}
+    assert review.well_supported(supported, sound) is True
+    assert review.well_supported(supported, {**sound, "follows": "partly"}) is False
+    assert review.well_supported(supported, {**sound, "evidence": "none_cited"}) is True
+    # right but not agreeing with E is never well supported
+    assert review.well_supported(held_back, sound) is False
+
+
+def test_a_not_established_unit_held_not_to_hold_agrees_in_the_scores(tmp_path, runs):
+    folder, items, _ = drawn(tmp_path, runs)
+    reviews = {i["id"]: {"overall": "not_holds", "evidence": "yes", "follows": "yes"} for i in items}
+    (folder / review.REVIEWS).write_text(json.dumps(reviews), encoding="utf-8")
+    s = review.score(folder)
+    for st in s["strata"]:
+        if st["judged"]:
+            expected = 0 if st["status"] == "supported" else st["judged"]
+            assert st["agree"] == expected and st["not_holds"] == st["judged"]
+            assert st["well_supported"] == expected
