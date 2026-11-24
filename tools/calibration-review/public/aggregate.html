@@ -59,6 +59,35 @@
         .codebook dd { margin-bottom: 0; margin-left: 1rem; }
         .evidence-card.kind-experiment { border-left-color: #e8590c; }
         [v-cloak] { display: none; }
+            /* the stage-1 page's treatment (24 Nov 2026): the concern on top, sections, cards, rows */
+        .left { max-height: 88vh; overflow-y: auto; }
+        .members, .evidence { max-height: none; overflow: visible; }
+        .subject { background: #fff; border: 1px solid #dde1e6; border-left: 5px solid #343a40; border-radius: .5rem; padding: .7rem .9rem; margin-top: .6rem; }
+        .subject-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: #6c757d; margin-bottom: .2rem; }
+        .subject-line { font-size: 1.12rem; font-weight: 700; line-height: 1.4; }
+        .subject-told { margin-top: .55rem; padding: .45rem .7rem; background: #f6f7f9; border-radius: .4rem; font-size: .93rem; }
+        .ask { font-size: .95rem; font-weight: 400; color: #495057; margin-top: 1rem !important; }
+        .section-head { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: #495057; font-weight: 700; margin: 1.1rem 0 .45rem; }
+        .section-sub { text-transform: none; letter-spacing: 0; font-weight: 400; color: #868e96; margin-left: .3rem; }
+        .section-toggle { cursor: pointer; }
+        .concern-box { background: #fff; border: 1px solid #dde1e6; border-radius: .5rem; padding: .65rem .8rem; }
+        .concern-label { font-size: 1.02rem; font-weight: 600; }
+        .members { display: flex; flex-direction: column; gap: .55rem; }
+        .member { background: #fff; border: 1px solid #e3e6ea !important; border-left: 3px solid #adb5bd !important; border-radius: .45rem; padding: .55rem .7rem !important; }
+        .mini-label { font-size: .66rem; text-transform: uppercase; letter-spacing: .04em; color: #868e96; margin-right: .3rem; }
+        .member-purpose { color: #495057; margin-top: .25rem; }
+        .member-reason { margin-top: .3rem; }
+        .alt { background: #f8f9fa; border: 1px solid #eef0f2; border-radius: .35rem; padding: .35rem .55rem; margin-top: .4rem; }
+        .evidence-card { margin-bottom: .65rem; }
+        .doc-link { cursor: pointer; }
+        .doc-link:hover { background: #f8f0fc; }
+        .judge { border-top: 1px solid #dde1e6; margin-top: 1rem; }
+        .decide { border-top: 1px solid #dde1e6; padding-top: .6rem; margin-top: .8rem; }
+        .q { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; padding: .45rem 0; border-top: 1px solid #f1f3f5; }
+        .q-label { min-width: 12.5rem; text-transform: uppercase; font-size: .72rem; letter-spacing: .04em; color: #6c757d; font-weight: 600; }
+        .reasons { padding-left: 13rem !important; margin: .1rem 0 .4rem; }
+        .document { max-height: 82vh; }
+        .passage { margin-bottom: .75rem; line-height: 1.55; }
     </style>
 </head>
 <body>
@@ -196,7 +225,7 @@
     </div>
 
     <div class="row g-3" v-if="item">
-        <div class="col-lg-6">
+        <div class="col-lg-6 left">
             <div class="card shadow-sm">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start">
@@ -207,9 +236,11 @@
                             <span v-if="item.review && item.review.overall" class="badge" :class="overallClass(item.review.overall)">{{ item.review.overall }}</span>
                         </span>
                     </div>
-                    <div class="mt-2"><b>{{ item.requirement.title }}</b></div>
-                    <div class="small text-secondary">{{ item.requirement.principle.replace('_', ' ') }} · {{ item.requirement.provisions.join(', ') }}</div>
-                    <div class="small mt-2" v-if="item.question"><span class="text-secondary">The frame's question:</span> {{ item.question }}</div>
+                    <div class="subject">
+                        <div class="subject-label">The requirement · {{ item.requirement.principle.replace('_', ' ') }} · {{ item.requirement.provisions.join(', ') }}</div>
+                        <div class="subject-line">{{ item.requirement.title }}</div>
+                        <div class="subject-told" v-if="item.question"><div class="subject-label">The frame asks</div>{{ item.question }}</div>
+                    </div>
 
                     <!-- blind first: the subject only -->
                     <template v-if="item.blind_now">
@@ -248,8 +279,8 @@
                                 <div class="d-flex gap-2 align-items-start">
                                     <span class="statement flex-grow-1" @click="query = m.statement" role="button" title="search the documents for it">“{{ m.statement }}”</span>
                                     <div class="btn-group btn-group-sm">
-                                        <button class="btn" :class="blindPhrases[m.concern] === 'specific' ? 'btn-success' : 'btn-outline-success'" @click="setBlindPhrase(m.concern, 'specific')">specific</button>
-                                        <button class="btn" :class="blindPhrases[m.concern] === 'not_specific' ? 'btn-danger' : 'btn-outline-danger'" @click="setBlindPhrase(m.concern, 'not_specific')">not specific</button>
+                                        <button class="btn" :class="blindPhrases[m.concern] === 'specific' ? 'btn-success' : 'btn-outline-secondary'" @click="setBlindPhrase(m.concern, 'specific')">specific</button>
+                                        <button class="btn" :class="blindPhrases[m.concern] === 'not_specific' ? 'btn-danger' : 'btn-outline-secondary'" @click="setBlindPhrase(m.concern, 'not_specific')">not specific</button>
                                         <button class="btn" :class="blindPhrases[m.concern] === 'unsure' ? 'btn-secondary' : 'btn-outline-secondary'" @click="setBlindPhrase(m.concern, 'unsure')">unsure</button>
                                     </div>
                                 </div>
@@ -270,20 +301,21 @@
 
                     <template v-else>
                         <div class="ask mt-3">{{ item.ask }}</div>
-                        <div class="border rounded p-2 mt-2">
-                            <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <div class="section-head">E's concern</div>
+                        <div class="concern-box">
+                            <div class="concern-label">{{ item.label }}</div>
+                            <div class="d-flex flex-wrap gap-2 align-items-center mt-1">
                                 <span class="badge" :class="statusClass(item.status)" :title="statusTitle(item.status)">E: concern {{ item.status.replace('_', ' ') }}</span>
                                 <span class="badge text-bg-light border" :title="tierTitle(item.tier)">{{ item.tier }} tier</span>
                                 <span class="small text-secondary" title="E's own uncertainty about the concern: its level, the highest of the reasons that raise it (low where none does)">E's uncertainty: {{ uncertaintyText(item.uncertainty) }}</span>
                                 <span v-if="item.disagreeing" class="small text-danger">samples disagreed on {{ item.disagreeing }} member(s)</span>
                             </div>
-                            <div class="fw-semibold mt-1">{{ item.label }}</div>
-                            <div v-if="item.condition && item.condition.length" class="small text-secondary">only if: {{ item.condition.join(', ') }}</div>
+                            <div v-if="item.condition && item.condition.length" class="small mt-1"><span class="text-secondary">only if:</span> {{ item.condition.join(', ') }}</div>
                             <div v-if="item.blind_first && item.review && item.review.blind" class="small mt-1 text-secondary">Your blind decision: <b>{{ item.review.blind.decision }}</b></div>
                         </div>
 
-                        <div class="d-flex justify-content-between align-items-center mt-3">
-                            <b class="small">{{ item.members.length }} {{ item.members.length === 1 ? 'member' : 'members' }}<span class="fw-normal text-secondary"> (the concerns this unit aggregates)</span></b>
+                        <div class="d-flex justify-content-between align-items-end">
+                            <div class="section-head">{{ item.members.length }} {{ item.members.length === 1 ? 'member' : 'members' }} <span class="section-sub">the concerns this unit aggregates</span></div>
                             <button v-if="item.kind === 'declared'" class="btn btn-sm btn-outline-secondary" @click="allNotSpecific()">all not specific <kbd>N</kbd></button>
                         </div>
                         <div class="members mt-1">
@@ -292,8 +324,8 @@
                                     <div class="d-flex gap-2 align-items-start">
                                         <span class="statement flex-grow-1" @click="query = m.statement" role="button" title="search the documents for it">“{{ m.statement }}”</span>
                                         <div class="btn-group btn-group-sm">
-                                            <button class="btn" :class="phrases[m.concern] === 'specific' ? 'btn-success' : 'btn-outline-success'" @click="setPhrase(m.concern, 'specific')">specific</button>
-                                            <button class="btn" :class="phrases[m.concern] === 'not_specific' ? 'btn-danger' : 'btn-outline-danger'" @click="setPhrase(m.concern, 'not_specific')">not specific</button>
+                                            <button class="btn" :class="phrases[m.concern] === 'specific' ? 'btn-success' : 'btn-outline-secondary'" @click="setPhrase(m.concern, 'specific')">specific</button>
+                                            <button class="btn" :class="phrases[m.concern] === 'not_specific' ? 'btn-danger' : 'btn-outline-secondary'" @click="setPhrase(m.concern, 'not_specific')">not specific</button>
                                             <button class="btn" :class="phrases[m.concern] === 'unsure' ? 'btn-secondary' : 'btn-outline-secondary'" @click="setPhrase(m.concern, 'unsure')">unsure</button>
                                         </div>
                                     </div>
@@ -317,14 +349,14 @@
                                 <template v-else-if="m.data">
                                     <div><vocab-term kind="data" :id="m.data"></vocab-term> → <b>{{ m.recipient || 'on the device' }}</b> for <vocab-term kind="purpose" :id="m.purpose"></vocab-term>
                                         <span class="text-secondary ms-2 text-nowrap" style="font-size: .72rem" title="the practice's id">{{ m.subject }}</span></div>
-                                    <div v-if="m.purpose_stated" class="text-secondary">E's purpose: {{ m.purpose_stated.action }} {{ m.purpose_stated.object }}<span v-if="m.purpose_stated.outcome">, to {{ m.purpose_stated.outcome }}</span></div>
+                                    <div v-if="m.purpose_stated" class="member-purpose"><span class="mini-label">E's purpose</span> {{ m.purpose_stated.action }} {{ m.purpose_stated.object }}<span v-if="m.purpose_stated.outcome">, to {{ m.purpose_stated.outcome }}</span></div>
                                     <div v-for="a in (m.alternatives || [])" class="alt">
-                                        <i class="bi bi-arrow-return-right"></i> less invasive alternative: {{ a.alternative }}
+                                        <i class="bi bi-arrow-return-right"></i> less invasive alternative: {{ alternativeText(a.alternative) }}
                                         <span class="text-secondary">· E: {{ a.status.replace('_', ' ') }}<span v-if="a.level">, {{ a.level.replace('_', ' ') }}</span><span v-if="a.component">; it would change the {{ a.component }}</span></span>
                                         <div v-if="a.reason" class="text-secondary">{{ a.reason }}</div>
                                     </div>
                                     <div v-if="m.specified" class="text-secondary">purposes the provider specifies for its data: {{ m.specified.join(', ') || 'none' }}</div>
-                                    <div>{{ m.reason }}</div>
+                                    <div class="member-reason"><span class="mini-label">E's reason</span> {{ m.reason }}</div>
                                 </template>
                                 <template v-else>
                                     <div>{{ m.reason }}</div>
@@ -341,10 +373,10 @@
                             <div v-else-if="!item.evidence.length" class="small text-secondary">E cites no evidence item for this concern: it rests
                                 on the documents' silence (above) and the documents themselves (right).</div>
                             <template v-else>
-                            <button class="btn btn-sm btn-outline-secondary" @click="evidenceShown = !evidenceShown">
+                            <div class="section-head section-toggle" role="button" @click="evidenceShown = !evidenceShown">
                                 <i class="bi" :class="evidenceShown ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
-                                What E's members rest on: {{ item.evidence.length }} evidence {{ item.evidence.length === 1 ? 'item' : 'items' }} <kbd>V</kbd>
-                            </button>
+                                What it rests on: {{ item.evidence.length }} evidence {{ item.evidence.length === 1 ? 'item' : 'items' }} <kbd>V</kbd>
+                            </div>
                             <div v-if="evidenceShown" class="evidence mt-2">
                                 <div v-for="e in item.evidence" class="evidence-card small" :class="['kind-' + kindOf(e), {'screen-row': e.screenshot}]">
                                     <div v-if="e.screenshot" class="shot-col"><img :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot"><div v-if="e.before_change" class="shot-label">before the change</div></div>
@@ -352,6 +384,7 @@
                                         <div class="text-secondary"><b>{{ e.kind === 'run' ? 'an experiment' : (e.source || e.kind) }}</b><span v-if="item.members.length > 1"> · cited by {{ e.members.length }} of {{ item.members.length }} members</span></div>
                                         <traffic-list v-if="e.source === 'traffic as captured'" class="mt-1" :lines="[e.text]"></traffic-list>
                                         <div v-else-if="e.kind === 'run'" class="text-break">{{ experiment(e) }}</div>
+                                        <div v-else-if="kindOf(e) === 'document'" class="text-break doc-link" role="button" title="find it in the document (right)" @click="query = (e.text || '').slice(0, 60)" v-html="escapeHtml(e.text)"></div>
                                         <div v-else class="text-break" v-html="escapeHtml(e.text)"></div>
                                         <div v-if="e.description" class="described"><div class="described-label"><i class="bi bi-chat-square-text"></i> A model's description of the screen, for orientation; not evidence:</div>{{ e.description }}</div>
                                     </div>
@@ -360,11 +393,12 @@
                             </template>
                         </div>
 
-                        <div class="decide">
-                            <div class="d-flex align-items-center gap-2 mb-1">
-                                <span class="crit-label">Evidence exists, cited correctly</span>
+                        <div class="judge">
+                            <div class="section-head">Your judgement</div>
+                            <div class="q">
+                                <span class="q-label">Evidence exists, cited correctly</span>
                                 <div class="btn-group btn-group-sm">
-                                    <button v-for="(v, i) in evidenceValues" class="btn" :class="evidence === v ? 'btn-primary' : 'btn-outline-primary'" @click="setCriterion('evidence', v)">{{ v.replace('_', ' ') }} <kbd>{{ i + 1 }}</kbd></button>
+                                    <button v-for="(v, i) in evidenceValues" class="btn" :class="evidence === v ? btnOn(v) : btnOff(v)" @click="setCriterion('evidence', v)">{{ v.replace('_', ' ') }} <kbd>{{ i + 1 }}</kbd></button>
                                 </div>
                             </div>
                             <div v-if="reasonsAsked('evidence')" class="reasons mb-2">
@@ -374,10 +408,10 @@
                                 <input v-if="otherAsked('evidence')" id="other-evidence" class="form-control form-control-sm other-reason" placeholder="Your reason (required)"
                                        v-model="crit.evidence_other" @keydown.stop>
                             </div>
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <span class="crit-label">E's conclusion follows from that evidence</span>
+                            <div class="q">
+                                <span class="q-label">E's conclusion follows</span>
                                 <div class="btn-group btn-group-sm">
-                                    <button v-for="(v, i) in followsValues" class="btn" :class="follows === v ? 'btn-primary' : 'btn-outline-primary'" @click="setCriterion('follows', v)">{{ v }} <kbd>{{ followsKeys[i] }}</kbd></button>
+                                    <button v-for="(v, i) in followsValues" class="btn" :class="follows === v ? btnOn(v) : btnOff(v)" @click="setCriterion('follows', v)">{{ v }} <kbd>{{ followsKeys[i] }}</kbd></button>
                                 </div>
                             </div>
                             <div v-if="reasonsAsked('follows')" class="reasons mb-2">
@@ -387,11 +421,12 @@
                                 <input v-if="otherAsked('follows')" id="other-follows" class="form-control form-control-sm other-reason" placeholder="Your reason (required)"
                                        v-model="crit.follows_other" @keydown.stop>
                             </div>
-                            <textarea class="form-control form-control-sm" rows="2" placeholder="Note (say why if you disagree or are unsure)" v-model="note" @keydown.stop></textarea>
+                            <textarea class="form-control form-control-sm mt-2" rows="2" placeholder="Note (say why if you disagree or are unsure)" v-model="note" @keydown.stop></textarea>
+                        </div>
+                        <div class="decide">
                             <div v-if="derived" class="small text-secondary mt-2">For declared purposes your verdict is your judgment of the
                                 phrases: it agrees with E where you marked a phrase not specific, and is derived from them when you save.</div>
-                            <div v-else class="mt-2"><b class="small">Your verdict on the concern as stated</b>
-                                <span class="small text-secondary"> (its status, label and members; the criteria above explain your verdict, they do not replace it)</span></div>
+                            <div v-else><span class="q-label" title="On the concern as stated: its status, label and members. The criteria above explain your verdict; they do not replace it.">Your verdict on the concern as stated <i class="bi bi-info-circle"></i></span></div>
                             <div class="d-flex flex-wrap gap-2 mt-1 align-items-center">
                                 <template v-if="derived">
                                     <button class="btn btn-primary" :disabled="!ready" @click="save(null)"><i class="bi bi-check-lg"></i> Save <kbd>S</kbd></button>
@@ -567,6 +602,20 @@ const app = createApp({
             return html.replace(pattern, m => `<mark>${m}</mark>`);
         },
         escapeHtml: t => escape(t),
+        // an answer's colour once chosen, grey until then (as on the stage-1 page)
+        btnOn: v => ({yes: 'btn-success', mostly: 'btn-info', partly: 'btn-warning', no: 'btn-danger', none_cited: 'btn-secondary'})[v] || 'btn-primary',
+        btnOff: () => 'btn-outline-secondary',
+        // a tested alternative's id ("<case>:<change>", e.g. e1:D-android_id) in words; any other alternative as stated
+        alternativeText(alt) {
+            const m = /^([^:\s]+):([RDG]-\S+)$/.exec(alt || '');
+            if (!m) return alt;
+            const [, kase, change] = m;
+            const where = kase === 'launch' ? "at the app's launch" : `in a feature (episode ${kase.replace(/^e/, '')})`;
+            const a = /^R-(.+)$/.exec(change), d = /^D-(.+)$/.exec(change), g = /^G-round(\d+)$/.exec(change);
+            const what = a ? `every request to ${a[1]} blocked` : d ? `the ${d[1].replace(/_/g, ' ')} replaced by a fresh one`
+                : g ? `the location rounded to ${g[1]} decimal${g[1] === '1' ? '' : 's'}` : change;
+            return `${what}, ${where} (tested: ${alt})`;
+        },
         // an experiment's comparison ("the case report's comparison <case>:<purpose>:<alternative> (<outcome>)") in words
         experiment(e) {
             const m = /comparison ([^:\s]+):[^:\s]+:(\S+) \((\w+)\)/.exec(e.method || '');
