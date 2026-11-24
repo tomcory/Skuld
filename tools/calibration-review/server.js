@@ -271,7 +271,12 @@ function expectationOpen(item, review, questions) {
     const open = [];
     for (const p of item.purposes) {
         const a = (review.purposes || {})[p.key] || {};
-        for (const q of askedOf(p, questions)) if (!questions.purpose[q].includes(a[q])) open.push(`${p.key} ${q}`);
+        for (const q of askedOf(p, questions)) {
+            if (!questions.purpose[q].includes(a[q])) open.push(`${p.key} ${q}`);
+            // a mostly or partly names at least one reason
+            const reasons = (questions.reasons || {})[q];
+            if (reasons && reasons.when.includes(a[q]) && !(a[`${q}_reasons`] || []).length) open.push(`${p.key} ${q} reasons`);
+        }
         for (const d of p.dependencies.filter(d => d.asked)) {
             const b = (review.dependencies || {})[d.key] || {};
             for (const q of Object.keys(questions.dependency)) if (!questions.dependency[q].includes(b[q])) open.push(`${d.key} ${q}`);
@@ -291,6 +296,12 @@ function expectationReview(req, res) {
         if (!purposeKeys.has(k) || typeof a !== 'object') return res.status(400).send(`no purpose ${k} in this unit`);
         for (const [q, v] of Object.entries(a)) {
             if (q === 'better_node') { if (typeof v !== 'string') return res.status(400).send('better_node must be text'); continue; }
+            if (q.endsWith('_reasons')) {  // the reasons of a mostly or partly, from the sample's list
+                const known = (((questions.reasons || {})[q.slice(0, -'_reasons'.length)] || {}).options || []).map(o => o.id);
+                if (!known.length) return res.status(400).send(`${k}: ${q} is not asked`);
+                if (!Array.isArray(v) || v.some(x => !known.includes(x))) return res.status(400).send(`${k} ${q} must be a list of ${known}`);
+                continue;
+            }
             if (!askedOf(purposeKeys.get(k), questions).includes(q)) return res.status(400).send(`${k}: ${q} is not asked`);
             if (v !== null && !questions.purpose[q].includes(v)) return res.status(400).send(`${k} ${q} must be one of ${questions.purpose[q]}`);
         }

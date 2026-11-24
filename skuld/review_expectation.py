@@ -12,7 +12,10 @@ whether the provider says the same (author: "judged against E's context").
 
 Per purpose:
 
-    plausible    a plausible purpose for this flow, given the context: yes, partly, no, unsure
+    plausible    a plausible purpose for this flow, given the context: yes, mostly (one detail off: accepted after changing
+                 one phrase), partly (something right, but it would have to be rewritten), no, unsure; mostly and
+                 partly name one or more reasons from a fixed list (REASONS: overstates, too vague, bundles purposes,
+                 part of the flow, loose fit), picked, never typed (24 Nov 2026)
     node         the DPV purpose node: exact, too_broad, too_narrow, wrong, unsure (with a better node, if any)
     beneficiary  user, provider or other: right, wrong, unsure
     role         functional or ancillary: right, wrong, unsure
@@ -63,7 +66,10 @@ from skuld.review_screens import context_keys, copy_screenshots, empty, evidence
 #: 2 since the drawn units are interleaved by stratum instead of shuffled (every prefix of the sample covers the strata
 #: in proportion), and a draw may cap the units of one application (`per_app`; the manifest records the applications'
 #: units per run) (20 Nov 2026)
-VERSION = "2"
+#: 3 since Plausible has five values (yes, mostly, partly, no, unsure) and a purpose judged mostly or partly names its
+#: reasons (`REASONS`), the rates are given strict (yes) and lenient (yes or mostly), and two reviewers' agreement on an
+#: ordered question also as linearly weighted κ (author, 24 Nov 2026: "partly" was too broad in the study's review)
+VERSION = "3"
 #: What a unit's stratum is made of
 STRATUM = ("run", "role", "status")
 KIND = "expectation-review"
@@ -77,7 +83,7 @@ MANIFEST, SAMPLE, KEY, REVIEWS, SCORES, AGREEMENT = (
 )
 #: The questions per purpose and per dependency, with their values; the first value is the one that agrees with E
 PURPOSE_QUESTIONS = {
-    "plausible": ("yes", "partly", "no", "unsure"),
+    "plausible": ("yes", "mostly", "partly", "no", "unsure"),
     "node": ("exact", "too_broad", "too_narrow", "wrong", "unsure"),
     "beneficiary": ("right", "wrong", "unsure"),
     "role": ("right", "wrong", "unsure"),
@@ -87,6 +93,27 @@ DEPENDENCY_QUESTIONS = {
     "relationship": ("yes", "partly", "no", "unsure"),
     "steps": ("yes", "partly", "no"),
 }
+#: Per question, the answers that name their reasons, and the reasons a reviewer picks from (one or more; never typed):
+#: what keeps a purpose from a plain yes
+REASONS = {
+    "plausible": {
+        "when": ("mostly", "partly"),
+        "options": (
+            (
+                "overstates",
+                "Overstates",
+                "asserts a detail the context does not show (personalised ads where only ad delivery is shown)",
+            ),
+            ("vague", "Too vague", "too broad or too generic to say what the recipient does"),
+            ("bundles", "Bundles purposes", "puts two or more purposes into one (analytics and advertising)"),
+            ("part_of_flow", "Part of the flow", "explains only part of what the flow sends or to whom"),
+            ("loose_fit", "Loose fit", "the recipient could do this, but the flow gives little sign of it"),
+        ),
+    },
+}
+#: The questions whose answers are ordered, best first (unsure left out): their agreement is also weighted, and their
+#: rate also given leniently, counting the first two as agreeing
+ORDERED = {"plausible": ("yes", "mostly", "partly", "no")}
 #: The dependency claims a reviewer judges: those that state a relationship
 STATED = ("supported", "not_established", "conflicted")
 ASK = (
@@ -585,7 +612,19 @@ def _questions() -> dict:
     return {
         "purpose": {k: list(v) for k, v in PURPOSE_QUESTIONS.items()},
         "dependency": {k: list(v) for k, v in DEPENDENCY_QUESTIONS.items()},
+        "reasons": {
+            q: {
+                "when": list(r["when"]),
+                "options": [{"id": i, "label": label, "hint": hint} for i, label, hint in r["options"]],
+            }
+            for q, r in REASONS.items()
+        },
     }
+
+
+def reasons_key(question: str) -> str:
+    """Where a purpose's answers keep the reasons of a question: `<question>_reasons`."""
+    return f"{question}_reasons"
 
 
 # -- checking a review ------------------------------------------------------------------------------------------------
@@ -600,6 +639,11 @@ def problems(item: dict, review: dict) -> list[str]:
         for q in asked(p):
             if a.get(q) not in PURPOSE_QUESTIONS[q]:
                 out.append(f"{p['key']}: {q}")
+            elif q in REASONS and a[q] in REASONS[q]["when"]:
+                named = a.get(reasons_key(q)) or []
+                known = {i for i, *_ in REASONS[q]["options"]}
+                if not named or not set(named) <= known:
+                    out.append(f"{p['key']}: {q} reasons")
         for d in p["dependencies"]:
             if not d["asked"]:
                 continue
@@ -642,9 +686,32 @@ def _asks(item: dict):
                     yield "dependency", q, role
 
 
-def _agrees(level: str, question: str, answer: str) -> bool:
+def _agrees(level: str, question: str, answer: str, lenient: bool = False) -> bool:
+    """Whether an answer agrees with E: its question's first value; `lenient`, for an ordered question, either of its
+    first two (yes or mostly)."""
     values = (PURPOSE_QUESTIONS if level == "purpose" else DEPENDENCY_QUESTIONS)[question]
+    if lenient and question in ORDERED:
+        return answer in ORDERED[question][:2]
     return answer == values[0]
+
+
+def weighted_kappa(pairs: list[tuple[str, str]], order: tuple[str, ...]) -> float | None:
+    """Cohen's κ with linear weights over an ordered scale (an answer outside it is left out): a disagreement by one
+    step counts less than one by three. None where undefined."""
+    pairs = [(a, b) for a, b in pairs if a in order and b in order]
+    n, k = len(pairs), len(order)
+    if not n or k < 2:
+        return None
+    rank = {v: i for i, v in enumerate(order)}
+
+    def w(i, j):
+        return abs(i - j) / (k - 1)
+
+    observed = sum(w(rank[a], rank[b]) for a, b in pairs) / n
+    pa = [sum(rank[a] == i for a, _ in pairs) / n for i in range(k)]
+    pb = [sum(rank[b] == j for _, b in pairs) / n for j in range(k)]
+    expected = sum(pa[i] * pb[j] * w(i, j) for i in range(k) for j in range(k))
+    return None if expected == 0 else 1 - observed / expected
 
 
 def _weighted(by: dict, population: dict) -> float | None:
@@ -656,8 +723,9 @@ def _weighted(by: dict, population: dict) -> float | None:
 def score(folder: str | Path) -> dict:
     """
     Agreement with the stage's predictions from one reviewer's judgments, per question: per run and role, unweighted
-    with a Wilson interval and weighted by the strata's populations; `partly` counts as not agreeing and `unsure` is
-    left out. The node's answers and the purposes noted as missed are reported as they were given. For a partial
+    with a Wilson interval and weighted by the strata's populations; only the first value (yes, exact, right) counts
+    as agreeing and `unsure` is left out. An ordered question (Plausible, ORDERED) also has its lenient rates, counting
+    `mostly` as agreeing too, and the reasons given for `mostly` and `partly` counted as `<answer>:<reason>`. The node's answers and the purposes noted as missed are reported as they were given. For a partial
     return, `strata` gives per stratum the units drawn, reviewed (done) and judged, and `coverage` the strata it did
     not reach, which the weighted rates do not represent.
     """
@@ -673,7 +741,17 @@ def score(folder: str | Path) -> dict:
 
     # per stratum k and n, combined as the strata's populations weight their rates: a stratum with unsure answers or
     # units not yet done counts for its whole population
-    totals = defaultdict(lambda: {"k": 0, "n": 0, "by": defaultdict(lambda: [0, 0]), "answers": defaultdict(int)})
+    totals = defaultdict(
+        lambda: {
+            "k": 0,
+            "n": 0,
+            "lenient": 0,
+            "by": defaultdict(lambda: [0, 0]),
+            "lenient_by": defaultdict(lambda: [0, 0]),
+            "answers": defaultdict(int),
+            "reasons": defaultdict(int),
+        }
+    )
     missed, done, done_in, judged_in = [], 0, defaultdict(int), defaultdict(int)
     for iid, entry in key.items():
         r = reviews.get(iid) or {}
@@ -685,7 +763,7 @@ def score(folder: str | Path) -> dict:
         # a unit done is reviewed; it is judged where at least one of its answers is not unsure
         done_in[sk] += 1
         judged_in[sk] += any(a != "unsure" for *_, a, _ in _judgments(items[iid], r))
-        for level, _, q, answer, role in _judgments(items[iid], r):
+        for level, part, q, answer, role in _judgments(items[iid], r):
             for scope in ((s["run"], level, q, role), (s["run"], level, q, "all")):
                 t = totals[scope]
                 t["answers"][answer] += 1
@@ -696,6 +774,14 @@ def score(folder: str | Path) -> dict:
                 t["n"] += 1
                 t["by"][sk][0] += ok
                 t["by"][sk][1] += 1
+                if q in ORDERED:
+                    fair = _agrees(level, q, answer, lenient=True)
+                    t["lenient"] += fair
+                    t["lenient_by"][sk][0] += fair
+                    t["lenient_by"][sk][1] += 1
+                if level == "purpose" and q in REASONS and answer in REASONS[q]["when"]:
+                    for reason in ((r.get("purposes") or {}).get(part["key"]) or {}).get(reasons_key(q)) or []:
+                        t["reasons"][f"{answer}:{reason}"] += 1
         for m in r.get("missed") or []:
             missed.append({"run": s["run"], "practice": entry["practice"], **m})
     # per estimate, the strata whose drawn units ask its question: the population a weighted rate could stand for
@@ -722,6 +808,16 @@ def score(folder: str | Path) -> dict:
                 "rate": round(t["k"] / t["n"], 3) if t["n"] else None,
                 "interval": [round(x, 3) for x in wilson(t["k"], t["n"])] if t["n"] else None,
                 "weighted_rate": _weighted(t["by"], population),
+                # an ordered question (Plausible): yes or mostly counted as agreeing
+                **(
+                    {
+                        "lenient_rate": round(t["lenient"] / t["n"], 3) if t["n"] else None,
+                        "lenient_interval": [round(x, 3) for x in wilson(t["lenient"], t["n"])] if t["n"] else None,
+                        "lenient_weighted_rate": _weighted(t["lenient_by"], population),
+                    }
+                    if q in ORDERED
+                    else {}
+                ),
                 # of the population of the strata whose units ask the question, the share in strata with an answer
                 # judged: what the weighted rate stands for
                 "population_covered": round(
@@ -730,6 +826,7 @@ def score(folder: str | Path) -> dict:
                     3,
                 ),
                 "answers": dict(t["answers"]),
+                **({"reasons": dict(sorted(t["reasons"].items()))} if t["reasons"] else {}),
             }
             for (run, level, q, role), t in sorted(totals.items())
         ],
@@ -771,16 +868,27 @@ def agree(folder: str | Path, first: str | Path, second: str | Path) -> dict:
             if ja[k] != jb[k]:
                 differ.append({"id": iid, "part": part, "question": q, "first": ja[k], "second": jb[k]})
 
-    def summary(p):
+    def summary(p, q):
         k = kappa(p)
-        return {"items": len(p), "agreed": sum(x == y for x, y in p), "kappa": round(k, 3) if k is not None else None}
+        out = {"items": len(p), "agreed": sum(x == y for x, y in p), "kappa": round(k, 3) if k is not None else None}
+        if q in ORDERED:
+            # an ordered question: linearly weighted κ over its scale, and κ on agreeing leniently (yes or mostly)
+            w = weighted_kappa(p, ORDERED[q])
+            top = ORDERED[q][:2]
+            sides = [(x in top, y in top) for x, y in p if x in ORDERED[q] and y in ORDERED[q]]
+            k2 = kappa(sides)
+            out |= {
+                "weighted_kappa": round(w, 3) if w is not None else None,
+                "lenient_kappa": round(k2, 3) if k2 is not None else None,
+            }
+        return out
 
     out = {
         "review": folder.name,
         "compared": datetime.now(UTC).isoformat(timespec="seconds"),
         "reviews": [str(Path(first)), str(Path(second))],
         "note": "kappa measures reliability, not validity: both reviewers see E's predictions and share their anchor",
-        "questions": {f"{scope} {level} {q}": summary(p) for (scope, level, q), p in sorted(pairs.items())},
+        "questions": {f"{scope} {level} {q}": summary(p, q) for (scope, level, q), p in sorted(pairs.items())},
         "differences": differ,
     }
     write_json(folder / AGREEMENT, out)
