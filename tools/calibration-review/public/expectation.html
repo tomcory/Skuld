@@ -491,7 +491,10 @@ const app = createApp({
             const p = this.focusPurpose;
             if (!p) return [];
             const seen = new Set();
-            return [...p.evidence, ...p.dependencies.flatMap(d => d.evidence)].filter(e => !seen.has(e.text) && seen.add(e.text));
+            const all = [...p.evidence, ...p.dependencies.flatMap(d => d.evidence)].filter(e => !seen.has(e.text) && seen.add(e.text));
+            // traffic first, then screens, then documentation and norms, then E's claims; each kind in E's order
+            const rank = {traffic: 0, screen: 1, passage: 2, claim: 3};
+            return all.map((e, i) => [rank[this.kindOf(e)] ?? 3, i, e]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(x => x[2]);
         },
         citedTexts() {
             const p = this.focusPurpose;

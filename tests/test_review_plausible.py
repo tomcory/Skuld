@@ -276,3 +276,8 @@ def test_the_tool_checks_a_concern_criterions_reasons(tmp_path, monkeypatch):
         proc.wait()
     page = (rex.TOOL / "public" / "aggregate.html").read_text()
     assert "setCriterion" in page and "Why not a plain yes?" in page
+
+
+def test_cited_for_lists_traffic_then_screens_then_documentation():
+    page = (rex.TOOL / "public" / "expectation.html").read_text()
+    assert "const rank = {traffic: 0, screen: 1, passage: 2, claim: 3};" in page
