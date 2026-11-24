@@ -26,6 +26,9 @@ const STYLE = `
     .tree-row .tw { display: inline-block; width: 1rem; color: #6c757d; }
     .tree-row.sel .tw { color: #fff; }
     .tree-row .origin-mark { font-size: .7rem; margin-left: .4rem; padding: 0 .3rem; border-radius: .2rem; background: #ffc107; color: #000; }
+    .tree-row .other-mark { font-size: .68rem; margin-left: .3rem; padding: 0 .4rem; border-radius: 1rem; border: 1px solid #6c757d; color: #495057; background: #fff; }
+    .tree-row.sel .other-mark { background: #fff; }
+    .marks-key { font-size: .72rem; color: #6c757d; }
 `;
 const style = document.createElement('style');
 style.textContent = STYLE;
@@ -110,7 +113,7 @@ export const NodePicker = {
 // one node of the tree and, when open, the nodes under it
 export const NodeTree = {
     name: 'node-tree',
-    props: ['id', 'depth', 'idx', 'children', 'expanded', 'visible', 'hits', 'selected', 'origin'],
+    props: ['id', 'depth', 'idx', 'children', 'expanded', 'visible', 'hits', 'selected', 'origin', 'marks'],
     emits: ['pick', 'choose', 'toggle'],
     computed: {
         kids() { return (this.children[this.id] || []).filter(c => !this.visible || this.visible.has(c)); },
@@ -119,11 +122,11 @@ export const NodeTree = {
     template: `<div>
         <div class="tree-row" :class="{sel: id === selected, origin: id === origin, hit: hits && hits.has(id)}"
              :style="{paddingLeft: (depth * 1.1 + .3) + 'rem'}" :data-node="id" @click="$emit('pick', id)" @dblclick="$emit('choose', id)">
-            <span class="tw" @click.stop="$emit('toggle', id)">{{ kids.length ? (isOpen ? '▾' : '▸') : '·' }}</span>{{ idx[id].title }}<span v-if="id === origin" class="origin-mark">shown in the unit</span>
+            <span class="tw" @click.stop="$emit('toggle', id)">{{ kids.length ? (isOpen ? '▾' : '▸') : '·' }}</span>{{ idx[id].title }}<span v-if="id === origin" class="origin-mark">shown in the unit</span><span v-for="m in ((marks || {})[id] || [])" :key="m.label" class="other-mark" :title="m.title">{{ m.label }}</span>
         </div>
         <template v-if="isOpen">
             <node-tree v-for="c in kids" :key="c" :id="c" :depth="depth + 1" :idx="idx" :children="children" :expanded="expanded"
-                       :visible="visible" :hits="hits" :selected="selected" :origin="origin"
+                       :visible="visible" :hits="hits" :selected="selected" :origin="origin" :marks="marks"
                        @pick="$emit('pick', $event)" @choose="$emit('choose', $event)" @toggle="$emit('toggle', $event)"></node-tree>
         </template>
     </div>`,
@@ -132,7 +135,9 @@ export const NodeTree = {
 // the vocabulary as a tree, in a modal: view (a value of the unit, in its context) or select (a node for a field)
 export const VocabBrowser = {
     components: {NodeTree},
-    props: {vocab: {type: Array, default: () => []}, mode: {type: String, default: 'view'}, initial: String, title: String},
+    // marks: nodes to mark with a chip each, {node: [{label, title}]} (the other purposes of a practice, 24 Nov 2026)
+    props: {vocab: {type: Array, default: () => []}, mode: {type: String, default: 'view'}, initial: String, title: String,
+            marks: {type: Object, default: () => ({})}},
     emits: ['close', 'choose'],
     data: () => ({query: '', expanded: {}, selected: null}),
     computed: {
@@ -174,6 +179,12 @@ export const VocabBrowser = {
         path(id) { return pathOf(id, this.idx); },
         toggle(id) { this.expanded = {...this.expanded, [id]: !this.expanded[id]}; },
         expandAll(open) { this.expanded = open ? Object.fromEntries(Object.keys(this.children).map(k => [k, true])) : {}; },
+        // the ancestors of a node opened, so that it shows in the tree
+        open(id) {
+            const expanded = {...this.expanded};
+            for (let cur = this.idx[id]; cur && (cur.parents || []).length; cur = this.idx[cur.parents[0]]) expanded[cur.parents[0]] = true;
+            this.expanded = expanded;
+        },
         reveal(id) {
             this.selected = id;
             const expanded = {...this.expanded};
@@ -191,6 +202,7 @@ export const VocabBrowser = {
         dblclick(id) { if (this.mode === 'select') this.choose(id); else this.reveal(id); },
     },
     mounted() {
+        for (const id of Object.keys(this.marks || {})) if (this.idx[id]) this.open(id);  // the marked nodes in view
         if (this.initial && this.idx[this.initial]) this.reveal(this.initial);
         this.$nextTick(() => this.mode === 'select' && this.$refs.search && this.$refs.search.focus());
     },
@@ -201,6 +213,7 @@ export const VocabBrowser = {
                 <input ref="search" class="form-control form-control-sm" v-model="query" placeholder="Filter by name, id or description"
                        @keydown.stop @keydown.esc="$emit('close')">
                 <span class="small text-secondary text-nowrap" v-if="query.trim().length >= 2">{{ hits.size }} match(es)</span>
+                <span class="marks-key text-nowrap" v-if="Object.keys(marks || {}).length">chips: the practice's other purposes</span>
                 <button class="btn btn-sm btn-outline-secondary text-nowrap" @click="expandAll(true)">Expand all</button>
                 <button class="btn btn-sm btn-outline-secondary text-nowrap" @click="expandAll(false)">Collapse</button>
                 <button class="btn-close" @click="$emit('close')"></button>
@@ -209,7 +222,7 @@ export const VocabBrowser = {
                 <div class="tree">
                     <div v-if="!vocab.length" class="text-secondary small">This sample carries no such vocabulary.</div>
                     <node-tree v-for="r in visibleRoots" :key="r" :id="r" :depth="0" :idx="idx" :children="children" :expanded="expanded"
-                               :visible="visible" :hits="hits" :selected="selected" :origin="mode === 'view' ? initial : null"
+                               :visible="visible" :hits="hits" :selected="selected" :origin="mode === 'view' ? initial : null" :marks="marks"
                                @pick="id => (selected = id)" @choose="dblclick" @toggle="toggle"></node-tree>
                     <div v-if="vocab.length && !visibleRoots.length" class="text-secondary small">Nothing matches.</div>
                 </div>

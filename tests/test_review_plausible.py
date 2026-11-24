@@ -281,3 +281,10 @@ def test_the_tool_checks_a_concern_criterions_reasons(tmp_path, monkeypatch):
 def test_cited_for_lists_traffic_then_screens_then_documentation():
     page = (rex.TOOL / "public" / "expectation.html").read_text()
     assert "const rank = {traffic: 0, screen: 1, passage: 2, claim: 3};" in page
+
+
+def test_the_dpv_tree_marks_the_practices_other_purposes():
+    vocab = (rex.TOOL / "public" / "vocab.js").read_text()
+    page = (rex.TOOL / "public" / "expectation.html").read_text()
+    assert "other-mark" in vocab and "marks: {type: Object" in vocab and "this.open(id)" in vocab
+    assert "otherPurposeMarks()" in page and ':marks="browser.marks || {}"' in page

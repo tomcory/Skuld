@@ -446,7 +446,7 @@
     </div>
     <div v-else-if="progress" class="text-secondary">Loading…</div>
     <div v-if="zoom" class="zoom" @click="zoom = null"><img :src="zoom" alt="Screenshot of the screen"></div>
-    <vocab-browser v-if="browser" :vocab="vocabs[browser.kind]" :mode="browser.mode" :initial="browser.initial" :title="browser.title"
+    <vocab-browser v-if="browser" :vocab="vocabs[browser.kind]" :mode="browser.mode" :initial="browser.initial" :title="browser.title" :marks="browser.marks || {}"
                    @close="browser = null" @choose="chooseNode"></vocab-browser>
 </div>
 <script type="module">
@@ -546,7 +546,17 @@ const app = createApp({
     },
     methods: {
         // a value of the unit in its vocabulary; a node for a field, from the DPV purposes
-        openVocab(kind, id) { this.browser = {kind, mode: 'view', initial: id, title: TITLES[kind]}; },
+        // a value in its vocabulary; for a purpose node, the practice's other purposes marked by chips on their nodes
+        openVocab(kind, id) { this.browser = {kind, mode: 'view', initial: id, title: TITLES[kind], marks: kind === 'purpose' ? this.otherPurposeMarks() : {}}; },
+        otherPurposeMarks() {
+            const marks = {};
+            if (!this.item) return marks;
+            this.item.purposes.forEach((p, i) => {
+                if (!p.node || p.key === this.focus) return;
+                (marks[p.node] = marks[p.node] || []).push({label: `P${i + 1}`, title: `${this.label(p.key)}: ${p.action} ${p.object}${p.outcome ? ', ' + p.outcome : ''}`});
+            });
+            return marks;
+        },
         openBrowser(setter, current) { this.browser = {kind: 'purpose', mode: 'select', initial: current, title: TITLES.purpose, setter}; },
         chooseNode(id) { if (this.browser && this.browser.setter) this.browser.setter(id); this.browser = null; },
         async api(path, options) {
