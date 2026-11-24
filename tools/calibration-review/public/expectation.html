@@ -117,16 +117,31 @@
         .nav-tabs .tab-traffic::before { color: #12b886; }
         .nav-tabs .tab-screens::before { color: #4c6ef5; }
         .nav-tabs .tab-passages::before { color: #f59f00; }
-        .codebook h6 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; margin: .9rem 0 .35rem; color: #343a40; }
-        .codebook h6:first-child { margin-top: 0; }
-        .codebook ul, .codebook dl, .codebook p { margin-bottom: .4rem; }
-        .codebook li { margin-bottom: .2rem; }
-        .codebook dt { margin-top: .45rem; }
-        .codebook dd { margin-bottom: 0; margin-left: 1rem; }
         [v-cloak] { display: none; }
         .rule-link { color: #adb5bd; margin-left: .2rem; cursor: pointer; text-transform: none; }
         .rule-link:hover { color: #0d6efd; }
         .rule-flash { background: #fff3bf; transition: background .3s; }
+        /* the codebook as a side panel (0.12.37): readable size, clear sections, contents to jump between them */
+        .codebook { position: fixed; top: 0; right: 0; bottom: 0; width: min(46rem, 100vw); z-index: 1050; background: #fff;
+                    box-shadow: -.5rem 0 2rem rgba(0,0,0,.18); display: flex; flex-direction: column; font-size: .97rem;
+                    line-height: 1.6; color: #212529; }
+        .codebook-top { display: flex; align-items: center; gap: .5rem; padding: .8rem 1.4rem .6rem; border-bottom: 1px solid #e3e6ea; background: #f8f9fa; }
+        .codebook-title { font-size: 1.2rem; font-weight: 700; margin: 0; }
+        .codebook-toc { display: flex; flex-wrap: wrap; gap: .3rem; padding: .55rem 1.4rem; border-bottom: 1px solid #e3e6ea; background: #f8f9fa; }
+        .codebook-toc a { font-size: .8rem; padding: .1rem .55rem; border: 1px solid #ced4da; border-radius: 1rem; color: #343a40; text-decoration: none; background: #fff; }
+        .codebook-toc a:hover { border-color: #0d6efd; color: #0d6efd; }
+        .codebook-body { overflow-y: auto; padding: .4rem 1.6rem 3rem; }
+        .codebook-body h5 { font-size: 1.15rem; font-weight: 700; color: #1f2d3d; margin: 1.7rem 0 .7rem; padding-bottom: .35rem;
+                            border-bottom: 2px solid #dee2e6; text-transform: none; letter-spacing: 0; scroll-margin-top: .5rem; }
+        .codebook-body h5 .text-secondary { font-size: .82rem; font-weight: 400; }
+        .codebook-body p, .codebook-body ul, .codebook-body dl { margin-bottom: .75rem; }
+        .codebook-body li { margin-bottom: .35rem; }
+        .codebook-body dt { font-size: 1rem; font-weight: 700; color: #212529; margin-top: 1.1rem; scroll-margin-top: .5rem; }
+        .codebook-body dt .text-secondary { font-weight: 400; font-size: .85rem; }
+        .codebook-body dd { margin: .25rem 0 0; padding-left: .9rem; border-left: 3px solid #e7ebf0; color: #343a40; }
+        .codebook-body dd ul { margin: .3rem 0 .2rem; }
+        .codebook-body kbd { font-size: .75rem; }
+        .codebook-body .rule-flash { background: #fff3bf; }
     </style>
 </head>
 <body>
@@ -143,8 +158,13 @@
         <button class="btn btn-sm btn-outline-secondary" @click="help = !help"><i class="bi bi-question-circle"></i> Help</button>
     </nav>
 
-    <div class="alert alert-info small codebook" v-if="help">
-        <h6>Words used here</h6>
+    <div class="codebook" v-if="help" role="dialog" aria-label="Codebook">
+        <div class="codebook-top"><span class="codebook-title">Codebook: the expectation stage</span>
+            <span class="small text-secondary ms-2"><kbd>Esc</kbd> closes</span>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @click="help = false"><i class="bi bi-x-lg"></i> Close</button></div>
+        <nav class="codebook-toc"><a v-for="t in toc" :key="t.id" :href="'#' + t.id" @click.prevent="openRule(t.id)">{{ t.text }}</a></nav>
+        <div class="codebook-body" ref="codebookBody">
+        <h5>Words used here</h5>
         <p>The analysis has three parts: <b>O</b> observes what the app does (its traffic, what it reads on the device),
             <b>D</b> reads what the provider declares (privacy policy, store listing), and <b>E</b> compares the two
             against data protection requirements. A <b>practice</b> is one observed processing: data sent to a recipient,
@@ -152,7 +172,7 @@
             <b>purposes</b>) and how far each purpose depends on the data and the recipient (its <b>needs</b>), without
             seeing anything the provider declares. Its later stage raises concerns, reviewed on the other page.</p>
 
-        <h6>What you judge</h6>
+        <h5>What you judge</h5>
         <p>Each unit is one practice (top box) and the purposes and needs stage 1 predicted for it. Judge them <b>against
             what the stage saw</b>: the sentence it was told (grey box) and, on the right, its traffic, screens and
             documentation passages. The stage never saw the provider's privacy policy or store listing: do not judge
@@ -162,7 +182,7 @@
             service does), and web searches about a recipient or service (its documentation, what it is). Say in the note
             what you looked up. A claim E makes about <i>this app</i> still needs the context.</p>
 
-        <h6>Rules for every question</h6>
+        <h5>Rules for every question</h5>
         <ul>
             <li><b>One scale.</b> <i>Yes</i>: you would sign it as it is. <i>Mostly</i>: after a small fix (one phrase, one
                 loose citation, a neighbouring level). <i>Partly</i>: part of it is right and part is wrong or missing; it
@@ -180,7 +200,7 @@
             <li><b><i>Unsure</i></b> only where the context and a search do not let you decide; say why in the note.</li>
         </ul>
 
-        <h6>The questions <span class="text-secondary fw-normal" style="text-transform: none; letter-spacing: 0">(the <i class="bi bi-info-circle"></i> beside a question on the page opens its rule here)</span></h6>
+        <h5>The questions <span class="text-secondary fw-normal" style="text-transform: none; letter-spacing: 0">(the <i class="bi bi-info-circle"></i> beside a question on the page opens its rule here)</span></h5>
         <dl>
             <dt id="rule-plausible">Plausible purpose</dt>
             <dd>Would someone who knows the recipient, seeing this flow, name this purpose? How much would you change E's
@@ -240,7 +260,7 @@
                 narrower form of a purpose E gave; tick <i>functional</i> if it is the feature's own.</dd>
         </dl>
 
-        <h6>What stage 1 gave <span class="text-secondary fw-normal" style="text-transform: none; letter-spacing: 0">(hover any of these on the page for the same text)</span></h6>
+        <h5>What stage 1 gave <span class="text-secondary fw-normal" style="text-transform: none; letter-spacing: 0">(hover any of these on the page for the same text)</span></h5>
         <dl>
             <dt>The practice (top box)</dt>
             <dd>What the observation saw the app do. Its type:</dd>
@@ -272,7 +292,7 @@
         <p>The statuses are E's own reading of its answers, not a verdict you check (see the rules above).</p>
 
 
-        <h6>Reading the context (right)</h6>
+        <h5>Reading the context (right)</h5>
         <ul>
             <li><b>Cited for</b> (opens first) shows what E cites for the purpose you are on: traffic, then screens, then
                 documentation. The other tabs hold everything the stage was given:
@@ -290,13 +310,14 @@
                 state.</li>
         </ul>
 
-        <h6>Moving around</h6>
+        <h5>Moving around</h5>
         <p>Purposes are shown one at a time: the bar above them shows each one's progress (a tick when complete); move with
             the numbers, the arrows, <i>Next purpose</i>, or <kbd>J</kbd> / <kbd>K</kbd>. <kbd>←</kbd> <kbd>→</kbd> practices,
             <kbd>O</kbd> next open one, <kbd>S</kbd> save, <kbd>Enter</kbd> done (once every question is answered; the
             links under <i>Done</i> lead to what is missing), <kbd>/</kbd> search the context. Values in
             <code>code type</code> open their vocabulary; DPV fields suggest nodes as you type, or browse with
             <i class="bi bi-diagram-3"></i>.</p>
+        </div>
     </div>
 
     <div class="row g-3" v-if="item">
@@ -593,7 +614,7 @@ const ICON = {traffic: 'bi-arrow-left-right', screen: 'bi-phone', passage: 'bi-b
 const GOOD = ['yes', 'exact', 'right'];
 const BAD = ['no', 'wrong'];
 const app = createApp({
-    data: () => ({progress: null, item: null, help: false, labels, PRACTICE_TEXT, RELATION_TEXT, PURPOSE_PARTS_TEXT, BENEFICIARY_TEXT, ROLE_TEXT, SPECIFICITY_TEXT, SAMPLES_TEXT, PURPOSE_STATUS, NEED_TEXT, RELATIONSHIP_TEXT, NEED_STATUS, WHY_TEXT, purposes: {}, dependencies: {}, missed: [], note: '',
+    data: () => ({progress: null, item: null, help: false, toc: [], labels, PRACTICE_TEXT, RELATION_TEXT, PURPOSE_PARTS_TEXT, BENEFICIARY_TEXT, ROLE_TEXT, SPECIFICITY_TEXT, SAMPLES_TEXT, PURPOSE_STATUS, NEED_TEXT, RELATIONSHIP_TEXT, NEED_STATUS, WHY_TEXT, purposes: {}, dependencies: {}, missed: [], note: '',
                   focus: null, tab: 'evidence', query: '', vocabs: {purpose: [], data: []}, browser: null, expanded: new Set(), zoom: null, overlapWith: ''}),
     provide() { return {openVocab: (kind, id) => this.openVocab(kind, id)}; },
     computed: {
@@ -671,6 +692,17 @@ const app = createApp({
     // the screens tab follows the purpose in focus: opened, or with another purpose or practice, it scrolls to the
     // first screen cited for it
     watch: {
+        // the codebook's contents: its sections, each given an id to jump to
+        help: {
+            immediate: true,
+            handler(open) {
+                if (!open) return;
+                this.$nextTick(() => {
+                    const heads = [...document.querySelectorAll('.codebook-body h5')];
+                    this.toc = heads.map((h, i) => { if (!h.id) h.id = `cb-${i}`; return {id: h.id, text: h.childNodes[0].textContent.replace(/[:(]\s*$/, '').trim()}; });
+                });
+            },
+        },
         tab() { this.scrollToCited(); },
         focus() { this.scrollToCited(); this.overlapWith = ''; },
         item() { this.scrollToCited(); },
@@ -799,7 +831,7 @@ const app = createApp({
         // the ⓘ beside a question: the codebook, opened at its rule
         openRule(id) {
             this.help = true;
-            this.$nextTick(() => { const el = document.getElementById(id); if (el) { el.scrollIntoView({block: 'start'}); el.classList.add('rule-flash'); setTimeout(() => el.classList.remove('rule-flash'), 1500); } });
+            this.$nextTick(() => { const el = document.getElementById(id); if (el) { el.scrollIntoView({block: 'start', behavior: 'smooth'}); el.classList.add('rule-flash'); setTimeout(() => el.classList.remove('rule-flash'), 1500); } });
         },
         kindIcon: k => ICON[k] || 'bi-dot',
         // what an evidence item is, for the coded style: traffic, screen, passage or a claim
@@ -859,6 +891,7 @@ const app = createApp({
             await this.go(index);
         },
         key(event) {
+            if (this.help && event.key === 'Escape') { this.help = false; return; }
             if (this.zoom) { if (event.key === 'Escape') this.zoom = null; return; }  // a screenshot is open
             if (this.browser) { if (event.key === 'Escape') this.browser = null; return; }  // a vocabulary is open: no shortcuts
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || !this.item) return;

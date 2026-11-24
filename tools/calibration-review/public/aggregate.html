@@ -51,12 +51,6 @@
         .chip.open { background: #e7f1ff; border-color: #0d6efd; color: #0d6efd; }
         .reasons { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem; padding-left: 11.5rem; }
         .other-reason { flex: 1 1 14rem; max-width: 26rem; margin-left: .2rem; }
-        .codebook h6 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; margin: .9rem 0 .35rem; color: #343a40; }
-        .codebook h6:first-child { margin-top: 0; }
-        .codebook ul, .codebook dl, .codebook p { margin-bottom: .4rem; }
-        .codebook li { margin-bottom: .2rem; }
-        .codebook dt { margin-top: .45rem; }
-        .codebook dd { margin-bottom: 0; margin-left: 1rem; }
         .evidence-card.kind-experiment { border-left-color: #e8590c; }
         [v-cloak] { display: none; }
         .rule-link { color: #6c757d; margin-left: .25rem; cursor: pointer; }
@@ -109,6 +103,27 @@
         .xp-run.other { color: #868e96; border-color: #dee2e6; background: #f8f9fa; }
         .xp-side .shot { max-height: 14rem; }
         .xp-outcome { margin-top: .5rem; font-weight: 600; }
+        /* the codebook as a side panel (0.12.37): readable size, clear sections, contents to jump between them */
+        .codebook { position: fixed; top: 0; right: 0; bottom: 0; width: min(46rem, 100vw); z-index: 1050; background: #fff;
+                    box-shadow: -.5rem 0 2rem rgba(0,0,0,.18); display: flex; flex-direction: column; font-size: .97rem;
+                    line-height: 1.6; color: #212529; }
+        .codebook-top { display: flex; align-items: center; gap: .5rem; padding: .8rem 1.4rem .6rem; border-bottom: 1px solid #e3e6ea; background: #f8f9fa; }
+        .codebook-title { font-size: 1.2rem; font-weight: 700; margin: 0; }
+        .codebook-toc { display: flex; flex-wrap: wrap; gap: .3rem; padding: .55rem 1.4rem; border-bottom: 1px solid #e3e6ea; background: #f8f9fa; }
+        .codebook-toc a { font-size: .8rem; padding: .1rem .55rem; border: 1px solid #ced4da; border-radius: 1rem; color: #343a40; text-decoration: none; background: #fff; }
+        .codebook-toc a:hover { border-color: #0d6efd; color: #0d6efd; }
+        .codebook-body { overflow-y: auto; padding: .4rem 1.6rem 3rem; }
+        .codebook-body h5 { font-size: 1.15rem; font-weight: 700; color: #1f2d3d; margin: 1.7rem 0 .7rem; padding-bottom: .35rem;
+                            border-bottom: 2px solid #dee2e6; text-transform: none; letter-spacing: 0; scroll-margin-top: .5rem; }
+        .codebook-body h5 .text-secondary { font-size: .82rem; font-weight: 400; }
+        .codebook-body p, .codebook-body ul, .codebook-body dl { margin-bottom: .75rem; }
+        .codebook-body li { margin-bottom: .35rem; }
+        .codebook-body dt { font-size: 1rem; font-weight: 700; color: #212529; margin-top: 1.1rem; scroll-margin-top: .5rem; }
+        .codebook-body dt .text-secondary { font-weight: 400; font-size: .85rem; }
+        .codebook-body dd { margin: .25rem 0 0; padding-left: .9rem; border-left: 3px solid #e7ebf0; color: #343a40; }
+        .codebook-body dd ul { margin: .3rem 0 .2rem; }
+        .codebook-body kbd { font-size: .75rem; }
+        .codebook-body .rule-flash { background: #fff3bf; }
     </style>
 </head>
 <body>
@@ -125,15 +140,20 @@
         <button class="btn btn-sm btn-outline-secondary" @click="help = !help"><i class="bi bi-question-circle"></i> Help</button>
     </nav>
 
-    <div class="alert alert-info small codebook" v-if="help" ref="codebook">
-        <h6>Words used here</h6>
+    <div class="codebook" v-if="help" role="dialog" aria-label="Codebook">
+        <div class="codebook-top"><span class="codebook-title">Codebook: aggregated concerns</span>
+            <span class="small text-secondary ms-2"><kbd>Esc</kbd> closes</span>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" @click="help = false"><i class="bi bi-x-lg"></i> Close</button></div>
+        <nav class="codebook-toc"><a v-for="t in toc" :key="t.id" :href="'#' + t.id" @click.prevent="openRule(t.id)">{{ t.text }}</a></nav>
+        <div class="codebook-body" ref="codebookBody">
+        <h5>Words used here</h5>
         <p>The analysis has three parts: <b>O</b> observes what the app does (its traffic, what it reads on the device),
             <b>D</b> reads what the provider declares (privacy policy, Data safety section, store listing), and <b>E</b>
             compares the two against data protection requirements. E first predicts what each practice is for (<b>stage
             1</b>, reviewed on the other page), then raises <b>concerns</b>: a requirement that, by E's evidence, the app
             does not meet. A <b>practice</b> is one observed processing: data sent to a recipient, or read on the device.</p>
 
-        <h6 id="rule-verdict">Your verdict: does the concern hold? <span class="text-secondary fw-normal" style="text-transform: none; letter-spacing: 0">(<kbd>H</kbd> holds, <kbd>D</kbd> does not hold, <kbd>U</kbd> unsure)</span></h6>
+        <h5 id="rule-verdict">Your verdict: does the concern hold? <span class="text-secondary fw-normal" style="text-transform: none; letter-spacing: 0">(<kbd>H</kbd> holds, <kbd>D</kbd> does not hold, <kbd>U</kbd> unsure)</span></h5>
         <p>You judge <b>the app</b>, not E. A concern says that the requirement (top box) is not met for its subject: the
             frame's question answered against the app. <b>Holds</b>: the requirement is not met, as the concern states.
             <b>Does not hold</b>: it is met, or the concern is wrong as stated. <b>Unsure</b> (left out of the rates):
@@ -161,7 +181,7 @@
                 stated: note the other reason in the recall pass.</li>
         </ul>
 
-        <h6>The levels of the criteria</h6>
+        <h5>The levels of the criteria</h5>
         <p>One scale for both: <i>yes</i>, you would sign it as it is; <i>mostly</i>, after a small fix (one loose
             citation, one overstated word); <i>partly</i>, part of it is right and part is wrong or missing; <i>no</i>, it
             does not hold. For <i>mostly</i> and <i>partly</i>, pick one or more <b>reasons</b> (hover one for its meaning),
@@ -181,7 +201,7 @@
                 <i>Evidence</i> asks only whether the experiment exists and is what E says it is.</dd>
         </dl>
 
-        <h6 id="rule-phrases">Declared purposes (phrases)</h6>
+        <h5 id="rule-phrases">Declared purposes (phrases)</h5>
         <p>Mark each phrase <i>specific</i>, <i>not specific</i> or <i>unsure</i> (<kbd>N</kbd>: all not specific), first
             blind, then with E's output (your blind judgments are kept). <b>The test:</b> could a user tell from the phrase
             which processing it covers and why? Not specific: "to improve our services", "for marketing purposes", "for
@@ -191,7 +211,7 @@
             phrase that is no purpose (a heading, a feature name, a negation): <i>unsure</i>, with a note. Where E holds
             the phrases not specific, your verdict is derived from them (all not specific: holds); save with <kbd>S</kbd>.</p>
 
-        <h6>Blind first and the recall pass</h6>
+        <h5>Blind first and the recall pass</h5>
         <ul>
             <li>Some units are shown <b>blind first</b> (subject and question only): <b>Requirement not met</b>
                 (<kbd>F</kbd>), <b>met</b> (<kbd>M</kbd>) or <b>unsure</b> (<kbd>U</kbd>), before E's output is shown; it
@@ -201,7 +221,7 @@
                 raised.</li>
         </ul>
 
-        <h6>The evidence</h6>
+        <h5>The evidence</h5>
         <ul>
             <li>Each item's edge shows its source: <span style="color:#12b886">●</span> traffic,
                 <span style="color:#4c6ef5">●</span> a screen, <span style="color:#ae3ec9">●</span> the provider's documents,
@@ -218,7 +238,7 @@
                 orientation.</li>
         </ul>
 
-        <h6>E's evaluations</h6>
+        <h5>E's evaluations</h5>
         <p class="mb-1">What E says of each unit (hover any of them on the page for the same text):</p>
         <dl>
             <dt>The concern's status <span class="badge text-bg-danger">E: concern …</span></dt>
@@ -236,10 +256,11 @@
         <p>These are E's claims, part of what you judge, not facts: neither its status nor its uncertainty changes what
             your verdict means, but a high uncertainty is a hint to read the evidence closely.</p>
 
-        <h6>Moving around</h6>
+        <h5>Moving around</h5>
         <p><kbd>←</kbd> <kbd>→</kbd> units, <kbd>O</kbd> next open unit, <kbd>V</kbd> show or hide the evidence,
             <kbd>/</kbd> search the document. Values in <code>code type</code> open their vocabulary. The
             <i class="bi bi-info-circle"></i> beside a question opens its rule here.</p>
+        </div>
     </div>
 
     <div class="alert alert-warning d-flex align-items-center gap-2 small" v-if="recallDue && !recallOpen">
@@ -656,7 +677,7 @@ const LEVEL_TEXT = {
 const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 const app = createApp({
     provide() { return {openVocab: (kind, id) => this.openVocab(kind, id)}; },
-    data: () => ({zoom: null, vocabs: {purpose: [], data: []}, browser: null, progress: null, item: null, help: false, shown: null, document: {}, query: '', titles, EVIDENCE, FOLLOWS, STATUS_TEXT, TIER_TEXT, UNCERTAINTY_TEXT, REASON_TEXT, ALTERNATIVE_TEXT, LEVEL_TEXT, crit: {}, followsKeys: FOLLOWS_KEYS.toUpperCase(),
+    data: () => ({zoom: null, vocabs: {purpose: [], data: []}, browser: null, progress: null, item: null, help: false, toc: [], shown: null, document: {}, query: '', titles, EVIDENCE, FOLLOWS, STATUS_TEXT, TIER_TEXT, UNCERTAINTY_TEXT, REASON_TEXT, ALTERNATIVE_TEXT, LEVEL_TEXT, crit: {}, followsKeys: FOLLOWS_KEYS.toUpperCase(),
                   evidence: null, follows: null, phrases: {}, blindPhrases: {}, note: '', blindNote: '', evidenceShown: true,
                   recall: null, recallOpen: false, recallDue: false}),
     computed: {
@@ -693,6 +714,19 @@ const app = createApp({
         },
         requirementsList() {
             return ['information_not_given (documents)', 'not_specific (declared purpose)', 'no_specified_purpose (practice)', 'less_invasive_alternative (practice)', 'declaration_contradicted (declaration)', 'other'];
+        },
+    },
+    watch: {
+        // the codebook's contents: its sections, each given an id to jump to
+        help: {
+            immediate: true,
+            handler(open) {
+                if (!open) return;
+                this.$nextTick(() => {
+                    const heads = [...document.querySelectorAll('.codebook-body h5')];
+                    this.toc = heads.map((h, i) => { if (!h.id) h.id = `cb-${i}`; return {id: h.id, text: h.childNodes[0].textContent.replace(/[:(]\s*$/, '').trim()}; });
+                });
+            },
         },
     },
     methods: {
@@ -897,9 +931,10 @@ const app = createApp({
         // the ⓘ beside a question: the codebook, opened at its rule
         openRule(id) {
             this.help = true;
-            this.$nextTick(() => { const el = document.getElementById(id); if (el) { el.scrollIntoView({block: 'start'}); el.classList.add('rule-flash'); setTimeout(() => el.classList.remove('rule-flash'), 1500); } });
+            this.$nextTick(() => { const el = document.getElementById(id); if (el) { el.scrollIntoView({block: 'start', behavior: 'smooth'}); el.classList.add('rule-flash'); setTimeout(() => el.classList.remove('rule-flash'), 1500); } });
         },
         key(event) {
+            if (this.help && event.key === 'Escape') { this.help = false; return; }
             if (this.zoom) { if (event.key === 'Escape') this.zoom = null; return; }  // a screenshot is open
             if (this.browser) { if (event.key === 'Escape') this.browser = null; return; }  // a vocabulary is open: no shortcuts
             if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') return;
