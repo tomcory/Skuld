@@ -313,6 +313,13 @@ def build_parser() -> argparse.ArgumentParser:
         "sizes (default: config.json's, none)",
     )
     review_.add_argument(
+        "--exclude-empty-descriptions",
+        action="store_true",
+        default=None,
+        help="draw, expect-draw: pass over a unit showing a screen whose description is empty by either model, for "
+        "the stratum's next eligible one (the re-run's D-45); the manifest lists those passed over",
+    )
+    review_.add_argument(
         "--application",
         action="append",
         default=[],
@@ -398,6 +405,7 @@ READ_BY = {
         "step": ("draw",),
         "prefix": ("expect-draw",),
         "per_app": ("expect-draw",),
+        "exclude_empty_descriptions": ("draw", "expect-draw"),
         "reviewer": ("export",),
         "application": ("exclude",),
         "reason": ("exclude",),
@@ -793,7 +801,15 @@ def main(argv: list[str] | None = None) -> int:
             if args.action == "expect-draw":
                 if not args.paths:
                     raise rx.ReviewError("expect-draw needs the workspaces")
-                m = rx.draw(args.folder, args.paths, args.per_stratum, args.seed, args.prefix or "x", args.per_app)
+                m = rx.draw(
+                    args.folder,
+                    args.paths,
+                    args.per_stratum,
+                    args.seed,
+                    args.prefix or "x",
+                    args.per_app,
+                    args.exclude_empty_descriptions,
+                )
                 for st in m["strata"]:
                     name = " ".join(str(st[k]) for k in ("run", "role", "status"))
                     print(f"{name:<50} {st['drawn']:>3} of {st['population']:>4}")
@@ -802,6 +818,9 @@ def main(argv: list[str] | None = None) -> int:
                     f"{len(items)} practices, {sum(len(i['purposes']) for i in items)} purposes "
                     f"-> {args.folder / rx.SAMPLE}"
                 )
+                if "empty_descriptions" in m:
+                    e = m["empty_descriptions"]
+                    print(f"D-45: {len(e['passed_over'])} passed over ({e['ineligible']} ineligible in all)")
             elif args.action == "expect-score":
                 sc = rx.score(args.folder)
                 for e in sc["estimates"]:
@@ -829,7 +848,14 @@ def main(argv: list[str] | None = None) -> int:
                 if not args.paths:
                     raise review.ReviewError("draw needs the workspaces")
                 m = review.draw(
-                    args.folder, args.paths, args.per_stratum, args.seed, args.anchor, args.per_run, args.step or None
+                    args.folder,
+                    args.paths,
+                    args.per_stratum,
+                    args.seed,
+                    args.anchor,
+                    args.per_run,
+                    args.step or None,
+                    args.exclude_empty_descriptions,
                 )
                 for st in m["strata"]:
                     name = " ".join(str(st[k]) for k in ("run", "principle", "tier", "step", "status"))
@@ -838,6 +864,9 @@ def main(argv: list[str] | None = None) -> int:
                     f"{sum(st['drawn'] for st in m['strata'])} units ({m['anchor']} shown blind first) "
                     f"-> {args.folder / review.SAMPLE}"
                 )
+                if "empty_descriptions" in m:
+                    e = m["empty_descriptions"]
+                    print(f"D-45: {len(e['passed_over'])} passed over ({e['ineligible']} ineligible in all)")
             elif args.action == "score":
                 sc = review.score(args.folder)
                 for e in sc["estimates"]:

@@ -1,0 +1,218 @@
+"""The screens a review shows, with their descriptions and screenshots as stage 1 was given them, and D-45 (0.12.19)."""
+
+import json
+import random
+import zipfile
+
+import pytest
+
+from skuld import expectation, review_screens
+from skuld import review_expectation as rx
+from skuld import review_export as rex
+from tests.test_described import GEMMA, QWEN, contexts, described_run, workspace_of
+
+
+@pytest.fixture
+def described(tmp_path, monkeypatch):
+    """test_described's workspace: a run with screenshots and both models' descriptions."""
+    monkeypatch.setattr(expectation, "describer", lambda model: model)  # expectation.descriptions: "own"
+    run = described_run(tmp_path)
+    return (*workspace_of(tmp_path, run), run)
+
+
+def write_contexts(a, built, root, model=GEMMA):
+    """The workspace's stage-1 contexts of prompt version 10, as `skuld expect` keeps them (expectation/<batch>/s1/)."""
+    for name, context in contexts(a, built, "10", model).items():
+        folder = root / "expectation" / name / "s1"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "context.json").write_text(json.dumps({"parts": list(context.parts)}))
+
+
+def empty_description(run, screen_id, model):
+    lines = [json.loads(x) for x in (run / "descriptions.jsonl").read_text().splitlines()]
+    for x in lines:
+        if x.get("screen_id") == screen_id and x.get("model") == model:
+            x["screen"] = ""
+    (run / "descriptions.jsonl").write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+
+
+def test_each_screen_has_its_own_familys_description_and_the_screenshot_the_context_attached(described):
+    a, built, run = described
+    root = a.root
+    write_contexts(a, built, root)
+    found = review_screens.index(root)
+    launch = json.loads((root / "expectation" / "launch" / "s1" / "context.json").read_text())["parts"]
+    home, signup = (p for p in launch if p["id"] in ("S1", "S2"))
+    entry = found[review_screens.screen_key(home)]
+    assert entry["description"] == "gemma4:31b reads s-home. It follows the start."  # without "(about S1)"
+    assert entry["screenshot"] == (home["provenance"][1]["record"], home["provenance"][1]["sha256"])
+    assert entry["empty"] == set()
+    shown = review_screens.view(entry)
+    assert shown == {
+        "description": entry["description"],
+        "screenshot": f"screenshots/{home['provenance'][1]['sha256']}.png",
+    }
+    # the sign-up form held a notice: the stage was given neither its description nor its screenshot
+    assert review_screens.view(found[review_screens.screen_key(signup)]) == {}
+
+
+def test_a_screen_whose_description_is_empty_by_either_model_is_marked_d45(described):
+    a, built, run = described
+    root = a.root
+    write_contexts(a, built, root)
+    empty_description(run, "s-home", QWEN)  # the other family's model: the gemma family's review still may not show it
+    found = review_screens.index(root)
+    home = next(k for k in found if k[1] == "s-home")
+    assert found[home]["empty"] == {QWEN} and found[home]["description"]
+    assert review_screens.empty([found[home]]) == [QWEN]
+    # the plan screen joins on an earlier visit (seq 1): its emptiness is that visit's
+    empty_description(run, "s-plan", GEMMA)
+    found = review_screens.index(root)
+    plan = [k for k in found if k[1] == "s-plan"]
+    assert plan and all(GEMMA in found[k]["empty"] for k in plan)
+
+
+def test_a_context_that_is_not_its_batchs_screens_is_refused(described):
+    a, built, run = described
+    root = a.root
+    write_contexts(a, built, root)
+    path = root / "expectation" / "launch" / "s1" / "context.json"
+    parts = json.loads(path.read_text())["parts"]
+    for p in parts:
+        if p["id"] == "S1":
+            p["provenance"][0]["record"] = "events.jsonl#screen/s-other"
+    path.write_text(json.dumps({"parts": parts}))
+    with pytest.raises(review_screens.ScreenError, match="not its batch's screen 1"):
+        review_screens.index(root)
+
+
+def test_screenshots_are_copied_once_by_digest_and_a_changed_file_is_refused(described, tmp_path):
+    a, built, run = described
+    root = a.root
+    write_contexts(a, built, root)
+    entries = list(review_screens.index(root).values())
+    with_shot = [e for e in entries if e["screenshot"]]
+    out = tmp_path / "sample"
+    assert review_screens.copy_screenshots(out, entries + entries) == len({e["screenshot"][1] for e in with_shot})
+    assert sorted(p.name for p in (out / "screenshots").iterdir()) == sorted(
+        {f"{e['screenshot'][1]}.png" for e in with_shot}
+    )
+    (run / with_shot[0]["screenshot"][0]).write_bytes(b"changed")
+    with pytest.raises(review_screens.ScreenError, match="differs"):
+        review_screens.copy_screenshots(tmp_path / "other", entries)
+
+
+def test_a_workspace_without_stage_one_contexts_shows_screens_as_before(tmp_path):
+    assert review_screens.index(tmp_path) == {}
+
+
+def test_d45_takes_the_strata_next_eligible_unit_in_the_seeds_order():
+    units = [{"n": n, "ok": n % 3 != 0} for n in range(12)]
+    order = random.Random(5).sample(units, len(units))
+    passed: list = []
+    taken = rx.eligible_first(units, 4, random.Random(5), lambda u: u["ok"], passed)
+    assert taken == [u for u in order if u["ok"]][:4]
+    last = order.index(taken[-1])
+    assert passed == [u for u in order[:last] if not u["ok"]]
+    # fewer eligible than the size: every eligible one
+    assert len(rx.eligible_first(units, 20, random.Random(5), lambda u: u["ok"], [])) == 8
+
+
+def test_the_cap_per_application_passes_over_ineligible_units_too():
+    strata = {("r", "ancillary", "supported"): [{"application": f"a{n % 3}", "n": n, "ok": n != 0} for n in range(9)]}
+    passed: list = []
+    out = rx.capped(strata, {k: 4 for k in strata}, 2, random.Random(1), lambda u: u["ok"], passed)
+    taken = out[("r", "ancillary", "supported")]
+    assert len(taken) == 4 and all(u["ok"] for u in taken)
+    assert all(not u["ok"] for u in passed)
+
+
+@pytest.mark.skipif(not (rex.TOOL / "node_modules").is_dir(), reason="the review tool's modules are not installed")
+def test_the_package_holds_the_samples_screenshots(tmp_path):
+    from tests.test_review_expectation import workspace
+
+    runs = [workspace(tmp_path, "model-x"), workspace(tmp_path, "model-y")]
+    folder = tmp_path / "reviews" / "expect-1"
+    rx.draw(folder, runs, per_stratum=5, seed=2)
+    (folder / "screenshots").mkdir()
+    (folder / "screenshots" / "abc.png").write_bytes(b"png")
+    names = zipfile.ZipFile(rex.export(tmp_path / "pkg.zip", [folder], "a")).namelist()
+    assert "asgard-review-a/samples/expect-1/screenshots/abc.png" in names
+
+
+def test_the_tool_serves_the_screenshots_and_both_pages_show_them():
+    server = (rex.TOOL / "server.js").read_text()
+    assert "app.use('/screenshots'" in server
+    for page in ("expectation.html", "aggregate.html"):
+        text = (rex.TOOL / "public" / page).read_text()
+        assert "e.screenshot" in text and "e.description" in text and 'class="zoom"' in text
+    assert "screen_details" in (rex.TOOL / "public" / "expectation.html").read_text()
+
+
+def test_described_reader_still_skips_empty_descriptions_for_stage_one(described):
+    a, built, run = described
+    empty_description(run, "s-home", GEMMA)
+    assert all(d["screen_id"] != "s-home" for d in expectation.descriptions(run, GEMMA))
+
+
+def test_an_empty_description_by_either_model_is_never_shown():
+    entry = {"description": "A form.", "screenshot": ("screenshots/1.png", "ab"), "directory": None, "empty": set()}
+    assert review_screens.view(entry)["description"] == "A form."
+    entry["empty"] = {GEMMA}
+    assert review_screens.view(entry) == {"screenshot": "screenshots/ab.png"}
+
+
+def stage_one_workspace(tmp_path, run):
+    """test_review_expectation's workspace, its context's screens named by run: S1 (cited by the steps) and S2."""
+    from tests.test_review_expectation import workspace
+
+    root = workspace(tmp_path, run)
+    path = root / "expectation" / "e1" / "s1" / "context.json"
+    parts = json.loads(path.read_text())["parts"]
+    parts[2]["provenance"] = [{"origin": "run", "record": "events.jsonl#screen/s-ad", "run": "r1"}]
+    parts.append(
+        {
+            "id": "S2",
+            "kind": "screen",
+            "text": "Settings",
+            "provenance": [{"origin": "run", "record": "events.jsonl#screen/s-set", "run": "r1"}],
+        }
+    )
+    path.write_text(json.dumps({"parts": parts}))
+    return root
+
+
+def entries(cited_empty=(), other_empty=()):
+    return {
+        ("r1", "s-ad", "An ad | Close"): {
+            "description": "An ad.",
+            "screenshot": None,
+            "directory": None,
+            "empty": set(cited_empty),
+        },
+        ("r1", "s-set", "Settings"): {
+            "description": "Settings.",
+            "screenshot": None,
+            "directory": None,
+            "empty": set(other_empty),
+        },
+    }
+
+
+def test_stage_one_d45_passes_over_a_unit_only_for_a_cited_screen_and_hides_the_others(tmp_path, monkeypatch):
+    runs = [stage_one_workspace(tmp_path, "model-x"), stage_one_workspace(tmp_path, "model-y")]
+    # an empty description of an uncited screen: every unit stays eligible, the screen shows no description
+    monkeypatch.setattr(rx, "index", lambda root: entries(other_empty={GEMMA}))
+    m = rx.draw(tmp_path / "s1", runs, per_stratum=5, seed=2, exclude_empty_descriptions=True)
+    assert m["empty_descriptions"]["ineligible"] == 0 and m["empty_descriptions"]["passed_over"] == []
+    item = json.loads((tmp_path / "s1" / "sample.json").read_text())["items"][0]
+    assert item["context"]["screens"] == ["An ad | Close", "Settings"]
+    assert item["context"]["screen_details"] == [{"description": "An ad."}, {}]
+    # an empty description of the screen the steps cite: no unit may be drawn
+    monkeypatch.setattr(rx, "index", lambda root: entries(cited_empty={GEMMA}))
+    m = rx.draw(tmp_path / "s2", runs, per_stratum=5, seed=2, exclude_empty_descriptions=True)
+    assert m["empty_descriptions"]["ineligible"] == 4 and sum(s["drawn"] for s in m["strata"]) == 0
+    assert {tuple(p["empty_by"]) for p in m["empty_descriptions"]["passed_over"]} == {(GEMMA,)}
+    # without the option the draw is as before
+    m = rx.draw(tmp_path / "s3", runs, per_stratum=5, seed=2)
+    assert "empty_descriptions" not in m and sum(s["drawn"] for s in m["strata"]) == 4

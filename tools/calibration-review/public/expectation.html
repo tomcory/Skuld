@@ -31,6 +31,10 @@
         .decide { position: sticky; bottom: 0; background: #fff; margin-top: 1rem; padding: .75rem 0 .25rem; border-top: 1px solid #dee2e6; z-index: 5; }
         .left { max-height: 86vh; overflow-y: auto; }
         kbd { font-size: .72rem; }
+        .described { color: #495057; font-size: .8rem; background: #f3f0ff; border-left: 3px solid #8c7ae6; padding: .25rem .5rem; margin-top: .3rem; }
+        .shot { display: block; max-height: 16rem; max-width: 100%; margin-top: .35rem; border: 1px solid #dee2e6; border-radius: .25rem; cursor: zoom-in; }
+        .zoom { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 1060; display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
+        .zoom img { max-height: 95vh; max-width: 95vw; border-radius: .25rem; background: #fff; }
         [v-cloak] { display: none; }
     </style>
 </head>
@@ -56,6 +60,9 @@
             highlighted), the screens of the episodes it occurred in and the documentation passages. The stage never sees
             the provider's privacy policy or store listing, so do not judge against them; if you know that the provider
             says otherwise, say so in the note.
+            A screen may come with a <b>description</b> written by a model (purple box) and a <b>screenshot</b> (click to
+            enlarge, <kbd>Esc</kbd> to close): the stage was given both. The description helps you find your way; it is a
+            model's reading, not evidence, and E may not cite it. The screenshot shows the screen as the user saw it.
             Which model produced the unit is not shown.</p>
         <p class="mb-1"><b>Each question on its own.</b> A flaw counts once, in the question it belongs to: an implausible
             purpose is a <i>no</i> on Plausible, not also on its node, need or steps. Judge the node, the need and the steps
@@ -177,7 +184,7 @@
                                         <span v-for="c in s.cites" class="chip" :class="{open: expanded.has(citeKey(d, si, c))}" :title="c.text"
                                               @click.stop="toggle(citeKey(d, si, c))"><i class="bi" :class="kindIcon(c.kind)"></i> {{ c.id }} · {{ c.kind }}</span>
                                     </div>
-                                    <template v-for="c in s.cites"><div v-if="expanded.has(citeKey(d, si, c))" class="cite"><b>{{ c.id }}</b> ({{ c.kind }}): <span v-html="c.kind === 'traffic' ? traffic(c.text) : mark(c.text)"></span></div></template>
+                                    <template v-for="c in s.cites"><div v-if="expanded.has(citeKey(d, si, c))" class="cite"><b>{{ c.id }}</b> ({{ c.kind }}): <span v-html="c.kind === 'traffic' ? traffic(c.text) : mark(c.text)"></span><div v-if="c.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> <span v-html="mark(c.description)"></span></div><img v-if="c.screenshot" :src="'/' + c.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + c.screenshot"></div></template>
                                 </div>
                                 <div v-if="!d.steps.length" class="text-secondary">no steps recorded</div>
                             </template>
@@ -243,10 +250,12 @@
                             <div v-for="e in focusEvidence" class="evidence-item">
                                 <div class="text-secondary">{{ e.source || e.kind }}</div>
                                 <div v-html="e.source === 'traffic as captured' ? traffic(e.text) : mark(e.text)"></div>
+                                <div v-if="e.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> <span v-html="mark(e.description)"></span></div><img v-if="e.screenshot" :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot">
                             </div>
                         </template>
                         <template v-else-if="tab === 'screens'">
-                            <div v-for="(s, i) in shownScreens" class="screen" :class="{cited: citedTexts.has(s)}"><span class="text-secondary">screen {{ i + 1 }}</span> · <span v-html="mark(s)"></span></div>
+                            <div v-for="s in shownScreens" class="screen" :class="{cited: citedTexts.has(s.text)}"><span class="text-secondary">screen {{ s.n }}</span> · <span v-html="mark(s.text)"></span>
+                                <div v-if="s.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> <span v-html="mark(s.description)"></span></div><img v-if="s.screenshot" :src="'/' + s.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + s.screenshot"></div>
                             <div v-if="!shownScreens.length" class="text-secondary small">No screen matches.</div>
                         </template>
                         <template v-else>
@@ -259,6 +268,7 @@
         </div>
     </div>
     <div v-else-if="progress" class="text-secondary">Loading…</div>
+    <div v-if="zoom" class="zoom" @click="zoom = null"><img :src="zoom" alt="Screenshot of the screen"></div>
     <vocab-browser v-if="browser" :vocab="vocabs[browser.kind]" :mode="browser.mode" :initial="browser.initial" :title="browser.title"
                    @close="browser = null" @choose="chooseNode"></vocab-browser>
 </div>
@@ -275,7 +285,7 @@ const GOOD = ['yes', 'exact', 'right'];
 const BAD = ['no', 'wrong'];
 const app = createApp({
     data: () => ({progress: null, item: null, help: false, labels, purposes: {}, dependencies: {}, missed: [], note: '',
-                  focus: null, tab: 'evidence', query: '', vocabs: {purpose: [], data: []}, browser: null, expanded: new Set()}),
+                  focus: null, tab: 'evidence', query: '', vocabs: {purpose: [], data: []}, browser: null, expanded: new Set(), zoom: null}),
     provide() { return {openVocab: (kind, id) => this.openVocab(kind, id)}; },
     computed: {
         open() {
@@ -301,9 +311,12 @@ const app = createApp({
             return new Set([...this.focusEvidence.map(e => e.text), ...p.dependencies.flatMap(d => d.steps.flatMap(s => s.cites.map(c => c.text)))]);
         },
         shownScreens() {
+            // each screen with its description and screenshot as stage 1 was given them (a sample drawn before 0.12.19
+            // has neither), numbered in the stage's order, the number kept when a search filters them
             const q = this.query.trim().toLowerCase();
-            const all = this.item.context.screens;
-            return q.length < 3 ? all : all.filter(s => s.toLowerCase().includes(q));
+            const details = this.item.context.screen_details || [];
+            const all = this.item.context.screens.map((text, i) => ({text, n: i + 1, ...(details[i] || {})}));
+            return q.length < 3 ? all : all.filter(s => s.text.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q));
         },
     },
     methods: {
@@ -355,6 +368,7 @@ const app = createApp({
             this.tab = (this.item.context.traffic || []).length ? 'traffic' : 'evidence';
             this.query = '';
             this.expanded = new Set();
+            this.zoom = null;
         },
         async save(done) {
             if (done && this.open.length) return;
@@ -376,6 +390,7 @@ const app = createApp({
             await this.go(index);
         },
         key(event) {
+            if (this.zoom) { if (event.key === 'Escape') this.zoom = null; return; }  // a screenshot is open
             if (this.browser) { if (event.key === 'Escape') this.browser = null; return; }  // a vocabulary is open: no shortcuts
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || !this.item) return;
             const action = {ArrowLeft: () => this.go(this.item.index - 1), ArrowRight: () => this.go(this.item.index + 1),

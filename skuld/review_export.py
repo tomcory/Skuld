@@ -11,8 +11,9 @@ The package holds, below one folder `asgard-review-<id>/`:
     README.md               the reviewer's guide: what to judge, in which order, how to start and how to send back
     reviewer.json           the reviewer's id, the samples and when the package was made
     tool/                   the review tool (server.js, public/, package.json) with the modules the server needs
-    samples/<name>/         per sample its sample.json and, for a review of concerns, the documents; never key.json
-                            or manifest.json, which name the runs
+    samples/<name>/         per sample its sample.json, for a review of concerns the documents, and the screenshots
+                            stage 1 was given of the units' screens; never key.json or manifest.json, which name the
+                            runs
     start-<name>.command    macOS: start the tool on that sample and open it in the browser (also -.sh, -.bat)
     pack-reviews.command    macOS: pack the reviews into reviews-<id>.zip to send back (also .sh, .bat)
 
@@ -88,9 +89,10 @@ def export(out: str | Path, samples: list[str | Path], reviewer: str, note: str 
             raise ReviewError(f"two samples named {name}")
         names.append((name, kind))
         files[f"samples/{name}/sample.json"] = sample
-        for f in sorted((folder / "documents").rglob("*")) if (folder / "documents").is_dir() else []:
-            if f.is_file():
-                files[f"samples/{name}/documents/{f.relative_to(folder / 'documents').as_posix()}"] = f
+        for sub in ("documents", "screenshots"):  # screenshots: what stage 1 was given of the units' screens
+            for f in sorted((folder / sub).rglob("*")) if (folder / sub).is_dir() else []:
+                if f.is_file():
+                    files[f"samples/{name}/{sub}/{f.relative_to(folder / sub).as_posix()}"] = f
     for f in ("server.js", "package.json", "package-lock.json"):
         if (TOOL / f).is_file():
             files[f"tool/{f}"] = TOOL / f

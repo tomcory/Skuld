@@ -130,10 +130,18 @@ def source(e: dict) -> str:
 
 
 def settings() -> dict:
-    """config.json's `review`: units drawn per stratum, anchoring units, and the seed."""
+    """config.json's `review`: units drawn per stratum, anchoring units, the seed, and whether a unit showing a screen
+    with an empty description is passed over (D-45; the re-run's profiles)."""
     from skuld import config
 
-    return {"per_run": 70, "floor": 3, "anchor": 0, "seed": 1, **(config.load().get("review") or {})}
+    return {
+        "per_run": 70,
+        "floor": 3,
+        "anchor": 0,
+        "seed": 1,
+        "exclude_empty_descriptions": False,
+        **(config.load().get("review") or {}),
+    }
 
 
 # -- units ------------------------------------------------------------------------------------------------------------
@@ -161,7 +169,12 @@ def _frame(root: Path):
 
 def units(root: Path) -> tuple[list[dict], dict]:
     """The units of one workspace (its aggregated concerns, as the reviewer sees them) and what the recall pass shows
-    of its application (its practices and declared purposes)."""
+    of its application (its practices and declared purposes). A screen among a unit's evidence comes with its
+    description and screenshot as stage 1 was given them (review_screens), and `_screens` holds them, for D-45 and the
+    copy."""
+    from skuld.review_screens import evidence_key, index, view
+
+    screens = index(root)
     report = read_json(root / REPORT)
     agg = read_json(root / AGGREGATE)
     frame = _frame(root)
@@ -250,6 +263,7 @@ def units(root: Path) -> tuple[list[dict], dict]:
                 "method": e.get("method"),
                 "citation": e.get("citation"),
                 "members": sorted(cited[x]),
+                **view(screens.get(evidence_key(e))),
             }
             items.append(by_text[key])
         out.append(
@@ -279,6 +293,9 @@ def units(root: Path) -> tuple[list[dict], dict]:
                 "members": members,
                 "evidence": items,
                 "_concerns": [m["concern"] for m in a["members"]],
+                "_screens": [
+                    screens[k] for k in {evidence_key(evidence[i]) for e in items for i in e["items"]} if k in screens
+                ],
             }
         )
     practices = [
@@ -340,11 +357,18 @@ def draw(
     anchor: int | None = None,
     per_run: int | None = None,
     steps: list[str] | None = None,
+    exclude_empty_descriptions: bool | None = None,
 ) -> dict:
     """Draws the review's units from the workspaces' aggregates and fixes them in `folder`, which must not exist:
     per run in proportion to the strata (`per_run`, the default), or `per_stratum` in each. With `steps`, only units
     of those steps are drawn (e.g. a supplementary sample of a concern type added after the first draw); the
-    manifest records them, and the strata's populations are of those steps alone."""
+    manifest records them, and the strata's populations are of those steps alone. With `exclude_empty_descriptions`
+    (D-45), a unit showing a screen whose description is empty by either model is passed over for the stratum's next
+    eligible one in the seed's order (review_expectation.eligible_first), and the manifest lists those passed over.
+    The screenshots the drawn units show are copied into the folder (review_screens)."""
+    from skuld.review_expectation import eligible_first
+    from skuld.review_screens import copy_screenshots, empty
+
     folder = Path(folder)
     if folder.exists():
         raise ReviewError(f"{folder} exists: a drawn sample is fixed, draw a new one into another folder")
@@ -353,6 +377,7 @@ def draw(
     floor = s["floor"]
     seed = s["seed"] if seed is None else seed
     anchor = s["anchor"] if anchor is None else anchor
+    exclude = s["exclude_empty_descriptions"] if exclude_empty_descriptions is None else exclude_empty_descriptions
 
     every, workspaces_out, apps = [], [], {}
     for n, root in enumerate(map(Path, workspaces), 1):
@@ -402,9 +427,17 @@ def draw(
         strata[_skey(_stratum(u["_run"], u))].append(u)
     sizes = {k: allocation(strata, k, per_stratum, per_run, floor) for k in strata}
     chosen = []
+    passed_over: list = []
+
+    def ok(u):
+        return not empty(u["_screens"])
+
     for k in sorted(strata):
         members = strata[k]
-        chosen.append(members if len(members) <= sizes[k] else rng.sample(members, sizes[k]))
+        if exclude:
+            chosen.append(eligible_first(members, sizes[k], rng, ok, passed_over))
+        else:
+            chosen.append(members if len(members) <= sizes[k] else rng.sample(members, sizes[k]))
     # every prefix covers the strata in proportion, so that a partial return is a smaller stratified sample
     drawn = interleave(chosen, rng)
     # a unit of declared purposes is judged blind phrase by phrase (blind_phrases), not by an anchoring decision
@@ -412,6 +445,7 @@ def draw(
     anchored = {id(u) for u in rng.sample(supported, min(anchor, len(supported)))}
 
     folder.mkdir(parents=True)
+    screenshots = copy_screenshots(folder, [e for u in drawn for e in u["_screens"]])
     if steps:  # a supplementary sample shows only the applications it has units of
         apps = {app: x for app, x in apps.items() if any(u["application"] == app for u in drawn)}
     applications = {}
@@ -457,6 +491,30 @@ def draw(
         else {"proportional": True, "per_run": per_run, "floor": floor},
         "anchor": len(anchored),
         **({"steps": sorted(steps)} if steps else {}),
+        # D-45: the units passed over because a screen they show has an empty description, by model
+        **(
+            {
+                "empty_descriptions": {
+                    "excluded": True,
+                    "passed_over": [
+                        {
+                            "run": u["_run"],
+                            "application": u["application"],
+                            "aggregated": u["aggregated"],
+                            "stratum": _stratum(u["_run"], u),
+                            "empty_by": empty(u["_screens"]),
+                        }
+                        for u in passed_over
+                    ],
+                    "ineligible": sum(1 for u in every if not ok(u)),
+                    "rule": "a unit showing a screen whose description is empty by either model among its evidence is "
+                    "passed over",
+                }
+            }
+            if exclude
+            else {}
+        ),
+        "screenshots": screenshots,
         "runs": runs,
         "run_models": {
             run: next((w["models"] for w in workspaces_out if w["run"] == run and w["models"]), []) for run in runs

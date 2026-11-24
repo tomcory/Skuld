@@ -58,6 +58,7 @@ from skuld.assess import REPORT
 from skuld.calibrate import decisions, file_sha256, kappa, model_identity, read_json, stage_one, wilson, write_json
 from skuld.expectation import listed
 from skuld.review import ReviewError, _given, _uncited, coverage, interleave, source
+from skuld.review_screens import context_keys, copy_screenshots, empty, evidence_key, index, screen_key, view
 
 #: 2 since the drawn units are interleaved by stratum instead of shuffled (every prefix of the sample covers the strata
 #: in proportion), and a draw may cap the units of one application (`per_app`; the manifest records the applications'
@@ -95,11 +96,17 @@ ASK = (
 
 
 def settings() -> dict:
-    """config.json's `expectation_review`: practices drawn per stratum, the cap per application (none), and the
-    seed."""
+    """config.json's `expectation_review`: practices drawn per stratum, the cap per application (none), the seed, and
+    whether a unit showing a screen with an empty description is passed over (D-45; the re-run's profiles)."""
     from skuld import config
 
-    return {"per_stratum": 8, "per_app": None, "seed": 1, **(config.load().get("expectation_review") or {})}
+    return {
+        "per_stratum": 8,
+        "per_app": None,
+        "seed": 1,
+        "exclude_empty_descriptions": False,
+        **(config.load().get("expectation_review") or {}),
+    }
 
 
 def asked(purpose: dict) -> list[str]:
@@ -124,8 +131,9 @@ def _sample_part(root: Path, ref: str) -> tuple[dict, dict] | None:
     return answer, {p["id"]: p for p in context.get("parts", [])}
 
 
-def _steps(root: Path, claim: dict) -> list[dict]:
-    """A dependency claim's reasoning steps as its samples gave them, each once, with the texts they cite."""
+def _steps(root: Path, claim: dict, screens: dict | None = None, cited: set | None = None) -> list[dict]:
+    """A dependency claim's reasoning steps as its samples gave them, each once, with the texts they cite (a screen
+    with its description and screenshot, `screens` from review_screens.index; its key added to `cited`)."""
     out, seen = [], set()
     for ref in claim.get("of", []):
         index = ref.rpartition(":")[2]
@@ -143,8 +151,15 @@ def _steps(root: Path, claim: dict) -> list[dict]:
             if not text or text in seen:
                 continue
             seen.add(text)
+            if cited is not None:
+                cited |= {screen_key(parts[c]) for c in step.get("cites") or [] if c in parts}
             cites = [
-                {"id": c, "kind": parts[c]["kind"], "text": parts[c]["text"]}
+                {
+                    "id": c,
+                    "kind": parts[c]["kind"],
+                    "text": parts[c]["text"],
+                    **(view((screens or {}).get(screen_key(parts[c]))) if parts[c]["kind"] == "screen" else {}),
+                }
                 for c in step.get("cites") or []
                 if c in parts
             ]
@@ -152,14 +167,20 @@ def _steps(root: Path, claim: dict) -> list[dict]:
     return out
 
 
-def _evidence(claim: dict, evidence: dict) -> list[dict]:
+def _evidence(claim: dict, evidence: dict, screens: dict | None = None) -> list[dict]:
     out, seen = [], set()
     for i in claim.get("supporting", []):
         e = evidence.get(i)
         if not e or not e.get("text") or e["text"] in seen:
             continue
         seen.add(e["text"])
-        out.append({**{k: e[k] for k in ("id", "kind", "text", "method", "citation") if e.get(k)}, "source": source(e)})
+        out.append(
+            {
+                **{k: e[k] for k in ("id", "kind", "text", "method", "citation") if e.get(k)},
+                "source": source(e),
+                **view((screens or {}).get(evidence_key(e))),
+            }
+        )
     return out
 
 
@@ -192,8 +213,12 @@ def _told(root: Path) -> dict[str, dict]:
 
 
 def units(root: Path, known_data_only: bool = True) -> list[dict]:
-    """The units of one workspace: one per practice the expectation stage gave a purpose, as the reviewer sees it."""
+    """The units of one workspace: one per practice the expectation stage gave a purpose, as the reviewer sees it. Each
+    screen comes with its description and screenshot as stage 1 was given them (`context.screen_details`, parallel to
+    `context.screens`; review_screens), and `_screens` holds every screen the unit shows, for D-45 and the copy."""
     report = read_json(root / REPORT)
+    screens = index(root)
+    keys = context_keys(root)
     evidence = {e["id"]: e for e in report.get("evidence", [])}
     stage = [c for c in report.get("claims", []) if c.get("stage") == "expectation"]
     read = stage_one(root)
@@ -206,6 +231,7 @@ def units(root: Path, known_data_only: bool = True) -> list[dict]:
         if not purposes:
             continue
         shown = []
+        cited: set = set()  # the keys of the screens the unit's steps cite
         for n, c in enumerate(purposes, 1):
             dependencies = []
             for m, d in enumerate(
@@ -225,8 +251,8 @@ def units(root: Path, known_data_only: bool = True) -> list[dict]:
                         "status": d["status"],
                         "reason": d.get("reason"),
                         "asked": d["status"] in STATED,
-                        "steps": _steps(root, d),
-                        "evidence": _evidence(d, evidence),
+                        "steps": _steps(root, d, screens, cited),
+                        "evidence": _evidence(d, evidence, screens),
                     }
                 )
             shown.append(
@@ -237,11 +263,16 @@ def units(root: Path, known_data_only: bool = True) -> list[dict]:
                     "status": c["status"],
                     "reason": c.get("reason"),
                     "samples": len(c.get("of", [])),
-                    "evidence": _evidence(c, evidence),
+                    "evidence": _evidence(c, evidence, screens),
                     "dependencies": dependencies,
                 }
             )
         party = p.get("party") or {}
+        context = read.get(p["id"], {"screens": [], "passages": []})
+        mine = keys.get(p["id"], {})
+        details = [view(screens.get(mine.get(t))) for t in context["screens"]]
+        cited |= {evidence_key(e) for e in evidence.values() if e.get("id") in _cited(shown)}
+        shown_keys = {mine.get(t) for t in context["screens"]} | cited
         out.append(
             {
                 "practice": {
@@ -254,15 +285,24 @@ def units(root: Path, known_data_only: bool = True) -> list[dict]:
                 },
                 "told": told.get(p["id"], {}).get("sentence"),
                 "context": {
-                    **read.get(p["id"], {"screens": [], "passages": []}),
+                    **context,
+                    **({"screen_details": details} if any(details) else {}),
                     "traffic": told.get(p["id"], {}).get("traffic", []),
                 },
                 "purposes": shown,
+                "_screens": [screens[k] for k in shown_keys if k in screens],
+                # D-45 (amended 24 Nov 2026): only the screens the unit cites decide whether it may be drawn
+                "_cited_screens": [screens[k] for k in cited if k in screens],
                 "_role": "functional" if any(x["role"] == "functional" for x in shown) else "ancillary",
                 "_status": "supported" if any(x["status"] == "supported" for x in shown) else "not_supported",
             }
         )
     return out
+
+
+def _cited(shown: list[dict]) -> set[str]:
+    """The evidence ids a unit's purposes and dependencies show."""
+    return {e["id"] for p in shown for e in p["evidence"] + [x for d in p["dependencies"] for x in d["evidence"]]}
 
 
 # -- drawing ----------------------------------------------------------------------------------------------------------
@@ -272,7 +312,21 @@ def _skey(s: dict) -> tuple:
     return tuple(s[k] for k in STRATUM)
 
 
-def capped(strata: dict, sizes: dict, per_app: int, rng: random.Random) -> dict:
+def eligible_first(members: list, size: int, rng: random.Random, ok, passed_over: list) -> list:
+    """A stratum's `size` units: the first `ok` ones in the seed's order of all its members; those not ok that come
+    before the last one taken are appended to `passed_over` (D-45: replaced by the next eligible unit)."""
+    taken = []
+    for u in rng.sample(members, len(members)):
+        if len(taken) == size:
+            break
+        if ok(u):
+            taken.append(u)
+        else:
+            passed_over.append(u)
+    return taken
+
+
+def capped(strata: dict, sizes: dict, per_app: int, rng: random.Random, ok=None, passed_over=None) -> dict:
     """
     Each stratum's units, `sizes[k]` of them, with at most about `per_app` units of one application per run: the cap
     is shared out over a run's strata in proportion to their sizes, each stratum's share rounded and at least one.
@@ -281,7 +335,8 @@ def capped(strata: dict, sizes: dict, per_app: int, rng: random.Random) -> dict:
     random order (the cap gives way where a stratum has too few other applications). Each stratum keeps its size, so
     the stratification and its weights are unchanged; within a stratum, a unit of an application with many units in
     it is less likely to be drawn than one of an application with few, so a stratum's rate leans towards the average
-    over its applications rather than over its units.
+    over its applications rather than over its units. With `ok`, a unit not ok is passed over (and appended to
+    `passed_over`), as by `eligible_first`.
     """
     total = defaultdict(int)
     for k, n in sizes.items():
@@ -294,6 +349,9 @@ def capped(strata: dict, sizes: dict, per_app: int, rng: random.Random) -> dict:
         for u in order:
             if len(taken) == sizes[k]:
                 break
+            if ok is not None and not ok(u):
+                passed_over.append(u)
+                continue
             if per[u["application"]] < share:
                 taken.append(u)
                 per[u["application"]] += 1
@@ -310,9 +368,14 @@ def draw(
     seed: int | None = None,
     prefix: str = "x",
     per_app: int | None = None,
+    exclude_empty_descriptions: bool | None = None,
 ) -> dict:
     """Draws the review's units from the workspaces' assessments and fixes them in `folder`, which must not exist:
-    `per_stratum` per stratum, and with `per_app`, at most about that many of one application per run (`capped`)."""
+    `per_stratum` per stratum, and with `per_app`, at most about that many of one application per run (`capped`).
+    With `exclude_empty_descriptions` (D-45 as amended on 24 Nov 2026), a unit citing a screen whose description is
+    empty by either model is passed over for the stratum's next eligible one in the seed's order (`eligible_first`),
+    and the manifest lists those passed over; its other such screens are shown without a description
+    (review_screens.view). The screenshots the drawn units show are copied into the folder (review_screens)."""
     folder = Path(folder)
     if folder.exists():
         raise ReviewError(f"{folder} exists: a drawn sample is fixed, draw a new one into another folder")
@@ -322,6 +385,7 @@ def draw(
     if per_app is not None and per_app < 1:
         raise ReviewError("per_app must be at least 1")
     seed = s["seed"] if seed is None else seed
+    exclude = s["exclude_empty_descriptions"] if exclude_empty_descriptions is None else exclude_empty_descriptions
 
     every, workspaces_out = [], []
     for n, root in enumerate(map(Path, workspaces), 1):
@@ -363,8 +427,12 @@ def draw(
     strata = defaultdict(list)
     for u in every:
         strata[_skey(stratum(u))].append(u)
+    ok = (lambda u: not empty(u["_cited_screens"])) if exclude else None
+    passed_over: list = []
     if per_app:
-        chosen = capped(strata, {k: min(len(v), per_stratum) for k, v in strata.items()}, per_app, rng)
+        chosen = capped(strata, {k: min(len(v), per_stratum) for k, v in strata.items()}, per_app, rng, ok, passed_over)
+    elif ok is not None:
+        chosen = {k: eligible_first(strata[k], per_stratum, rng, ok, passed_over) for k in sorted(strata)}
     else:
         chosen = {
             k: strata[k] if len(strata[k]) <= per_stratum else rng.sample(strata[k], per_stratum)
@@ -374,6 +442,7 @@ def draw(
     drawn = interleave([chosen[k] for k in sorted(chosen)], rng)
 
     folder.mkdir(parents=True)
+    screenshots = copy_screenshots(folder, [e for u in drawn for e in u["_screens"]])
     items, key = [], {}
     for n, u in enumerate(drawn, 1):
         iid = f"{prefix}{n:03d}"
@@ -405,6 +474,31 @@ def draw(
         "seed": seed,
         "per_stratum": per_stratum,
         **({"per_app": per_app} if per_app else {}),
+        # D-45: the units passed over because a screen they show has an empty description, by model
+        **(
+            {
+                "empty_descriptions": {
+                    "excluded": True,
+                    "passed_over": [
+                        {
+                            "run": u["_run"],
+                            "application": u["application"],
+                            "practice": u["practice"]["id"],
+                            "stratum": stratum(u),
+                            "empty_by": empty(u["_cited_screens"]),
+                        }
+                        for u in passed_over
+                    ],
+                    "ineligible": sum(1 for u in every if not ok(u)),
+                    "rule": "a unit citing a screen whose description is empty by either model is passed over; its "
+                    "other such screens are shown without a description",
+                    "hidden": sum(1 for u in drawn for e in u["_screens"] if e["empty"]),
+                }
+            }
+            if exclude
+            else {}
+        ),
+        "screenshots": screenshots,
         "runs": runs,
         "run_models": {
             run: next((w["models"] for w in workspaces_out if w["run"] == run and w["models"]), []) for run in runs

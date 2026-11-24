@@ -133,6 +133,8 @@ app.use('/vendor/bootstrap.css', express.static(path.join(__dirname, 'node_modul
 app.use('/vendor/icons', express.static(path.join(__dirname, 'node_modules/bootstrap-icons/font')));
 // only the collections' documents: E's outcomes stay in key.json, which is never served
 app.use('/documents', express.static(path.join(FOLDER, 'documents')));
+// the screenshots stage 1 was given of the screens the units show (skuld review_screens), named by digest
+app.use('/screenshots', express.static(path.join(FOLDER, 'screenshots')));
 
 app.get('/api/progress', (req, res) => res.send(progress()));
 

@@ -24,6 +24,10 @@
         mark.datum { background: #ffd166; font-weight: 600; padding: 0 .15em; }
         .crit-label { font-size: .85rem; color: #495057; min-width: 11rem; }
         kbd { font-size: .72rem; }
+        .described { color: #495057; font-size: .8rem; background: #f3f0ff; border-left: 3px solid #8c7ae6; padding: .25rem .5rem; margin-top: .3rem; }
+        .shot { display: block; max-height: 16rem; max-width: 100%; margin-top: .35rem; border: 1px solid #dee2e6; border-radius: .25rem; cursor: zoom-in; }
+        .zoom { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 1060; display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
+        .zoom img { max-height: 95vh; max-width: 95vw; border-radius: .25rem; background: #fff; }
         [v-cloak] { display: none; }
     </style>
 </head>
@@ -50,7 +54,9 @@
             <li><b>Evidence</b> (<kbd>1</kbd>–<kbd>4</kbd>): the evidence exists and is cited correctly: yes, partly, no, or none cited.
                 Each evidence item names its source (the practice as observed, traffic as captured, a screen of the app, the
                 provider's documents, documentation or a legal norm from E's corpus, E's expectation stage); a text several
-                members cite is shown once, with how many cite it.
+                members cite is shown once, with how many cite it. A screen may come with a <b>description</b> written by
+                a model (purple box) and a <b>screenshot</b> (click to enlarge, <kbd>Esc</kbd> to close), as E's first stage
+                was given them: the description helps you find your way, but it is a model's reading, not evidence.
                 <i>Yes</i>: every item exists and says what E takes it to say. <i>Partly</i>: some items do not, or one
                 sentence is cut into fragments that are counted as separate evidence. <i>No</i>: the items the conclusion
                 rests on do not exist or do not say it.</li>
@@ -305,6 +311,8 @@
                                 <div v-for="e in item.evidence" class="border-start border-3 ps-2 mb-2 small">
                                     <div class="text-secondary"><b>{{ e.source || e.kind }}</b><span v-if="item.members.length > 1"> · cited by {{ e.members.length }} of {{ item.members.length }} members</span></div>
                                     <div class="text-break" v-html="e.source === 'traffic as captured' ? traffic(e.text) : escapeHtml(e.text)"></div>
+                                    <div v-if="e.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> {{ e.description }}</div>
+                                    <img v-if="e.screenshot" :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot">
                                 </div>
                             </div>
                             </template>
@@ -392,6 +400,7 @@
         </div>
     </div>
     <div v-else-if="progress" class="text-secondary">Loading…</div>
+    <div v-if="zoom" class="zoom" @click="zoom = null"><img :src="zoom" alt="Screenshot of the screen"></div>
     <vocab-browser v-if="browser" :vocab="vocabs[browser.kind]" :mode="browser.mode" :initial="browser.initial" :title="browser.title"
                    @close="browser = null"></vocab-browser>
 </div>
@@ -404,7 +413,7 @@ const FOLLOWS = ['yes', 'partly', 'no'];
 const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 const app = createApp({
     provide() { return {openVocab: (kind, id) => this.openVocab(kind, id)}; },
-    data: () => ({vocabs: {purpose: [], data: []}, browser: null, progress: null, item: null, help: false, shown: null, document: {}, query: '', titles, EVIDENCE, FOLLOWS,
+    data: () => ({zoom: null, vocabs: {purpose: [], data: []}, browser: null, progress: null, item: null, help: false, shown: null, document: {}, query: '', titles, EVIDENCE, FOLLOWS,
                   evidence: null, follows: null, phrases: {}, blindPhrases: {}, note: '', blindNote: '', evidenceShown: true,
                   recall: null, recallOpen: false, recallDue: false}),
     computed: {
@@ -458,6 +467,7 @@ const app = createApp({
         async go(index) {
             if (!this.progress || index < 0 || index >= this.progress.total) return;
             this.item = await this.api(`/items/${index}`);
+            this.zoom = null;
             const r = this.item.review || {};
             this.evidence = r.evidence || null;
             this.follows = r.follows || null;
@@ -569,6 +579,7 @@ const app = createApp({
         statusClass: s => ({supported: 'text-bg-danger', not_established: 'text-bg-warning', not_assessable: 'text-bg-secondary'})[s] || 'text-bg-secondary',
         overallClass: d => ({agree: 'text-bg-success', disagree: 'text-bg-danger', partly: 'text-bg-warning', unsure: 'text-bg-secondary'})[d],
         key(event) {
+            if (this.zoom) { if (event.key === 'Escape') this.zoom = null; return; }  // a screenshot is open
             if (this.browser) { if (event.key === 'Escape') this.browser = null; return; }  // a vocabulary is open: no shortcuts
             if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') return;
             if (!this.item) return;
