@@ -18,6 +18,13 @@ manifest lists the items passed over: a review of concerns, an item that shows s
 review of stage 1, whose item shows every screen of its practice's batches, an item that cites one (a screen among
 its purposes' and dependencies' evidence or cited by a step; D-45 as amended by the author on 24 Nov 2026).
 
+**Visits** (author, 24 Nov 2026): Loki takes one screenshot per visit, when a screen's structure key changes; a change
+within the screen (typed text, a toggle, a scroll, a page that finished loading) keeps the visit and takes none, while
+stage 1 shows each changed state as a screen of its own. Each screen names its visit (`visit`, the seq of the visit's
+first observation: the run of observations with the same structure key it belongs to), so the tool groups a visit's
+screens; a screen Loki took no screenshot of is shown with its visit's first screenshot, labelled "before the change"
+(`before`), never where gate 1 applies (the screen or the visit's first state a notice).
+
 A screen is keyed by (run, screen id, text): how a concern's evidence item names it (`screen of <run>`, cited at
 `events.jsonl#screen/<sid>`) and what a stage-1 context's screen part holds.
 """
@@ -81,10 +88,26 @@ def _description_text(text: str) -> str:
     return text
 
 
+def _visits(directory: Path) -> dict[int, dict]:
+    """Per screen observation of a run, by seq: the visit's first observation (the earliest of the run of
+    observations with the same structure key that ends at it)."""
+    events = [json.loads(x) for x in (Path(directory) / "events.jsonl").read_text(encoding="utf-8").splitlines() if x]
+    out, start = {}, None
+    for e in (e for e in events if e.get("type") == "screen" and e.get("seq") is not None):
+        # an observation without a structure key begins a visit of its own
+        if start is None or not e.get("exact_key") or e.get("exact_key") != start["_last"]:
+            start = {**e, "_last": e.get("exact_key")}
+        out[e["seq"]] = start
+    return out
+
+
 def index(root: Path) -> dict[tuple, dict]:
     """Per screen of the workspace's stage-1 contexts, keyed (run, screen id, text): {description, screenshot
-    (path in the run, digest), directory, empty (the models whose description at the joined visit is empty)}; {} for a
-    workspace without stage-1 contexts or an assessment.yaml."""
+    (path in the run, digest), directory, empty (the models whose description at the joined visit is empty), visit
+    (the seq of its visit's first observation), before (the visit's first screenshot, for a screen Loki took none
+    of)}; {} for a workspace without stage-1 contexts or an assessment.yaml."""
+    from skuld import images
+
     root = Path(root)
     paths = sorted((root / "expectation").rglob("context.json")) if (root / "expectation").is_dir() else []
     if not paths or not (root / "assessment.yaml").is_file():
@@ -97,6 +120,7 @@ def index(root: Path) -> dict[tuple, dict]:
     notices = expectation.notices_of(read_json(root / REPORT)) if (root / REPORT).is_file() else None
     made = {b.key: b for b in expectation.batches(a, assessment.build(a, load_registry(None)), notices)}
     raw: dict[Path, dict] = {}
+    visits: dict[Path, dict] = {}
     out: dict[tuple, dict] = {}
     for path in paths:
         name = path.relative_to(root / "expectation").parts[0]
@@ -112,7 +136,15 @@ def index(root: Path) -> dict[tuple, dict]:
                 raise ScreenError(f"{path.relative_to(root)}: {part['id']} is not its batch's screen {n}")
             shown = batch.shown[n - 1]
             entry = out.setdefault(
-                key, {"description": None, "screenshot": None, "directory": batch.directory, "empty": set()}
+                key,
+                {
+                    "description": None,
+                    "screenshot": None,
+                    "directory": batch.directory,
+                    "empty": set(),
+                    "visit": None,
+                    "before": None,
+                },
             )
             described = by_id.get(f"{part['id']}.d")
             if described and entry["description"] is None:
@@ -120,6 +152,24 @@ def index(root: Path) -> dict[tuple, dict]:
             shot = next((x for x in part.get("provenance", []) if x.get("sha256")), None)
             if shot and entry["screenshot"] is None:
                 entry["screenshot"] = (shot["record"], shot["sha256"])
+            if batch.directory is not None and (batch.directory / "events.jsonl").is_file():
+                if batch.directory not in visits:
+                    visits[batch.directory] = _visits(batch.directory)
+                first = visits[batch.directory].get(shown.get("seq"))
+                if first is not None and entry["visit"] is None:
+                    entry["visit"] = first["seq"]
+                noticed = shown.get("noticed") or frozenset()
+                if (
+                    first is not None
+                    and entry["before"] is None
+                    and not shown.get("screenshot")  # Loki took none of this state (not: one stage 1 was not sent)
+                    and not shown.get("notice")
+                    and shown.get("seq") not in noticed
+                    and first["seq"] not in noticed
+                    and first.get("screenshot")
+                    and (batch.directory / first["screenshot"]).is_file()
+                ):
+                    entry["before"] = (first["screenshot"], images.digest(batch.directory / first["screenshot"]))
             if batch.directory is not None:
                 if batch.directory not in raw:
                     raw[batch.directory] = _raw_descriptions(batch.directory)
@@ -152,9 +202,14 @@ def view(entry: dict | None) -> dict:
     out = {}
     if entry.get("description") and not entry.get("empty"):
         out["description"] = entry["description"]
-    if entry.get("screenshot"):
-        record, digest = entry["screenshot"]
+    if entry.get("visit") is not None:
+        out["visit"] = f"v{entry['visit']}"  # a seq, never the run's name
+    shot = entry.get("screenshot") or entry.get("before")
+    if shot:
+        record, digest = shot
         out["screenshot"] = f"{SCREENSHOTS}/{digest}{Path(record).suffix or '.png'}"
+        if not entry.get("screenshot"):
+            out["before_change"] = True  # the visit's first screenshot: the screen before it changed in place
     return out
 
 
@@ -170,9 +225,9 @@ def copy_screenshots(folder: Path, entries: list[dict | None]) -> int:
 
     copied = set()
     for e in entries:
-        if not e or not e.get("screenshot") or e.get("directory") is None:
+        if not e or not (e.get("screenshot") or e.get("before")) or e.get("directory") is None:
             continue
-        record, digest = e["screenshot"]
+        record, digest = e.get("screenshot") or e["before"]
         target = folder / view(e)["screenshot"]
         if target in copied:
             continue

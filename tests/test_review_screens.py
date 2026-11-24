@@ -51,9 +51,12 @@ def test_each_screen_has_its_own_familys_description_and_the_screenshot_the_cont
     assert shown == {
         "description": entry["description"],
         "screenshot": f"screenshots/{home['provenance'][1]['sha256']}.png",
+        "visit": shown["visit"],
     }
-    # the sign-up form held a notice: the stage was given neither its description nor its screenshot
-    assert review_screens.view(found[review_screens.screen_key(signup)]) == {}
+    assert shown["visit"].startswith("v")
+    # the sign-up form held a notice: the stage was given neither its description nor its screenshot, and none from
+    # its visit either
+    assert set(review_screens.view(found[review_screens.screen_key(signup)])) <= {"visit"}
 
 
 def test_a_screen_whose_description_is_empty_by_either_model_is_marked_d45(described):
@@ -264,3 +267,31 @@ def test_a_concern_draw_of_one_tier_with_its_experiments_drawn_whole(tmp_path, m
 
 def read_key(folder):
     return json.loads((folder / "key.json").read_text())
+
+
+def test_a_screen_changed_in_place_shows_its_visits_first_screenshot_before_the_change(tmp_path, monkeypatch):
+    """Loki takes one screenshot per visit (a structure key); stage 1 shows a state changed in place as a screen of its
+    own, without one: the review shows the visit's first screenshot, labelled, and names the visit for grouping."""
+    from tests.test_described import described_run, workspace_of
+
+    monkeypatch.setattr(expectation, "describer", lambda model: model)
+    run = described_run(tmp_path)
+    events = [json.loads(x) for x in (run / "events.jsonl").read_text().splitlines()]
+    for e in events:
+        e["exact_key"] = f"k-{e['screen_id']}"
+    plan = next(e for e in events if e["screen_id"] == "s-plan")
+    events.append({**plan, "seq": 4, "texts": ["Your plan", "Week 1: four sessions"], "screenshot": None})
+    (run / "events.jsonl").write_text("\n".join(json.dumps(e) for e in events) + "\n")
+    a, built = workspace_of(tmp_path, run)
+    write_contexts(a, built, a.root)
+    found = review_screens.index(a.root)
+    first = next(v for k, v in found.items() if k[2] == "Your plan | Week 1: three sessions")
+    changed = next(v for k, v in found.items() if k[2] == "Your plan | Week 1: four sessions")
+    assert changed["visit"] == first["visit"] == plan["seq"]
+    assert changed["screenshot"] is None and changed["before"][0] == plan["screenshot"]
+    shown = review_screens.view(changed)
+    assert shown["before_change"] is True and shown["visit"] == f"v{plan['seq']}"
+    assert shown["screenshot"] == f"screenshots/{changed['before'][1]}.png"
+    assert "before_change" not in review_screens.view(first)
+    out = tmp_path / "copied"
+    assert review_screens.copy_screenshots(out, [changed]) == 1 and (out / shown["screenshot"]).is_file()

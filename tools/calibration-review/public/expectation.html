@@ -40,6 +40,12 @@
         .screen-row .shot-col { flex: 0 0 8.5rem; }
         .screen-row .shot { margin-top: 0; max-height: 18rem; width: 100%; object-fit: contain; object-position: top; }
         .screen-row .text-col { flex: 1 1 auto; min-width: 0; word-break: break-word; }
+        .screen-row.visit { background: #f8f9fa; border: 1px solid #dee2e6; border-left: 4px solid #6c757d; border-radius: .3rem; padding: .45rem; margin: .35rem 0; }
+        .visit-head { font-size: .72rem; color: #6c757d; text-transform: uppercase; letter-spacing: .03em; margin-bottom: .15rem; }
+        .visit-screen { padding: .2rem 0; }
+        .screen-row.visit .visit-screen + .visit-screen { border-top: 1px dashed #ced4da; }
+        .visit-screen.cited { background: #fff8e1; }
+        .shot-label { font-size: .68rem; color: #6c757d; margin-top: .15rem; text-align: center; }
         .no-shot { height: 4rem; border: 1px dashed #ced4da; border-radius: .25rem; color: #adb5bd; font-size: .7rem; display: flex; align-items: center; justify-content: center; text-align: center; padding: .25rem; }
         .cited-nav { position: sticky; top: 0; z-index: 2; background: #fff; padding: .25rem 0 .35rem; border-bottom: 1px solid #eee; }
         .zoom { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 1060; display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
@@ -72,6 +78,9 @@
             A screen may come with a <b>description</b> written by a model (purple box) and a <b>screenshot</b> (click to
             enlarge, <kbd>Esc</kbd> to close): the stage was given both. The description helps you find your way; it is a
             model's reading, not evidence, and E may not cite it. The screenshot shows the screen as the user saw it.
+            Screens in a grey block are <b>one visit</b>: the same screen whose content changed in place (text typed, a
+            box ticked, a page loaded). They share one screenshot and one description, taken when the visit began; a
+            screen marked <i>before the change</i> shows that earlier state, since no screenshot was taken of its own.
             Which model produced the unit is not shown.</p>
         <p class="mb-1"><b>Each question on its own.</b> A flaw counts once, in the question it belongs to: an implausible
             purpose is a <i>no</i> on Plausible, not also on its node, need or steps. Judge the node, the need and the steps
@@ -217,7 +226,7 @@
                                         <span v-for="c in s.cites" class="chip" :class="{open: expanded.has(citeKey(d, si, c))}" :title="c.text"
                                               @click.stop="toggle(citeKey(d, si, c))"><i class="bi" :class="kindIcon(c.kind)"></i> {{ c.id }} · {{ c.kind }}</span>
                                     </div>
-                                    <template v-for="c in s.cites"><div v-if="expanded.has(citeKey(d, si, c))" class="cite"><b>{{ c.id }}</b> ({{ c.kind }}): <span v-html="c.kind === 'traffic' ? traffic(c.text) : mark(c.text)"></span><div v-if="c.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> <span v-html="mark(c.description)"></span></div><img v-if="c.screenshot" :src="'/' + c.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + c.screenshot"></div></template>
+                                    <template v-for="c in s.cites"><div v-if="expanded.has(citeKey(d, si, c))" class="cite"><b>{{ c.id }}</b> ({{ c.kind }}): <span v-html="c.kind === 'traffic' ? traffic(c.text) : mark(c.text)"></span><div v-if="c.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> <span v-html="mark(c.description)"></span></div><img v-if="c.screenshot" :src="'/' + c.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + c.screenshot"><div v-if="c.screenshot && c.before_change" class="shot-label text-start">before the change</div></div></template>
                                 </div>
                                 <div v-if="!d.steps.length" class="text-secondary">no steps recorded</div>
                             </template>
@@ -281,7 +290,7 @@
                         <template v-else-if="tab === 'evidence'">
                             <div v-if="!focusEvidence.length" class="text-secondary small">E cites nothing for this purpose and its dependencies.</div>
                             <div v-for="e in focusEvidence" class="evidence-item" :class="{'screen-row': e.screenshot}">
-                                <div v-if="e.screenshot" class="shot-col"><img :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot"></div>
+                                <div v-if="e.screenshot" class="shot-col"><img :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot"><div v-if="e.before_change" class="shot-label">before the change</div></div>
                                 <div :class="{'text-col': e.screenshot}">
                                     <div class="text-secondary">{{ e.source || e.kind }}</div>
                                     <div v-html="e.source === 'traffic as captured' ? traffic(e.text) : mark(e.text)"></div>
@@ -294,14 +303,23 @@
                                 <span class="text-secondary">Cited for {{ label(focus) }}:</span>
                                 <a v-for="n in citedScreens" href="#" class="chip" @click.prevent="scrollToScreen(n)">screen {{ n }}</a>
                             </div>
-                            <div v-for="s in shownScreens" :key="s.n" :id="'screen-' + s.n" class="screen screen-row" :class="{cited: citedTexts.has(s.text)}">
+                            <!-- a visit's screens in one block: one screenshot, one description, their texts in order -->
+                            <div v-for="g in screenGroups" :key="g.key" class="screen screen-row" :class="{visit: g.screens.length > 1}">
                                 <div class="shot-col">
-                                    <img v-if="s.screenshot" :src="'/' + s.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + s.screenshot">
+                                    <template v-if="g.screenshot">
+                                        <img :src="'/' + g.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + g.screenshot">
+                                        <div class="shot-label">{{ g.caption }}</div>
+                                    </template>
                                     <div v-else class="no-shot">no screenshot given to the stage</div>
                                 </div>
                                 <div class="text-col">
-                                    <div><span class="text-secondary">screen {{ s.n }}</span><span v-if="citedTexts.has(s.text)" class="badge text-bg-warning ms-1">cited</span> · <span v-html="mark(s.text)"></span></div>
-                                    <div v-if="s.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> <span v-html="mark(s.description)"></span></div>
+                                    <div v-if="g.screens.length > 1" class="visit-head">one visit · screens {{ g.screens[0].n }}–{{ g.screens[g.screens.length - 1].n }} · the same screen, changed in place</div>
+                                    <div v-for="x in g.screens" :key="x.n" :id="'screen-' + x.n" class="visit-screen" :class="{cited: citedTexts.has(x.text)}">
+                                        <span class="text-secondary">screen {{ x.n }}</span><span v-if="citedTexts.has(x.text)" class="badge text-bg-warning ms-1">cited</span>
+                                        <span v-if="x.before_change" class="badge text-bg-light border ms-1" title="Loki took no screenshot of this state; the picture shows the screen before it changed">before the change</span>
+                                        · <span v-html="mark(x.text)"></span>
+                                    </div>
+                                    <div v-for="d in g.descriptions" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen{{ g.screens.length > 1 ? ' (one for the visit)' : '' }}, for orientation; not evidence:</span> <span v-html="mark(d)"></span></div>
                                 </div>
                             </div>
                             <div v-if="!shownScreens.length" class="text-secondary small">No screen matches.</div>
@@ -366,6 +384,28 @@ const app = createApp({
         citedScreens() {
             if (!this.item) return [];
             return this.item.context.screens.map((t, i) => (this.citedTexts.has(t) ? i + 1 : null)).filter(n => n);
+        },
+        // consecutive screens of one visit (Loki's: the same screen, its content changed in place) as one group, which
+        // shares the visit's screenshot and description; a screen of no known visit is a group of its own
+        screenGroups() {
+            const groups = [];
+            for (const x of this.shownScreens) {
+                const last = groups[groups.length - 1];
+                if (last && x.visit && last.visit === x.visit) last.screens.push(x);
+                else groups.push({key: 'g' + x.n, visit: x.visit, screens: [x]});
+            }
+            for (const g of groups) {
+                const own = g.screens.find(x => x.screenshot && !x.before_change);
+                const shot = own || g.screens.find(x => x.screenshot);
+                g.screenshot = shot ? shot.screenshot : null;
+                // the screens Loki took no screenshot of: the group's picture shows an earlier state of the same visit
+                const before = g.screens.filter(x => x.before_change).map(x => x.n);
+                g.caption = !shot ? '' : own
+                    ? (before.length ? `screen ${own.n}; before the change for ${before.length === 1 ? 'screen' : 'screens'} ${before.join(', ')}` : (g.screens.length > 1 ? `screen ${own.n}` : ''))
+                    : 'before the change';
+                g.descriptions = [...new Set(g.screens.map(x => x.description).filter(d => d))];
+            }
+            return groups;
         },
         shownScreens() {
             // each screen with its description and screenshot as stage 1 was given them (a sample drawn before 0.12.19
