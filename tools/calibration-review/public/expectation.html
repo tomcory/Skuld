@@ -77,7 +77,8 @@
             the provider's privacy policy or store listing, so do not judge against them; if you know that the provider
             says otherwise, say so in the note.
             A screen may come with a <b>description</b> written by a model (purple box) and a <b>screenshot</b> (click to
-            enlarge, <kbd>Esc</kbd> to close): the stage was given both. The description helps you find your way; it is a
+            enlarge, <kbd>Esc</kbd> to close). The stage was given the descriptions and up to eight screenshots per episode;
+            you see every screenshot taken, except of screens with a privacy or consent notice, which the stage never sees. The description helps you find your way; it is a
             model's reading, not evidence, and E may not cite it. The screenshot shows the screen as the user saw it.
             Screens in a grey block are <b>one visit</b>: the same screen whose content changed in place (text typed, a
             box ticked, a page loaded). They share one screenshot and one description, taken when the visit began; a
@@ -312,7 +313,7 @@
                                         <img :src="'/' + g.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + g.screenshot">
                                         <div class="shot-label">{{ g.caption }}</div>
                                     </template>
-                                    <div v-else class="no-shot">no screenshot given to the stage</div>
+                                    <div v-else class="no-shot">no screenshot</div>
                                 </div>
                                 <div class="text-col">
                                     <div v-if="g.screens.length > 1" class="visit-head">one visit · screens {{ g.screens[0].n }}–{{ g.screens[g.screens.length - 1].n }} · the same screen, changed in place</div>

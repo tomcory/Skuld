@@ -26,7 +26,10 @@ within the screen (typed text, a toggle, a scroll, a page that finished loading)
 stage 1 shows each changed state as a screen of its own. Each screen names its visit (`visit`, the seq of the visit's
 first observation: the run of observations with the same structure key it belongs to), so the tool groups a visit's
 screens; a screen Loki took no screenshot of is shown with its visit's first screenshot, labelled "before the change"
-(`before`), never where gate 1 applies (the screen or the visit's first state a notice).
+(`before`), never where gate 1 applies (the screen or the visit's first state a notice). A screen Loki took a
+screenshot of that stage 1 was not sent (at most images.MAX_IMAGES per batch, or the same file given for another
+screen) is shown with it too, unlabelled (`unsent`; author, 24 Nov 2026), never one of a notice (`expectation._shown`
+gives no screenshot of a visit that is one; a screen whose texts held one is passed over here).
 
 A screen is keyed by (run, screen id, text): how a concern's evidence item names it (`screen of <run>`, cited at
 `events.jsonl#screen/<sid>`) and what a stage-1 context's screen part holds.
@@ -145,6 +148,7 @@ def index(root: Path) -> dict[tuple, dict]:
                 "empty": set(),
                 "visit": None,
                 "before": None,
+                "unsent": None,
             }
             seen.setdefault(key, []).append(entry)
             described = by_id.get(f"{part['id']}.d")
@@ -153,6 +157,13 @@ def index(root: Path) -> dict[tuple, dict]:
             shot = next((x for x in part.get("provenance", []) if x.get("sha256")), None)
             if shot:
                 entry["screenshot"] = (shot["record"], shot["sha256"])
+            elif (
+                batch.directory is not None
+                and shown.get("screenshot")  # Loki took one; stage 1 was not sent it
+                and not shown.get("notice")
+                and (batch.directory / shown["screenshot"]).is_file()
+            ):
+                entry["unsent"] = (shown["screenshot"], images.digest(batch.directory / shown["screenshot"]))
             if batch.directory is not None and (batch.directory / "events.jsonl").is_file():
                 if batch.directory not in visits:
                     visits[batch.directory] = _visits(batch.directory)
@@ -188,6 +199,7 @@ def index(root: Path) -> dict[tuple, dict]:
         out[key] = {
             **chosen,
             "screenshot": chosen["screenshot"] or next((o["screenshot"] for o in occurrences if o["screenshot"]), None),
+            "unsent": chosen["unsent"] or next((o["unsent"] for o in occurrences if o["unsent"]), None),
             "occurrences": len(occurrences),
         }
     return out
@@ -217,11 +229,11 @@ def view(entry: dict | None) -> dict:
         out["description"] = entry["description"]
     if entry.get("visit") is not None:
         out["visit"] = f"v{entry['visit']}"  # a seq, never the run's name
-    shot = entry.get("screenshot") or entry.get("before")
+    shot = entry.get("screenshot") or entry.get("unsent") or entry.get("before")
     if shot:
         record, digest = shot
         out["screenshot"] = f"{SCREENSHOTS}/{digest}{Path(record).suffix or '.png'}"
-        if not entry.get("screenshot"):
+        if not entry.get("screenshot") and not entry.get("unsent"):
             out["before_change"] = True  # the visit's first screenshot: the screen before it changed in place
     return out
 
@@ -238,9 +250,9 @@ def copy_screenshots(folder: Path, entries: list[dict | None]) -> int:
 
     copied = set()
     for e in entries:
-        if not e or not (e.get("screenshot") or e.get("before")) or e.get("directory") is None:
+        if not e or not (e.get("screenshot") or e.get("unsent") or e.get("before")) or e.get("directory") is None:
             continue
-        record, digest = e.get("screenshot") or e["before"]
+        record, digest = e.get("screenshot") or e.get("unsent") or e["before"]
         target = folder / view(e)["screenshot"]
         if target in copied:
             continue

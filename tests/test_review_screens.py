@@ -365,3 +365,25 @@ import(process.argv[1]).then(m => {
     for page in ("expectation.html", "aggregate.html"):
         text = (rex.TOOL / "public" / page).read_text()
         assert "traffic-list" in text and "useTraffic(app)" in text and "described-label" in text
+
+
+def test_screenshots_over_the_stages_limit_are_shown_unlabelled_never_one_of_a_notice(tmp_path, monkeypatch):
+    from skuld import images
+    from tests.test_described import described_run, workspace_of
+
+    monkeypatch.setattr(expectation, "describer", lambda model: model)
+    run = described_run(tmp_path, extra_screens=12)
+    a, built = workspace_of(tmp_path, run)
+    write_contexts(a, built, a.root)
+    found = review_screens.index(a.root)
+    e1 = json.loads((a.root / "expectation" / "e1" / "s1" / "context.json").read_text())["parts"]
+    screens = [p for p in e1 if p["kind"] == "screen"]
+    sent = [p for p in screens if any(x.get("sha256") for x in p["provenance"])]
+    assert len(screens) == 13 and len(sent) == images.MAX_IMAGES
+    shown = [review_screens.view(found[review_screens.screen_key(p)]) for p in screens]
+    assert all(v.get("screenshot") for v in shown) and not any(v.get("before_change") for v in shown)
+    launch = json.loads((a.root / "expectation" / "launch" / "s1" / "context.json").read_text())["parts"]
+    signup = next(p for p in launch if p["id"] == "S2")  # its texts held a notice
+    assert "screenshot" not in review_screens.view(found[review_screens.screen_key(signup)])
+    out = tmp_path / "copied"
+    assert review_screens.copy_screenshots(out, list(found.values())) >= 13
