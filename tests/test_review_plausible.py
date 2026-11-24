@@ -33,8 +33,16 @@ def test_the_sample_carries_the_scale_and_the_reasons_to_pick_from(drawn):
     assert questions["purpose"]["plausible"] == ["yes", "mostly", "partly", "no", "unsure"]
     reasons = questions["reasons"]["plausible"]
     assert reasons["when"] == ["mostly", "partly"]
-    assert [o["id"] for o in reasons["options"]] == ["overstates", "vague", "bundles", "part_of_flow", "loose_fit"]
+    assert [o["id"] for o in reasons["options"]] == [
+        "overstates",
+        "vague",
+        "bundles",
+        "part_of_flow",
+        "loose_fit",
+        "other",
+    ]
     assert all(o["label"] and o["hint"] for o in reasons["options"])
+    assert reasons["free"] == "other"
     assert read(folder / rx.MANIFEST)["method"]["version"] == "3"
 
 
@@ -125,3 +133,45 @@ def test_the_tool_asks_for_reasons_and_refuses_unknown_ones(drawn):
         proc.wait()
     page = (rex.TOOL / "public" / "expectation.html").read_text()
     assert "toggleReason" in page and "Why not a plain yes?" in page and "<i>Mostly</i>" in page
+
+
+def test_other_needs_its_written_reason_which_the_scores_list(drawn):
+    folder, items = drawn
+    item = items[0]
+    assert "p1: plausible other reason" in rx.problems(item, judged(item, "partly", ["other"]))
+    blank = judged(item, "partly", ["other"])
+    blank["purposes"]["p1"]["plausible_other"] = "   "
+    assert "p1: plausible other reason" in rx.problems(item, blank)
+    given = judged(item, "partly", ["other", "vague"])
+    given["purposes"]["p1"]["plausible_other"] = " names the wrong company "
+    assert not rx.problems(item, given)
+    (folder / rx.REVIEWS).write_text(json.dumps({item["id"]: given}))
+    s = rx.score(folder)
+    listed = [o for e in s["estimates"] if e["question"] == "plausible" for o in e.get("other_reasons", [])]
+    assert {"id": item["id"], "purpose": "p1", "answer": "partly", "text": "names the wrong company"} in listed
+
+
+@pytest.mark.skipif(
+    not shutil.which("node") or not (rex.TOOL / "node_modules").is_dir(), reason="Node.js or the tool's modules missing"
+)
+def test_the_tool_asks_for_the_text_of_other(drawn):
+    from tests.test_review_tool import call, serve
+
+    folder, items = drawn
+    proc, base = serve(folder)
+    try:
+        item = items[0]
+        body = judged(item, "mostly", ["other"])
+        status, text = call(base, f"/reviews/{item['id']}", "PUT", body)
+        assert status == 400 and "p1 plausible other reason" in text
+        body["purposes"]["p1"]["plausible_other"] = 42
+        status, text = call(base, f"/reviews/{item['id']}", "PUT", body)
+        assert status == 400 and "must be text" in text
+        body["purposes"]["p1"]["plausible_other"] = "names the wrong company"
+        status, _ = call(base, f"/reviews/{item['id']}", "PUT", body)
+        assert status == 200
+    finally:
+        proc.kill()
+        proc.wait()
+    page = (rex.TOOL / "public" / "expectation.html").read_text()
+    assert "otherAsked" in page and "Your reason (required)" in page

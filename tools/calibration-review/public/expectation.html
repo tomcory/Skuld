@@ -19,6 +19,7 @@
         .chip.open { background: #e7f1ff; border-color: #0d6efd; color: #0d6efd; }
         .reasons { flex-basis: 100%; padding-left: 10rem; display: flex; flex-wrap: wrap; align-items: center; gap: .15rem; }
         .chip.reason { font-size: .76rem; padding: .05rem .5rem; }
+        .other-reason { flex: 1 1 14rem; max-width: 26rem; margin-left: .2rem; }
         .why { font-size: .82rem; color: #6c757d; }
         .not-asked { color: #6c757d; font-style: italic; }
         .q { display: flex; align-items: center; gap: .5rem; margin-top: .3rem; flex-wrap: wrap; }
@@ -89,7 +90,8 @@
                 <i>Overstates</i> (asserts a detail the context does not show), <i>Too vague</i> (too broad or generic
                 to say what the recipient does), <i>Bundles purposes</i> (two or more purposes in one, e.g. analytics
                 and advertising), <i>Part of the flow</i> (explains only part of what is sent, or to whom), <i>Loose
-                fit</i> (the recipient could do this, but the flow gives little sign of it). The reasons say why it is
+                fit</i> (the recipient could do this, but the flow gives little sign of it), or <i>Other</i>, which opens a
+                field for a reason of your own (a few words). The reasons say why it is
                 not a plain yes; the level says how far it is from one: an overstated detail is usually <i>mostly</i>,
                 a loose fit usually <i>partly</i>.</li>
             <li><b>Node</b>: the DPV purpose node: exact, too broad, too narrow, wrong (name a better one if you can), for the
@@ -179,6 +181,9 @@
                                 <span class="small text-secondary">Why not a plain yes? (one or more)</span>
                                 <span v-for="o in reasonsOf(q).options" class="chip reason" :class="{open: hasReason(p.key, q, o.id)}"
                                       :title="o.hint" @click.stop="toggleReason(p.key, q, o.id)"><i class="bi" :class="hasReason(p.key, q, o.id) ? 'bi-check-square' : 'bi-square'"></i> {{ o.label }}</span>
+                                <input v-if="otherAsked(p.key, q)" :id="`other-${p.key}-${q}`" class="form-control form-control-sm other-reason"
+                                       placeholder="Your reason (required)" :value="answer(p.key, `${q}_other`) || ''"
+                                       @input="setPurpose(p.key, `${q}_other`, $event.target.value)" @keydown.stop @click.stop>
                             </div>
                             <div v-if="q === 'node' && ['too_broad', 'too_narrow', 'wrong'].includes(answer(p.key, 'node'))" style="width: 17rem" @click.stop>
                                 <node-picker :vocab="vocabs.purpose" placeholder="better node (optional)" :model-value="answer(p.key, 'better_node') || ''"
@@ -317,6 +322,7 @@ const app = createApp({
                 for (const q of this.asked(p)) {
                     if (!this.item.questions.purpose[q].includes(this.answer(p.key, q))) out.push(`${p.key} ${q}`);
                     else if (this.reasonsAsked(p.key, q) && !(this.answer(p.key, `${q}_reasons`) || []).length) out.push(`${p.key} ${q} reasons`);
+                    else if (this.otherAsked(p.key, q) && !String(this.answer(p.key, `${q}_other`) || '').trim()) out.push(`${p.key} ${q} other reason`);
                 }
                 for (const d of p.dependencies.filter(d => d.asked))
                     for (const q of Object.keys(this.item.questions.dependency)) if (!this.item.questions.dependency[q].includes(this.dependency(d.key, q))) out.push(`${d.key} ${q}`);
@@ -360,7 +366,7 @@ const app = createApp({
         setPurpose(key, q, v) {
             const a = {...(this.purposes[key] || {}), [q]: v};
             // an answer that names no reasons (yes, no, unsure) drops those picked for another
-            if (this.reasonsOf(q) && !this.reasonsOf(q).when.includes(v)) delete a[`${q}_reasons`];
+            if (this.reasonsOf(q) && !this.reasonsOf(q).when.includes(v)) { delete a[`${q}_reasons`]; delete a[`${q}_other`]; }
             this.purposes = {...this.purposes, [key]: a};
             this.focus = key;
         },
@@ -370,8 +376,15 @@ const app = createApp({
         hasReason(key, q, id) { return (this.answer(key, `${q}_reasons`) || []).includes(id); },
         toggleReason(key, q, id) {
             const now = this.answer(key, `${q}_reasons`) || [];
-            this.setPurpose(key, `${q}_reasons`, now.includes(id) ? now.filter(x => x !== id) : [...now, id]);
+            const off = now.includes(id);
+            this.setPurpose(key, `${q}_reasons`, off ? now.filter(x => x !== id) : [...now, id]);
+            const free = this.reasonsOf(q).free;
+            if (id === free && off) { const a = {...this.purposes[key]}; delete a[`${q}_other`]; this.purposes = {...this.purposes, [key]: a}; }
+            // Other picked: its field takes the cursor
+            if (id === free && !off) this.$nextTick(() => { const f = document.getElementById(`other-${key}-${q}`); if (f) f.focus(); });
         },
+        // Other is picked among a question's reasons: its written reason is asked
+        otherAsked(key, q) { const r = this.reasonsOf(q); return !!r && !!r.free && this.reasonsAsked(key, q) && this.hasReason(key, q, r.free); },
         setDependency(key, q, v) { this.dependencies = {...this.dependencies, [key]: {...(this.dependencies[key] || {}), [q]: v}}; },
         btnOn: v => (GOOD.includes(v) ? 'btn-success' : BAD.includes(v) ? 'btn-danger' : v === 'unsure' ? 'btn-secondary' : v === 'mostly' ? 'btn-info' : 'btn-warning'),
         btnOff: v => (GOOD.includes(v) ? 'btn-outline-success' : BAD.includes(v) ? 'btn-outline-danger' : v === 'unsure' ? 'btn-outline-secondary' : v === 'mostly' ? 'btn-outline-info' : 'btn-outline-warning'),

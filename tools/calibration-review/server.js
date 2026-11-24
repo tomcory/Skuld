@@ -276,6 +276,8 @@ function expectationOpen(item, review, questions) {
             // a mostly or partly names at least one reason
             const reasons = (questions.reasons || {})[q];
             if (reasons && reasons.when.includes(a[q]) && !(a[`${q}_reasons`] || []).length) open.push(`${p.key} ${q} reasons`);
+            else if (reasons && reasons.free && reasons.when.includes(a[q]) && (a[`${q}_reasons`] || []).includes(reasons.free)
+                     && !String(a[`${q}_other`] || '').trim()) open.push(`${p.key} ${q} other reason`);
         }
         for (const d of p.dependencies.filter(d => d.asked)) {
             const b = (review.dependencies || {})[d.key] || {};
@@ -296,6 +298,11 @@ function expectationReview(req, res) {
         if (!purposeKeys.has(k) || typeof a !== 'object') return res.status(400).send(`no purpose ${k} in this unit`);
         for (const [q, v] of Object.entries(a)) {
             if (q === 'better_node') { if (typeof v !== 'string') return res.status(400).send('better_node must be text'); continue; }
+            if (q.endsWith('_other')) {  // the written reason of a question whose reasons offer Other
+                if (!((questions.reasons || {})[q.slice(0, -'_other'.length)] || {}).free) return res.status(400).send(`${k}: ${q} is not asked`);
+                if (typeof v !== 'string') return res.status(400).send(`${k} ${q} must be text`);
+                continue;
+            }
             if (q.endsWith('_reasons')) {  // the reasons of a mostly or partly, from the sample's list
                 const known = (((questions.reasons || {})[q.slice(0, -'_reasons'.length)] || {}).options || []).map(o => o.id);
                 if (!known.length) return res.status(400).send(`${k}: ${q} is not asked`);

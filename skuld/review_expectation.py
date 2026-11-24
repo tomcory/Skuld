@@ -15,7 +15,7 @@ Per purpose:
     plausible    a plausible purpose for this flow, given the context: yes, mostly (one detail off: accepted after changing
                  one phrase), partly (something right, but it would have to be rewritten), no, unsure; mostly and
                  partly name one or more reasons from a fixed list (REASONS: overstates, too vague, bundles purposes,
-                 part of the flow, loose fit), picked, never typed (24 Nov 2026)
+                 part of the flow, loose fit), picked, never typed (24 Nov 2026), or Other with a written reason
     node         the DPV purpose node: exact, too_broad, too_narrow, wrong, unsure (with a better node, if any)
     beneficiary  user, provider or other: right, wrong, unsure
     role         functional or ancillary: right, wrong, unsure
@@ -108,7 +108,10 @@ REASONS = {
             ("bundles", "Bundles purposes", "puts two or more purposes into one (analytics and advertising)"),
             ("part_of_flow", "Part of the flow", "explains only part of what the flow sends or to whom"),
             ("loose_fit", "Loose fit", "the recipient could do this, but the flow gives little sign of it"),
+            ("other", "Other", "another reason: say which in the field that opens"),
         ),
+        # the reason that is written, not picked: its text is required
+        "free": "other",
     },
 }
 #: The questions whose answers are ordered, best first (unsure left out): their agreement is also weighted, and their
@@ -616,6 +619,7 @@ def _questions() -> dict:
             q: {
                 "when": list(r["when"]),
                 "options": [{"id": i, "label": label, "hint": hint} for i, label, hint in r["options"]],
+                **({"free": r["free"]} if r.get("free") else {}),
             }
             for q, r in REASONS.items()
         },
@@ -625,6 +629,11 @@ def _questions() -> dict:
 def reasons_key(question: str) -> str:
     """Where a purpose's answers keep the reasons of a question: `<question>_reasons`."""
     return f"{question}_reasons"
+
+
+def other_key(question: str) -> str:
+    """Where a purpose's answers keep the text of a question's written reason (Other): `<question>_other`."""
+    return f"{question}_other"
 
 
 # -- checking a review ------------------------------------------------------------------------------------------------
@@ -644,6 +653,8 @@ def problems(item: dict, review: dict) -> list[str]:
                 known = {i for i, *_ in REASONS[q]["options"]}
                 if not named or not set(named) <= known:
                     out.append(f"{p['key']}: {q} reasons")
+                elif REASONS[q].get("free") in named and not str(a.get(other_key(q)) or "").strip():
+                    out.append(f"{p['key']}: {q} other reason")
         for d in p["dependencies"]:
             if not d["asked"]:
                 continue
@@ -750,6 +761,7 @@ def score(folder: str | Path) -> dict:
             "lenient_by": defaultdict(lambda: [0, 0]),
             "answers": defaultdict(int),
             "reasons": defaultdict(int),
+            "other": [],
         }
     )
     missed, done, done_in, judged_in = [], 0, defaultdict(int), defaultdict(int)
@@ -780,8 +792,18 @@ def score(folder: str | Path) -> dict:
                     t["lenient_by"][sk][0] += fair
                     t["lenient_by"][sk][1] += 1
                 if level == "purpose" and q in REASONS and answer in REASONS[q]["when"]:
-                    for reason in ((r.get("purposes") or {}).get(part["key"]) or {}).get(reasons_key(q)) or []:
+                    given = (r.get("purposes") or {}).get(part["key"]) or {}
+                    for reason in given.get(reasons_key(q)) or []:
                         t["reasons"][f"{answer}:{reason}"] += 1
+                        if reason == REASONS[q].get("free") and str(given.get(other_key(q)) or "").strip():
+                            t["other"].append(
+                                {
+                                    "id": iid,
+                                    "purpose": part["key"],
+                                    "answer": answer,
+                                    "text": given[other_key(q)].strip(),
+                                }
+                            )
         for m in r.get("missed") or []:
             missed.append({"run": s["run"], "practice": entry["practice"], **m})
     # per estimate, the strata whose drawn units ask its question: the population a weighted rate could stand for
@@ -827,6 +849,8 @@ def score(folder: str | Path) -> dict:
                 ),
                 "answers": dict(t["answers"]),
                 **({"reasons": dict(sorted(t["reasons"].items()))} if t["reasons"] else {}),
+                # the reasons written under Other, as given, for coding afterwards
+                **({"other_reasons": t["other"]} if t["other"] else {}),
             }
             for (run, level, q, role), t in sorted(totals.items())
         ],
