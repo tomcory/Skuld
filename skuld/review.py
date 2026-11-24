@@ -293,6 +293,19 @@ def units(root: Path) -> tuple[list[dict], dict]:
                 "members": members,
                 "evidence": items,
                 "_concerns": [m["concern"] for m in a["members"]],
+                # a member rests on an experiment: an item of an `ex:` channel supports it or a claim it rests on
+                "_experiment": any(
+                    str(evidence.get(x, {}).get("channel") or "").startswith("ex:")
+                    for m in a["members"]
+                    for x in [
+                        *concerns[m["concern"]].get("supporting", []),
+                        *(
+                            y
+                            for b in concerns[m["concern"]].get("basis", [])
+                            for y in claims.get(b, {}).get("supporting", [])
+                        ),
+                    ]
+                ),
                 "_screens": [
                     screens[k] for k in {evidence_key(evidence[i]) for e in items for i in e["items"]} if k in screens
                 ],
@@ -332,21 +345,49 @@ def interleave(strata: list[list], rng: random.Random) -> list:
 
 
 def _stratum(run: str, u: dict) -> dict:
-    return {
+    out = {
         "run": run,
         "principle": u["requirement"]["principle"],
         "tier": u["tier"],
         "step": u["step"],
         "status": u["status"],
     }
+    if "_by_experiment" in u:  # a draw with census_experiments: units resting on an experiment are a stratum apart
+        out["experiment"] = u["_experiment"]
+    return out
 
 
 #: What a unit's stratum is made of
 STRATUM = ("run", "principle", "tier", "step", "status")
+#: What a stratum may also be made of, in a draw that asked for it (None in one that did not)
+OPTIONAL = ("experiment",)
 
 
 def _skey(s: dict) -> tuple:
-    return tuple(s[k] for k in STRATUM)
+    return tuple(s[k] for k in STRATUM) + tuple(s.get(k) for k in OPTIONAL)
+
+
+def shares(populations: dict, n: int, floor: int = 1, census: frozenset = frozenset()) -> dict:
+    """`n` units shared out over strata of these populations: a census stratum whole, every other at least `floor`
+    (or all of a smaller one), the rest in proportion to the populations by largest remainder (ties to the larger
+    population, then the key), never more than a stratum has. Fewer than n only if the strata hold fewer."""
+    out = {k: (v if k in census else min(v, floor)) for k, v in populations.items()}
+    rest = [k for k in populations if k not in census]
+    left = n - sum(out.values())
+    while left > 0:
+        open_ = [k for k in rest if out[k] < populations[k]]
+        if not open_:
+            break
+        total = sum(populations[k] for k in open_)
+        quota = {k: left * populations[k] / total for k in open_}
+        whole = {k: min(int(quota[k]), populations[k] - out[k]) for k in open_}
+        if sum(whole.values()) == 0:
+            k = max(open_, key=lambda k: (quota[k] - int(quota[k]), populations[k], k))
+            whole[k] = 1
+        for k, v in whole.items():
+            out[k] += v
+        left -= sum(whole.values())
+    return out
 
 
 def draw(
@@ -358,6 +399,10 @@ def draw(
     per_run: int | None = None,
     steps: list[str] | None = None,
     exclude_empty_descriptions: bool | None = None,
+    tiers: list[str] | None = None,
+    total_per_run: int | None = None,
+    census_experiments: bool = False,
+    floor: int | None = None,
 ) -> dict:
     """Draws the review's units from the workspaces' aggregates and fixes them in `folder`, which must not exist:
     per run in proportion to the strata (`per_run`, the default), or `per_stratum` in each. With `steps`, only units
@@ -365,7 +410,12 @@ def draw(
     manifest records them, and the strata's populations are of those steps alone. With `exclude_empty_descriptions`
     (D-45), a unit showing a screen whose description is empty by either model is passed over for the stratum's next
     eligible one in the seed's order (review_expectation.eligible_first), and the manifest lists those passed over.
-    The screenshots the drawn units show are copied into the folder (review_screens)."""
+    The screenshots the drawn units show are copied into the folder (review_screens).
+
+    With `tiers`, only units of those tiers are drawn. With `census_experiments`, the units with a member resting on an
+    experiment (an evidence item of an `ex:` channel) are a stratum apart, drawn whole. With `total_per_run`, each
+    run's units number that many in all: its census strata whole, the rest shared out over its other strata in
+    proportion, at least `floor` each (`shares`)."""
     from skuld.review_expectation import eligible_first
     from skuld.review_screens import copy_screenshots, empty
 
@@ -374,7 +424,7 @@ def draw(
         raise ReviewError(f"{folder} exists: a drawn sample is fixed, draw a new one into another folder")
     s = settings()
     per_run = None if per_stratum else (per_run or s["per_run"])
-    floor = s["floor"]
+    floor = s["floor"] if floor is None else floor
     seed = s["seed"] if seed is None else seed
     anchor = s["anchor"] if anchor is None else anchor
     exclude = s["exclude_empty_descriptions"] if exclude_empty_descriptions is None else exclude_empty_descriptions
@@ -403,6 +453,11 @@ def draw(
         found, recall = units(root)
         if steps:
             found = [u for u in found if u["step"] in steps]
+        if tiers:
+            found = [u for u in found if u["tier"] in tiers]
+        if census_experiments:
+            for u in found:
+                u["_by_experiment"] = True
         apps.setdefault(app, {"root": root, "recall": recall})
         for u in found:
             u["_run"], u["_workspace"], u["application"] = run, wkey, app
@@ -425,7 +480,20 @@ def draw(
     strata = defaultdict(list)
     for u in every:
         strata[_skey(_stratum(u["_run"], u))].append(u)
-    sizes = {k: allocation(strata, k, per_stratum, per_run, floor) for k in strata}
+    if total_per_run:
+        # shared out over what may be drawn: with exclude_empty_descriptions, a stratum's eligible units (D-45), so
+        # that a run still gets its total and a census stratum is every eligible unit of it
+        sizes = {}
+        for run in runs:
+            mine = {
+                k: sum(1 for u in v if not exclude or not empty(u["_screens"]))
+                for k, v in strata.items()
+                if k[0] == run
+            }
+            census = frozenset(k for k in mine if census_experiments and k[len(STRATUM)] is True)
+            sizes |= shares(mine, total_per_run, floor, census)
+    else:
+        sizes = {k: allocation(strata, k, per_stratum, per_run, floor) for k in strata}
     chosen = []
     passed_over: list = []
 
@@ -486,9 +554,12 @@ def draw(
         "skuld": skuld.__version__,
         "method": {"id": "skuld.review", "version": VERSION},
         "seed": seed,
-        "allocation": {"per_stratum": per_stratum}
+        "allocation": {"total_per_run": total_per_run, "floor": floor, "census_experiments": census_experiments}
+        if total_per_run
+        else {"per_stratum": per_stratum}
         if per_stratum
         else {"proportional": True, "per_run": per_run, "floor": floor},
+        **({"tiers": sorted(tiers)} if tiers else {}),
         "anchor": len(anchored),
         **({"steps": sorted(steps)} if steps else {}),
         # D-45: the units passed over because a screen they show has an empty description, by model

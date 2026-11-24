@@ -216,3 +216,51 @@ def test_stage_one_d45_passes_over_a_unit_only_for_a_cited_screen_and_hides_the_
     # without the option the draw is as before
     m = rx.draw(tmp_path / "s3", runs, per_stratum=5, seed=2)
     assert "empty_descriptions" not in m and sum(s["drawn"] for s in m["strata"]) == 4
+
+
+# -- the re-run's review sizes (24 Nov 2026: 50 per sample, 25 per model) ----------------------------------------------
+
+
+def test_shares_take_a_census_whole_and_the_rest_in_proportion_with_a_floor():
+    from skuld.review import shares
+
+    pops = {"exp": 7, "a": 334, "b": 51, "c": 118, "d": 15, "e": 67, "f": 376}
+    out = shares(pops, 25, 1, frozenset({"exp"}))
+    assert out["exp"] == 7 and sum(out.values()) == 25 and all(out[k] >= 1 for k in pops)
+    assert out["f"] >= out["a"] > out["c"] >= out["e"] >= out["b"] >= out["d"]
+    assert shares({"a": 2, "b": 1}, 10) == {"a": 2, "b": 1}  # never more than a stratum holds
+
+
+def test_equal_shares_fill_the_strata_one_at_a_time():
+    out = rx.equal_shares({"a": 340, "b": 10, "c": 215, "d": 9}, 25)
+    assert sum(out.values()) == 25 and sorted(out.values()) == [6, 6, 6, 7] and out["a"] == 7
+    assert rx.equal_shares({"a": 352, "b": 2, "c": 200, "d": 20}, 25) == {"a": 8, "b": 2, "c": 8, "d": 7}
+
+
+def test_a_concern_draw_of_one_tier_with_its_experiments_drawn_whole(tmp_path, monkeypatch):
+    from skuld import review
+    from tests.test_review import FRAME, assessment, workspace
+
+    monkeypatch.setattr(review, "_frame", lambda root: FRAME)
+    monkeypatch.setattr(review, "copy_documents", lambda root, target: [])
+    runs = []
+    for run in ("model-x", "model-y"):
+        r = assessment(("appnexus", "yahoo", "criteo"), alternative_status="supported")
+        r["evidence"].append({"id": "item:9", "kind": "run", "channel": "ex:e1", "method": "the case report"})
+        r["concerns"][0]["supporting"] = ["item:9"]
+        runs.append(workspace(tmp_path, run, r))
+    every = [u for root in runs for u in review.units(root)[0]]
+    backed = sum(u["_experiment"] for u in every)
+    assert backed >= 2
+    m = review.draw(tmp_path / "c", runs, seed=1, tiers=["reasoning"], total_per_run=3, census_experiments=True)
+    assert m["allocation"] == {"total_per_run": 3, "floor": 3, "census_experiments": True} and m["tiers"] == [
+        "reasoning"
+    ]
+    key = read_key(tmp_path / "c")
+    assert sum(1 for k in key.values() if k["stratum"]["experiment"]) == backed
+    assert all(s["drawn"] == s["population"] for s in m["strata"] if s["experiment"])
+    assert all(s["tier"] == "reasoning" for s in m["strata"])
+
+
+def read_key(folder):
+    return json.loads((folder / "key.json").read_text())

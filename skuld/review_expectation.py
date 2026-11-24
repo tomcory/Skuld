@@ -312,6 +312,19 @@ def _skey(s: dict) -> tuple:
     return tuple(s[k] for k in STRATUM)
 
 
+def equal_shares(populations: dict, n: int) -> dict:
+    """`n` units shared out equally over strata of these populations, one at a time to the stratum with the fewest so
+    far (ties to the larger population, then the key), never more than a stratum has."""
+    out = dict.fromkeys(populations, 0)
+    for _ in range(n):
+        open_ = [k for k in populations if out[k] < populations[k]]
+        if not open_:
+            break
+        k = min(open_, key=lambda k: (out[k], -populations[k], k))
+        out[k] += 1
+    return out
+
+
 def eligible_first(members: list, size: int, rng: random.Random, ok, passed_over: list) -> list:
     """A stratum's `size` units: the first `ok` ones in the seed's order of all its members; those not ok that come
     before the last one taken are appended to `passed_over` (D-45: replaced by the next eligible unit)."""
@@ -369,13 +382,16 @@ def draw(
     prefix: str = "x",
     per_app: int | None = None,
     exclude_empty_descriptions: bool | None = None,
+    total_per_run: int | None = None,
 ) -> dict:
     """Draws the review's units from the workspaces' assessments and fixes them in `folder`, which must not exist:
     `per_stratum` per stratum, and with `per_app`, at most about that many of one application per run (`capped`).
     With `exclude_empty_descriptions` (D-45 as amended on 24 Nov 2026), a unit citing a screen whose description is
     empty by either model is passed over for the stratum's next eligible one in the seed's order (`eligible_first`),
     and the manifest lists those passed over; its other such screens are shown without a description
-    (review_screens.view). The screenshots the drawn units show are copied into the folder (review_screens)."""
+    (review_screens.view). With `total_per_run`, each run's units number that many in all, shared out equally over its
+    strata (`equal_shares`) instead of `per_stratum` each. The screenshots the drawn units show are copied into the
+    folder (review_screens)."""
     folder = Path(folder)
     if folder.exists():
         raise ReviewError(f"{folder} exists: a drawn sample is fixed, draw a new one into another folder")
@@ -429,10 +445,22 @@ def draw(
         strata[_skey(stratum(u))].append(u)
     ok = (lambda u: not empty(u["_cited_screens"])) if exclude else None
     passed_over: list = []
+    if total_per_run:
+        sizes = {}
+        for run in runs:
+            # over what may be drawn (D-45: a stratum's eligible units), so that a run still gets its total
+            mine = {k: sum(1 for u in v if ok is None or ok(u)) for k, v in strata.items() if k[0] == run}
+            sizes |= equal_shares(mine, total_per_run)
+    else:
+        sizes = {k: min(len(v), per_stratum) for k, v in strata.items()}
     if per_app:
-        chosen = capped(strata, {k: min(len(v), per_stratum) for k, v in strata.items()}, per_app, rng, ok, passed_over)
+        chosen = capped(strata, sizes, per_app, rng, ok, passed_over)
     elif ok is not None:
-        chosen = {k: eligible_first(strata[k], per_stratum, rng, ok, passed_over) for k in sorted(strata)}
+        chosen = {k: eligible_first(strata[k], sizes[k], rng, ok, passed_over) for k in sorted(strata)}
+    elif total_per_run:
+        chosen = {
+            k: strata[k] if len(strata[k]) <= sizes[k] else rng.sample(strata[k], sizes[k]) for k in sorted(strata)
+        }
     else:
         chosen = {
             k: strata[k] if len(strata[k]) <= per_stratum else rng.sample(strata[k], per_stratum)
@@ -472,7 +500,7 @@ def draw(
         "skuld": skuld.__version__,
         "method": {"id": "skuld.review_expectation", "version": VERSION},
         "seed": seed,
-        "per_stratum": per_stratum,
+        **({"total_per_run": total_per_run} if total_per_run else {"per_stratum": per_stratum}),
         **({"per_app": per_app} if per_app else {}),
         # D-45: the units passed over because a screen they show has an empty description, by model
         **(

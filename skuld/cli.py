@@ -313,6 +313,22 @@ def build_parser() -> argparse.ArgumentParser:
         "sizes (default: config.json's, none)",
     )
     review_.add_argument(
+        "--total-per-run",
+        type=int,
+        help="draw, expect-draw: each run's units number this many in all (draw: census strata whole, the rest in "
+        "proportion, at least the floor each; expect-draw: shared out equally over the run's strata)",
+    )
+    review_.add_argument("--floor", type=int, help="draw: the least units per stratum (default: config.json's, 3)")
+    review_.add_argument(
+        "--tier", action="append", default=[], help="draw: only units of this tier (rule, reasoning); repeatable"
+    )
+    review_.add_argument(
+        "--census-experiments",
+        action="store_true",
+        default=None,
+        help="draw: the units with a member resting on an experiment are a stratum apart, drawn whole",
+    )
+    review_.add_argument(
         "--exclude-empty-descriptions",
         action="store_true",
         default=None,
@@ -406,6 +422,10 @@ READ_BY = {
         "prefix": ("expect-draw",),
         "per_app": ("expect-draw",),
         "exclude_empty_descriptions": ("draw", "expect-draw"),
+        "total_per_run": ("draw", "expect-draw"),
+        "tier": ("draw",),
+        "floor": ("draw",),
+        "census_experiments": ("draw",),
         "reviewer": ("export",),
         "application": ("exclude",),
         "reason": ("exclude",),
@@ -809,6 +829,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.prefix or "x",
                     args.per_app,
                     args.exclude_empty_descriptions,
+                    args.total_per_run,
                 )
                 for st in m["strata"]:
                     name = " ".join(str(st[k]) for k in ("run", "role", "status"))
@@ -856,9 +877,14 @@ def main(argv: list[str] | None = None) -> int:
                     args.per_run,
                     args.step or None,
                     args.exclude_empty_descriptions,
+                    args.tier or None,
+                    args.total_per_run,
+                    bool(args.census_experiments),
+                    args.floor,
                 )
                 for st in m["strata"]:
                     name = " ".join(str(st[k]) for k in ("run", "principle", "tier", "step", "status"))
+                    name += " (experiment)" if st.get("experiment") else ""
                     print(f"{name:<90} {st['drawn']:>3} of {st['population']:>4}")
                 print(
                     f"{sum(st['drawn'] for st in m['strata'])} units ({m['anchor']} shown blind first) "

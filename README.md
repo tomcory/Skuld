@@ -157,7 +157,7 @@ Options (from `--help`):
 | `run` | `--recorded <Loki run>`, `--config <Loki configuration>`, `--device <adb serial>` (all required), `--conditions …` (default `all`: baseline and every alternative of the workspace's experimental cases), `--repeat` (3), `--loki` (the sibling Loki), `--qualify` (one baseline run first), `--case` (the runs of this experimental case: goal-directed for a case with a path, the cold start for the launch; `all` conditions are its own and its control), `--replay` (with `--case`: replay up to the end of its path instead), `--max-duration` (a goal-directed run's cap, s), `--keep-going` (Loki goes on after an action it could not replay), `--json` (one JSON line per run) |
 | `analyse` | `--offline` (existing observation reports only) |
 | `calibrate` | `--per-stratum`, `--seed` (default: config.json's; draw only), `--registry` |
-| `review` | `--per-stratum`, `--per-run`, `--anchor`, `--seed`, `--step` (draw); `--exclude-empty-descriptions` (draw, expect-draw: D-45); `--prefix`, `--per-app` (expect-draw); `--reviewer` (export); `--application`, `--reason` (exclude) |
+| `review` | `--per-stratum`, `--per-run`, `--anchor`, `--seed`, `--step` (draw); `--exclude-empty-descriptions` (draw, expect-draw: D-45), `--total-per-run` (draw, expect-draw), `--tier`, `--census-experiments`, `--floor` (draw); `--prefix`, `--per-app` (expect-draw); `--reviewer` (export); `--application`, `--reason` (exclude) |
 | `corpus` | `--corpus` (default: Skuld's); `--dry-run` (repoint: list only) |
 | `purposes` | `--out` (required), `--model` (default `qwen3-embedding:8b-fp16`, on the server of `OLLAMA_BASE_URL`) |
 | `catalogue` | `--catalogue` (default: Skuld's); `--review <family>`, `--by <person>`, `--note` |
