@@ -36,6 +36,12 @@
         kbd { font-size: .72rem; }
         .described { color: #495057; font-size: .8rem; background: #f3f0ff; border-left: 3px solid #8c7ae6; padding: .25rem .5rem; margin-top: .3rem; }
         .shot { display: block; max-height: 16rem; max-width: 100%; margin-top: .35rem; border: 1px solid #dee2e6; border-radius: .25rem; cursor: zoom-in; }
+        .screen-row { display: flex; gap: .75rem; align-items: flex-start; }
+        .screen-row .shot-col { flex: 0 0 8.5rem; }
+        .screen-row .shot { margin-top: 0; max-height: 18rem; width: 100%; object-fit: contain; object-position: top; }
+        .screen-row .text-col { flex: 1 1 auto; min-width: 0; word-break: break-word; }
+        .no-shot { height: 4rem; border: 1px dashed #ced4da; border-radius: .25rem; color: #adb5bd; font-size: .7rem; display: flex; align-items: center; justify-content: center; text-align: center; padding: .25rem; }
+        .cited-nav { position: sticky; top: 0; z-index: 2; background: #fff; padding: .25rem 0 .35rem; border-bottom: 1px solid #eee; }
         .zoom { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 1060; display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
         .zoom img { max-height: 95vh; max-width: 95vw; border-radius: .25rem; background: #fff; }
         [v-cloak] { display: none; }
@@ -267,22 +273,37 @@
                         <li class="nav-item"><a class="nav-link" :class="{active: tab === 'passages'}" href="#" @click.prevent="tab = 'passages'">Passages ({{ item.context.passages.length }})</a></li>
                     </ul>
                     <input ref="search" class="form-control form-control-sm mb-2" placeholder="Search the context (/)" v-model="query" @keydown.esc="$event.target.blur()" @keydown.stop>
-                    <div class="context">
+                    <div class="context" ref="pane">
                         <template v-if="tab === 'traffic'">
                             <div v-if="!(item.context.traffic || []).length" class="text-secondary small">The stage was shown no traffic for this practice.</div>
                             <div v-for="t in item.context.traffic" class="traffic" v-html="traffic(t)"></div>
                         </template>
                         <template v-else-if="tab === 'evidence'">
                             <div v-if="!focusEvidence.length" class="text-secondary small">E cites nothing for this purpose and its dependencies.</div>
-                            <div v-for="e in focusEvidence" class="evidence-item">
-                                <div class="text-secondary">{{ e.source || e.kind }}</div>
-                                <div v-html="e.source === 'traffic as captured' ? traffic(e.text) : mark(e.text)"></div>
-                                <div v-if="e.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> <span v-html="mark(e.description)"></span></div><img v-if="e.screenshot" :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot">
+                            <div v-for="e in focusEvidence" class="evidence-item" :class="{'screen-row': e.screenshot}">
+                                <div v-if="e.screenshot" class="shot-col"><img :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot"></div>
+                                <div :class="{'text-col': e.screenshot}">
+                                    <div class="text-secondary">{{ e.source || e.kind }}</div>
+                                    <div v-html="e.source === 'traffic as captured' ? traffic(e.text) : mark(e.text)"></div>
+                                    <div v-if="e.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> <span v-html="mark(e.description)"></span></div>
+                                </div>
                             </div>
                         </template>
                         <template v-else-if="tab === 'screens'">
-                            <div v-for="s in shownScreens" class="screen" :class="{cited: citedTexts.has(s.text)}"><span class="text-secondary">screen {{ s.n }}</span> · <span v-html="mark(s.text)"></span>
-                                <div v-if="s.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> <span v-html="mark(s.description)"></span></div><img v-if="s.screenshot" :src="'/' + s.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + s.screenshot"></div>
+                            <div v-if="citedScreens.length" class="cited-nav small">
+                                <span class="text-secondary">Cited for {{ label(focus) }}:</span>
+                                <a v-for="n in citedScreens" href="#" class="chip" @click.prevent="scrollToScreen(n)">screen {{ n }}</a>
+                            </div>
+                            <div v-for="s in shownScreens" :key="s.n" :id="'screen-' + s.n" class="screen screen-row" :class="{cited: citedTexts.has(s.text)}">
+                                <div class="shot-col">
+                                    <img v-if="s.screenshot" :src="'/' + s.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + s.screenshot">
+                                    <div v-else class="no-shot">no screenshot given to the stage</div>
+                                </div>
+                                <div class="text-col">
+                                    <div><span class="text-secondary">screen {{ s.n }}</span><span v-if="citedTexts.has(s.text)" class="badge text-bg-warning ms-1">cited</span> · <span v-html="mark(s.text)"></span></div>
+                                    <div v-if="s.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> <span v-html="mark(s.description)"></span></div>
+                                </div>
+                            </div>
                             <div v-if="!shownScreens.length" class="text-secondary small">No screen matches.</div>
                         </template>
                         <template v-else>
@@ -341,6 +362,11 @@ const app = createApp({
             if (!p) return new Set();
             return new Set([...this.focusEvidence.map(e => e.text), ...p.dependencies.flatMap(d => d.steps.flatMap(s => s.cites.map(c => c.text)))]);
         },
+        // the numbers of the screens cited for the purpose in focus (its evidence and its needs' steps), in order
+        citedScreens() {
+            if (!this.item) return [];
+            return this.item.context.screens.map((t, i) => (this.citedTexts.has(t) ? i + 1 : null)).filter(n => n);
+        },
         shownScreens() {
             // each screen with its description and screenshot as stage 1 was given them (a sample drawn before 0.12.19
             // has neither), numbered in the stage's order, the number kept when a search filters them
@@ -349,6 +375,13 @@ const app = createApp({
             const all = this.item.context.screens.map((text, i) => ({text, n: i + 1, ...(details[i] || {})}));
             return q.length < 3 ? all : all.filter(s => s.text.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q));
         },
+    },
+    // the screens tab follows the purpose in focus: opened, or with another purpose or practice, it scrolls to the
+    // first screen cited for it
+    watch: {
+        tab() { this.scrollToCited(); },
+        focus() { this.scrollToCited(); },
+        item() { this.scrollToCited(); },
     },
     methods: {
         // a value of the unit in its vocabulary; a node for a field, from the DPV purposes
@@ -371,6 +404,21 @@ const app = createApp({
             this.focus = key;
         },
         // the reasons a question's answer names (Plausible: mostly, partly), picked from the sample's list, never typed
+        // the screens tab scrolled to a screen: its row at the top of the context pane, below the list of cited ones
+        scrollToScreen(n) {
+            const pane = this.$refs.pane, row = document.getElementById('screen-' + n);
+            if (!pane || !row) return;
+            const nav = pane.querySelector('.cited-nav');
+            pane.scrollTop = row.offsetTop - pane.offsetTop - (nav ? nav.offsetHeight : 0) - 4;
+        },
+        // on opening the screens tab, another purpose or another practice: to the first screen cited for the purpose
+        scrollToCited() {
+            this.$nextTick(() => {
+                if (this.tab !== 'screens') return;
+                if (this.citedScreens.length && this.query.trim().length < 3) this.scrollToScreen(this.citedScreens[0]);
+                else if (this.$refs.pane) this.$refs.pane.scrollTop = 0;
+            });
+        },
         reasonsOf(q) { return ((this.item.questions || {}).reasons || {})[q]; },
         reasonsAsked(key, q) { const r = this.reasonsOf(q); return !!r && r.when.includes(this.answer(key, q)); },
         hasReason(key, q, id) { return (this.answer(key, `${q}_reasons`) || []).includes(id); },

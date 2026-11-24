@@ -26,6 +26,10 @@
         kbd { font-size: .72rem; }
         .described { color: #495057; font-size: .8rem; background: #f3f0ff; border-left: 3px solid #8c7ae6; padding: .25rem .5rem; margin-top: .3rem; }
         .shot { display: block; max-height: 16rem; max-width: 100%; margin-top: .35rem; border: 1px solid #dee2e6; border-radius: .25rem; cursor: zoom-in; }
+        .screen-row { display: flex; gap: .75rem; align-items: flex-start; }
+        .screen-row .shot-col { flex: 0 0 8.5rem; }
+        .screen-row .shot { margin-top: 0; max-height: 18rem; width: 100%; object-fit: contain; object-position: top; }
+        .screen-row .text-col { flex: 1 1 auto; min-width: 0; word-break: break-word; }
         .zoom { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 1060; display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
         .zoom img { max-height: 95vh; max-width: 95vw; border-radius: .25rem; background: #fff; }
         [v-cloak] { display: none; }
@@ -308,11 +312,13 @@
                                 What E's members rest on: {{ item.evidence.length }} evidence {{ item.evidence.length === 1 ? 'item' : 'items' }} <kbd>V</kbd>
                             </button>
                             <div v-if="evidenceShown" class="evidence mt-2">
-                                <div v-for="e in item.evidence" class="border-start border-3 ps-2 mb-2 small">
-                                    <div class="text-secondary"><b>{{ e.source || e.kind }}</b><span v-if="item.members.length > 1"> · cited by {{ e.members.length }} of {{ item.members.length }} members</span></div>
-                                    <div class="text-break" v-html="e.source === 'traffic as captured' ? traffic(e.text) : escapeHtml(e.text)"></div>
-                                    <div v-if="e.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> {{ e.description }}</div>
-                                    <img v-if="e.screenshot" :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot">
+                                <div v-for="e in item.evidence" class="border-start border-3 ps-2 mb-2 small" :class="{'screen-row': e.screenshot}">
+                                    <div v-if="e.screenshot" class="shot-col"><img :src="'/' + e.screenshot" class="shot" loading="lazy" alt="Screenshot of the screen" @click.stop="zoom = '/' + e.screenshot"></div>
+                                    <div :class="e.screenshot ? 'text-col' : ''">
+                                        <div class="text-secondary"><b>{{ e.source || e.kind }}</b><span v-if="item.members.length > 1"> · cited by {{ e.members.length }} of {{ item.members.length }} members</span></div>
+                                        <div class="text-break" v-html="e.source === 'traffic as captured' ? traffic(e.text) : escapeHtml(e.text)"></div>
+                                        <div v-if="e.description" class="described"><i class="bi bi-chat-square-text"></i> <span class="text-secondary">A model's description of the screen, for orientation; not evidence:</span> {{ e.description }}</div>
+                                    </div>
                                 </div>
                             </div>
                             </template>
