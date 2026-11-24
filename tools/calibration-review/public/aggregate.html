@@ -148,6 +148,24 @@
                 less. The screenshots show where a run met the check, for orientation.</li>
         </ul>
 
+        <h6>E's evaluations</h6>
+        <p class="mb-1">What E says of each unit (hover any of them on the page for the same text):</p>
+        <dl>
+            <dt>The concern's status <span class="badge text-bg-danger">E: concern …</span></dt>
+            <dd v-for="(t, k) in STATUS_TEXT"><i>{{ k.replace('_', ' ') }}</i>: {{ t }}.</dd>
+            <dt>The tier</dt>
+            <dd v-for="(t, k) in TIER_TEXT"><i>{{ k }}</i>: {{ t }}.</dd>
+            <dt>E's uncertainty</dt>
+            <dd>{{ UNCERTAINTY_TEXT }}. The reasons:</dd>
+            <dd><ul class="mb-0"><li v-for="(t, k) in REASON_TEXT"><i>{{ k.replace(/_/g, ' ') }}</i>: {{ t }}</li></ul></dd>
+            <dd><i>Samples disagreed on n member(s)</i>: E judged those members several times and its judgements differed.</dd>
+            <dt>A member's less invasive alternative <span class="text-secondary">(E: status, level)</span></dt>
+            <dd v-for="(t, k) in ALTERNATIVE_TEXT"><i>{{ k.replace('_', ' ') }}</i>: {{ t }}.</dd>
+            <dd v-for="(t, k) in LEVEL_TEXT"><i>{{ k.replace('_', ' ') }}</i>: {{ t }}.</dd>
+        </dl>
+        <p>These are E's claims, part of what you judge, not facts: uncertainty does not change your verdict, but a high
+            one is a hint to read the evidence closely.</p>
+
         <h6>The criteria</h6>
         <dl>
             <dt>Evidence exists, cited correctly <span class="text-secondary">(<kbd>1</kbd>–<kbd>5</kbd>)</span></dt>
@@ -328,8 +346,8 @@
                             <div class="d-flex flex-wrap gap-2 align-items-center mt-1">
                                 <span class="badge" :class="statusClass(item.status)" :title="statusTitle(item.status)">E: concern {{ item.status.replace('_', ' ') }}</span>
                                 <span class="badge text-bg-light border" :title="tierTitle(item.tier)">{{ item.tier }} tier</span>
-                                <span class="small text-secondary" title="E's own uncertainty about the concern: its level, the highest of the reasons that raise it (low where none does)">E's uncertainty: {{ uncertaintyText(item.uncertainty) }}</span>
-                                <span v-if="item.disagreeing" class="small text-danger">samples disagreed on {{ item.disagreeing }} member(s)</span>
+                                <span class="small text-secondary" :title="uncertaintyTitle(item.uncertainty)">E's uncertainty: {{ uncertaintyText(item.uncertainty) }}</span>
+                                <span v-if="item.disagreeing" class="small text-danger" :title="REASON_TEXT.samples_disagree + ' on these members: E judged each several times'">samples disagreed on {{ item.disagreeing }} member(s)</span>
                             </div>
                             <div v-if="item.condition && item.condition.length" class="small mt-1"><span class="text-secondary">only if:</span> {{ item.condition.join(', ') }}</div>
                             <div v-if="item.blind_first && item.review && item.review.blind" class="small mt-1 text-secondary">Your blind decision: <b>{{ item.review.blind.decision }}</b></div>
@@ -373,7 +391,7 @@
                                     <div v-if="m.purpose_stated" class="member-purpose"><span class="mini-label">E's purpose</span> {{ m.purpose_stated.action }} {{ m.purpose_stated.object }}<span v-if="m.purpose_stated.outcome">, to {{ m.purpose_stated.outcome }}</span></div>
                                     <div v-for="a in (m.alternatives || [])" class="alt">
                                         <i class="bi bi-arrow-return-right"></i> less invasive alternative: {{ alternativeText(a.alternative) }}
-                                        <span class="text-secondary">· E: {{ a.status.replace('_', ' ') }}<span v-if="a.level">, {{ a.level.replace('_', ' ') }}</span><span v-if="a.component">; it would change the {{ a.component }}</span></span>
+                                        <span class="text-secondary" :title="altTitle(a)">· E: {{ a.status.replace('_', ' ') }}<span v-if="a.level">, {{ a.level.replace('_', ' ') }}</span><span v-if="a.component">; it would change the {{ a.component }}</span></span>
                                         <div v-if="a.reason" class="text-secondary">{{ a.reason }}</div>
                                     </div>
                                     <div v-if="m.specified" class="text-secondary">purposes the provider specifies for its data: {{ m.specified.join(', ') || 'none' }}</div>
@@ -565,10 +583,51 @@ const titles = {policy: 'Privacy policy', data_safety: 'Data safety', listing: '
 const EVIDENCE = ['yes', 'partly', 'no', 'none_cited'];
 const FOLLOWS = ['yes', 'partly', 'no'];
 const FOLLOWS_KEYS = 'qwet';
+// E's evaluations, in words: the hover texts and the codebook's section "E's evaluations" (one source for both)
+const STATUS_TEXT = {
+    supported: 'E raises the concern: its evidence shows the requirement is not met',
+    not_established: 'E could not establish the concern from its evidence (e.g. alternatives proposed, none supported; or its samples did not agree it holds); agree if that is the right call',
+    not_assessable: 'E could not judge the requirement',
+};
+const TIER_TEXT = {
+    rule: 'decided by a fixed rule over the documents and observations, without a model',
+    reasoning: "judged by E's model from the documents, the observations and the corpus",
+};
+const UNCERTAINTY_TEXT = "E's own uncertainty about the concern: its level (low, moderate, high), the highest of the reasons that raise it (low where none does)";
+const REASON_TEXT = {
+    from_documents: "a model's judgement grounded in cited documents",
+    own_knowledge: "a model's judgement resting on its own knowledge, citing no document",
+    open_judgement: 'a judgement of an open term of the norms (specific, compatible, minimal)',
+    samples_disagree: "E's samples of the judgement disagreed",
+    open_condition: 'the concern holds only under a condition (e.g. a DPO is designated)',
+    silence_not_exhaustive: 'it reads a silence of documents that need not say everything',
+    o_silence: 'it reads that the observation did not see a practice',
+    aligned_above: "an experiment's purpose matched at a broader purpose node",
+    purpose_not_from_feature: "an experiment's purpose is not the feature's own",
+    unverifiable: "an experiment's change could not be confirmed in some runs",
+    runs_not_alternated: "an experiment's runs did not alternate between the sides",
+    few_runs: 'an experiment with few runs on a side',
+    not_demonstrated: 'an alternative documented, not demonstrated by an experiment',
+    covers_by_model: 'whether the alternative covers the needs was judged by a model, not by rule',
+    model_decision: "a model placed a value of the document analysis (D) the concern rests on",
+    annotator_span: "the document analysis (D) took a value from an annotator's span",
+    mapping_fit: 'a value mapped to a vocabulary node that fits only closely, broader or narrower',
+};
+const ALTERNATIVE_TEXT = {
+    supported: 'the alternative would serve the purpose (and so the practice is more invasive than needed)',
+    not_established: 'proposed, but neither shown to serve the purpose nor ruled out',
+    refuted: 'shown not to serve the purpose: it raises no concern',
+    not_assessable: 'could not be judged (e.g. no check for the purpose)',
+};
+const LEVEL_TEXT = {
+    demonstrated: 'by an experiment: the feature still worked with the change',
+    technically_supported: 'by documents: E finds they show the alternative covers what the purpose needs',
+    plausible: 'proposed only: not shown by documents or an experiment',
+};
 const escape = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 const app = createApp({
     provide() { return {openVocab: (kind, id) => this.openVocab(kind, id)}; },
-    data: () => ({zoom: null, vocabs: {purpose: [], data: []}, browser: null, progress: null, item: null, help: false, shown: null, document: {}, query: '', titles, EVIDENCE, FOLLOWS, crit: {}, followsKeys: FOLLOWS_KEYS.toUpperCase(),
+    data: () => ({zoom: null, vocabs: {purpose: [], data: []}, browser: null, progress: null, item: null, help: false, shown: null, document: {}, query: '', titles, EVIDENCE, FOLLOWS, STATUS_TEXT, TIER_TEXT, UNCERTAINTY_TEXT, REASON_TEXT, ALTERNATIVE_TEXT, LEVEL_TEXT, crit: {}, followsKeys: FOLLOWS_KEYS.toUpperCase(),
                   evidence: null, follows: null, phrases: {}, blindPhrases: {}, note: '', blindNote: '', evidenceShown: true,
                   recall: null, recallOpen: false, recallDue: false}),
     computed: {
@@ -796,11 +855,13 @@ const app = createApp({
             });
             if (done) { this.recallOpen = false; this.recallDue = false; await this.nextOpen(); }
         },
-        statusTitle: s => ({supported: 'E raises the concern: its evidence shows the requirement is not met',
-                            not_established: 'E could not establish the concern from its evidence; agree if that is the right call',
-                            not_assessable: 'E could not judge the requirement'})[s] || s,
-        tierTitle: t => ({rule: 'decided by a fixed rule over the documents and observations, without a model',
-                          reasoning: "judged by E's model from the documents, the observations and the corpus"})[t] || t,
+        statusTitle: s => STATUS_TEXT[s] || s,
+        tierTitle: t => TIER_TEXT[t] || t,
+        altTitle: a => [ALTERNATIVE_TEXT[a.status], a.level && LEVEL_TEXT[a.level]].filter(Boolean).join('; '),
+        uncertaintyTitle(u) {
+            const reasons = ((u && u.reasons) || []).map(r => `${r.reason.replace(/_/g, ' ')}: ${REASON_TEXT[r.reason] || r.reason}`);
+            return [UNCERTAINTY_TEXT, ...reasons].join('\n');
+        },
         statusClass: s => ({supported: 'text-bg-danger', not_established: 'text-bg-warning', not_assessable: 'text-bg-secondary'})[s] || 'text-bg-secondary',
         overallClass: d => ({agree: 'text-bg-success', disagree: 'text-bg-danger', partly: 'text-bg-warning', unsure: 'text-bg-secondary'})[d],
         key(event) {
