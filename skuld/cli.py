@@ -280,9 +280,11 @@ def build_parser() -> argparse.ArgumentParser:
             "export",
             "import",
             "exclude",
+            "pick",
         ],
         help="export: <package.zip> <drawn sample folders…> --reviewer <id>; import: <returned.zip> <reviews folder>; "
-        "exclude: <drawn sample> <new folder> <the withdrawn workspaces…> --application <package> --reason <text>",
+        "exclude: <drawn sample> <new folder> <the withdrawn workspaces…> --application <package> --reason <text>; "
+        "pick: <drawn sample> <new folder> --item <id> --why <id>=<text> … --avoid <sample> … (a calibration sample)",
     )
     review_.add_argument("folder", type=Path, help="the review's folder (draw: a new one)")
     review_.add_argument(
@@ -343,6 +345,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     review_.add_argument("--reason", help="exclude: why the applications were withdrawn (recorded in the manifest)")
     review_.add_argument("--step", action="append", default=[], help="draw: only units of this step (repeatable)")
+    review_.add_argument(
+        "--item", action="append", default=[], help="pick: a unit to pick, by id (repeatable, in order)"
+    )
+    review_.add_argument(
+        "--why", action="append", default=[], help="pick: <id>=<why the unit is picked> (one per unit, recorded)"
+    )
+    review_.add_argument(
+        "--avoid", action="append", default=[], type=Path, help="pick: a sample none of whose units may be picked"
+    )
     select_ = commands.add_parser("select", help="choose the experiments the assessment asks for, within the budget")
     select_.add_argument("workspace", type=Path)
     fixed = select_.add_mutually_exclusive_group()
@@ -419,7 +430,10 @@ READ_BY = {
         "per_run": ("draw",),
         "anchor": ("draw",),
         "step": ("draw",),
-        "prefix": ("expect-draw",),
+        "prefix": ("expect-draw", "pick"),
+        "item": ("pick",),
+        "why": ("pick",),
+        "avoid": ("pick",),
         "per_app": ("expect-draw",),
         "exclude_empty_descriptions": ("draw", "expect-draw"),
         "total_per_run": ("draw", "expect-draw"),
@@ -428,7 +442,7 @@ READ_BY = {
         "census_experiments": ("draw",),
         "reviewer": ("export",),
         "application": ("exclude",),
-        "reason": ("exclude",),
+        "reason": ("exclude", "pick"),
     },
     "calibrate": {"per_stratum": ("draw",), "seed": ("draw",), "registry": ("draw",)},
 }
@@ -801,6 +815,24 @@ def main(argv: list[str] | None = None) -> int:
                     print(path)
                 for flag in flags:
                     print(f"check: {flag}", file=sys.stderr)
+        elif args.command == "review" and args.action == "pick":
+            from skuld import review_pick
+
+            if len(args.paths) != 1 or not args.item:
+                raise review_pick.PickError("pick needs the new folder and --item for each unit")
+            why = dict(w.split("=", 1) for w in args.why if "=" in w)
+            m = review_pick.pick(
+                args.folder,
+                args.paths[0],
+                args.item,
+                why,
+                args.avoid,
+                args.prefix or "c",
+                args.reason or "calibration round",
+            )
+            for u in m["derived"]["units"]:
+                print(f"{u['id']} (was {u['from']}): {u['why']}")
+            print(f"{len(m['derived']['units'])} units, {m['screenshots']} screenshots -> {args.paths[0]}")
         elif args.command == "review" and args.action == "exclude":
             from skuld import review_exclude
 
